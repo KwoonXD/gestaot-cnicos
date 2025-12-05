@@ -1,0 +1,159 @@
+{% extends 'base.html' %}
+
+{% block title %}Pagamentos - Gestão de Técnicos{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center">
+    <h1><i class="bi bi-cash-stack"></i> Pagamentos</h1>
+    {% if tecnicos_com_pendente %}
+    <a href="{{ url_for('gerar_pagamento') }}" class="btn btn-primary">
+        <i class="bi bi-plus"></i> Gerar Pagamento
+    </a>
+    {% endif %}
+</div>
+
+<div class="filter-section">
+    <form method="GET" class="row g-3">
+        <div class="col-md-4">
+            <label class="form-label">Técnico</label>
+            <select name="tecnico" class="form-select">
+                <option value="">Todos</option>
+                {% for t in tecnicos %}
+                <option value="{{ t.id }}" {% if tecnico_filter == t.id|string %}selected{% endif %}>{{ t.nome }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">Status</label>
+            <select name="status" class="form-select">
+                <option value="">Todos</option>
+                {% for s in status_options %}
+                <option value="{{ s }}" {% if status_filter == s %}selected{% endif %}>{{ s }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-5 d-flex align-items-end gap-2">
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-search"></i> Filtrar
+            </button>
+            <a href="{{ url_for('pagamentos') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-x"></i> Limpar
+            </a>
+        </div>
+    </form>
+</div>
+
+{% if tecnicos_com_pendente %}
+<div class="alert alert-warning d-flex align-items-center mb-4" role="alert">
+    <i class="bi bi-exclamation-triangle me-2"></i>
+    <div>
+        Existem <strong>{{ tecnicos_com_pendente|length }}</strong> técnico(s) com chamados concluídos aguardando pagamento.
+        <a href="{{ url_for('gerar_pagamento') }}" class="alert-link">Gerar pagamento agora</a>
+    </div>
+</div>
+{% endif %}
+
+<div class="card">
+    <div class="card-body">
+        {% if pagamentos %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Técnico</th>
+                        <th>Período</th>
+                        <th>Chamados</th>
+                        <th>Valor Total</th>
+                        <th>Status</th>
+                        <th>Data Pagamento</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for pagamento in pagamentos %}
+                    <tr>
+                        <td>
+                            <a href="{{ url_for('pagamento_detalhes', id=pagamento.id) }}">
+                                <code>{{ pagamento.id_pagamento }}</code>
+                            </a>
+                        </td>
+                        <td>
+                            <a href="{{ url_for('tecnico_detalhes', id=pagamento.tecnico.id) }}" class="text-decoration-none">
+                                {{ pagamento.tecnico.nome }}
+                            </a>
+                        </td>
+                        <td>{{ pagamento.periodo_inicio.strftime('%d/%m') }} - {{ pagamento.periodo_fim.strftime('%d/%m/%Y') }}</td>
+                        <td><span class="badge bg-secondary">{{ pagamento.numero_chamados }}</span></td>
+                        <td class="{% if pagamento.status_pagamento == 'Pendente' %}money-pending{% else %}money-positive{% endif %}">
+                            R$ {{ "%.2f"|format(pagamento.valor_total) }}
+                        </td>
+                        <td>
+                            <span class="badge badge-status badge-{{ pagamento.status_pagamento|lower }}">
+                                {{ pagamento.status_pagamento }}
+                            </span>
+                        </td>
+                        <td>{{ pagamento.data_pagamento.strftime('%d/%m/%Y') if pagamento.data_pagamento else '-' }}</td>
+                        <td class="action-buttons">
+                            <a href="{{ url_for('pagamento_detalhes', id=pagamento.id) }}" class="btn btn-sm btn-outline-primary btn-action" title="Ver Detalhes">
+                                <i class="bi bi-eye"></i>
+                            </a>
+                            {% if pagamento.status_pagamento == 'Pendente' %}
+                            <button type="button" class="btn btn-sm btn-outline-success btn-action" data-bs-toggle="modal" data-bs-target="#pagarModal{{ pagamento.id }}" title="Marcar como Pago">
+                                <i class="bi bi-check-lg"></i>
+                            </button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    
+                    {% if pagamento.status_pagamento == 'Pendente' %}
+                    <div class="modal fade" id="pagarModal{{ pagamento.id }}" tabindex="-1">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <form method="POST" action="{{ url_for('marcar_como_pago', id=pagamento.id) }}">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Confirmar Pagamento</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <p>Confirmar pagamento para <strong>{{ pagamento.tecnico.nome }}</strong>?</p>
+                                        <p class="mb-3">
+                                            <strong>Valor:</strong> R$ {{ "%.2f"|format(pagamento.valor_total) }}<br>
+                                            <strong>Período:</strong> {{ pagamento.periodo_inicio.strftime('%d/%m/%Y') }} - {{ pagamento.periodo_fim.strftime('%d/%m/%Y') }}<br>
+                                            <strong>Chamados:</strong> {{ pagamento.numero_chamados }}
+                                        </p>
+                                        <div class="mb-3">
+                                            <label class="form-label">Observações</label>
+                                            <textarea name="observacoes" class="form-control" rows="2" placeholder="Ex: Pago via PIX"></textarea>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                        <button type="submit" class="btn btn-success">
+                                            <i class="bi bi-check"></i> Confirmar Pagamento
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <i class="bi bi-cash"></i>
+            <h5>Nenhum pagamento encontrado</h5>
+            <p>Gere pagamentos para técnicos com chamados concluídos.</p>
+            {% if tecnicos_com_pendente %}
+            <a href="{{ url_for('gerar_pagamento') }}" class="btn btn-primary">
+                <i class="bi bi-plus"></i> Gerar Pagamento
+            </a>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

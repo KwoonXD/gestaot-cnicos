@@ -1,0 +1,178 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ pagamento.id_pagamento }} - Gestão de Técnicos{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('pagamentos') }}">Pagamentos</a></li>
+            <li class="breadcrumb-item active">{{ pagamento.id_pagamento }}</li>
+        </ol>
+    </nav>
+    <div class="d-flex justify-content-between align-items-center">
+        <h1><i class="bi bi-receipt"></i> {{ pagamento.id_pagamento }}</h1>
+        {% if pagamento.status_pagamento == 'Pendente' %}
+        <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#pagarModal">
+            <i class="bi bi-check"></i> Marcar como Pago
+        </button>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> Informações do Pagamento</h5>
+            </div>
+            <div class="card-body">
+                <div class="detail-item">
+                    <div class="label">ID do Pagamento</div>
+                    <div class="value"><code>{{ pagamento.id_pagamento }}</code></div>
+                </div>
+                <div class="detail-item">
+                    <div class="label">Técnico</div>
+                    <div class="value">
+                        <a href="{{ url_for('tecnico_detalhes', id=pagamento.tecnico.id) }}">
+                            {{ pagamento.tecnico.nome }}
+                        </a>
+                    </div>
+                </div>
+                <div class="detail-item">
+                    <div class="label">ID do Técnico</div>
+                    <div class="value"><code>{{ pagamento.tecnico.id_tecnico }}</code></div>
+                </div>
+                <div class="detail-item">
+                    <div class="label">Período</div>
+                    <div class="value">{{ pagamento.periodo_inicio.strftime('%d/%m/%Y') }} - {{ pagamento.periodo_fim.strftime('%d/%m/%Y') }}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="label">Número de Chamados</div>
+                    <div class="value"><span class="badge bg-secondary">{{ pagamento.numero_chamados }}</span></div>
+                </div>
+                <div class="detail-item">
+                    <div class="label">Valor por Atendimento</div>
+                    <div class="value">R$ {{ "%.2f"|format(pagamento.valor_por_atendimento) }}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="label">Valor Total</div>
+                    <div class="value fs-4 {% if pagamento.status_pagamento == 'Pago' %}text-success{% else %}text-warning{% endif %}">
+                        <strong>R$ {{ "%.2f"|format(pagamento.valor_total) }}</strong>
+                    </div>
+                </div>
+                <div class="detail-item">
+                    <div class="label">Status</div>
+                    <div class="value">
+                        <span class="badge badge-status badge-{{ pagamento.status_pagamento|lower }} fs-6">
+                            {{ pagamento.status_pagamento }}
+                        </span>
+                    </div>
+                </div>
+                {% if pagamento.data_pagamento %}
+                <div class="detail-item">
+                    <div class="label">Data do Pagamento</div>
+                    <div class="value">{{ pagamento.data_pagamento.strftime('%d/%m/%Y') }}</div>
+                </div>
+                {% endif %}
+                {% if pagamento.observacoes %}
+                <div class="detail-item">
+                    <div class="label">Observações</div>
+                    <div class="value">{{ pagamento.observacoes }}</div>
+                </div>
+                {% endif %}
+                <div class="detail-item">
+                    <div class="label">Data de Criação</div>
+                    <div class="value">{{ pagamento.data_criacao.strftime('%d/%m/%Y %H:%M') }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-clipboard-check"></i> Chamados Incluídos</h5>
+            </div>
+            <div class="card-body">
+                {% if chamados %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Data</th>
+                                <th>Tipo</th>
+                                <th>Cliente</th>
+                                <th>Status</th>
+                                <th>Valor</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for chamado in chamados %}
+                            <tr>
+                                <td><code>{{ chamado.id_chamado }}</code></td>
+                                <td>{{ chamado.data_atendimento.strftime('%d/%m/%Y') }}</td>
+                                <td>{{ chamado.tipo_servico }}</td>
+                                <td>{{ chamado.cliente or '-' }}</td>
+                                <td>
+                                    <span class="badge badge-status badge-{{ chamado.status_chamado|lower|replace(' ', '-') }}">
+                                        {{ chamado.status_chamado }}
+                                    </span>
+                                </td>
+                                <td>R$ {{ "%.2f"|format(chamado.valor) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot>
+                            <tr class="table-light">
+                                <td colspan="5" class="text-end"><strong>Total:</strong></td>
+                                <td><strong>R$ {{ "%.2f"|format(pagamento.valor_total) }}</strong></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-4">
+                    <i class="bi bi-clipboard fs-1 opacity-50"></i>
+                    <p class="mt-2">Nenhum chamado vinculado.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if pagamento.status_pagamento == 'Pendente' %}
+<div class="modal fade" id="pagarModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('marcar_como_pago', id=pagamento.id) }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">Confirmar Pagamento</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Confirmar pagamento para <strong>{{ pagamento.tecnico.nome }}</strong>?</p>
+                    <p class="mb-3">
+                        <strong>Valor:</strong> R$ {{ "%.2f"|format(pagamento.valor_total) }}<br>
+                        <strong>Período:</strong> {{ pagamento.periodo_inicio.strftime('%d/%m/%Y') }} - {{ pagamento.periodo_fim.strftime('%d/%m/%Y') }}<br>
+                        <strong>Chamados:</strong> {{ pagamento.numero_chamados }}
+                    </p>
+                    <div class="mb-3">
+                        <label class="form-label">Observações</label>
+                        <textarea name="observacoes" class="form-control" rows="2" placeholder="Ex: Pago via PIX"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-check"></i> Confirmar Pagamento
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

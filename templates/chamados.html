@@ -1,0 +1,136 @@
+{% extends 'base.html' %}
+
+{% block title %}Chamados - Gestão de Técnicos{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center">
+    <h1><i class="bi bi-clipboard-check"></i> Chamados</h1>
+    <a href="{{ url_for('novo_chamado') }}" class="btn btn-primary">
+        <i class="bi bi-plus"></i> Novo Chamado
+    </a>
+</div>
+
+<div class="filter-section">
+    <form method="GET" class="row g-3">
+        <div class="col-md-3">
+            <label class="form-label">Técnico</label>
+            <select name="tecnico" class="form-select">
+                <option value="">Todos</option>
+                {% for t in tecnicos %}
+                <option value="{{ t.id }}" {% if tecnico_filter == t.id|string %}selected{% endif %}>{{ t.nome }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">Status</label>
+            <select name="status" class="form-select">
+                <option value="">Todos</option>
+                {% for s in status_options %}
+                <option value="{{ s }}" {% if status_filter == s %}selected{% endif %}>{{ s }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">Tipo</label>
+            <select name="tipo" class="form-select">
+                <option value="">Todos</option>
+                {% for tipo in tipos_servico %}
+                <option value="{{ tipo }}" {% if tipo_filter == tipo %}selected{% endif %}>{{ tipo }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">Pago?</label>
+            <select name="pago" class="form-select">
+                <option value="">Todos</option>
+                <option value="sim" {% if pago_filter == 'sim' %}selected{% endif %}>Sim</option>
+                <option value="nao" {% if pago_filter == 'nao' %}selected{% endif %}>Não</option>
+            </select>
+        </div>
+        <div class="col-md-3 d-flex align-items-end gap-2">
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-search"></i> Filtrar
+            </button>
+            <a href="{{ url_for('chamados') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-x"></i> Limpar
+            </a>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        {% if chamados %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Código</th>
+                        <th>Técnico</th>
+                        <th>Data</th>
+                        <th>Localização</th>
+                        <th>Tipo</th>
+                        <th>Status</th>
+                        <th>Valor</th>
+                        <th>Pago?</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for chamado in chamados %}
+                    <tr>
+                        <td><code>{{ chamado.id_chamado }}</code></td>
+                        <td>{{ chamado.codigo_chamado or '-' }}</td>
+                        <td>
+                            <a href="{{ url_for('tecnico_detalhes', id=chamado.tecnico.id) }}" class="text-decoration-none">
+                                {{ chamado.tecnico.nome }}
+                            </a>
+                        </td>
+                        <td>{{ chamado.data_atendimento.strftime('%d/%m/%Y') }}</td>
+                        <td>{{ chamado.localizacao }}</td>
+                        <td>{{ chamado.tipo_servico }}</td>
+                        <td>
+                            <span class="badge badge-status badge-{{ chamado.status_chamado|lower|replace(' ', '-') }}">
+                                {{ chamado.status_chamado }}
+                            </span>
+                        </td>
+                        <td>R$ {{ "%.2f"|format(chamado.valor) }}</td>
+                        <td>
+                            {% if chamado.pago %}
+                            <span class="badge bg-success"><i class="bi bi-check"></i></span>
+                            {% else %}
+                            <span class="badge bg-secondary"><i class="bi bi-x"></i></span>
+                            {% endif %}
+                        </td>
+                        <td class="action-buttons">
+                            <a href="{{ url_for('editar_chamado', id=chamado.id) }}" class="btn btn-sm btn-outline-secondary btn-action" title="Editar">
+                                <i class="bi bi-pencil"></i>
+                            </a>
+                            {% if chamado.status_chamado != 'Concluído' and chamado.status_chamado != 'Cancelado' %}
+                            <form method="POST" action="{{ url_for('atualizar_status_chamado', id=chamado.id) }}" class="d-inline">
+                                <input type="hidden" name="status" value="Concluído">
+                                <button type="submit" class="btn btn-sm btn-outline-success btn-action" title="Marcar como Concluído">
+                                    <i class="bi bi-check-lg"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <i class="bi bi-clipboard"></i>
+            <h5>Nenhum chamado encontrado</h5>
+            <p>Adicione um novo chamado para começar.</p>
+            <a href="{{ url_for('novo_chamado') }}" class="btn btn-primary">
+                <i class="bi bi-plus"></i> Novo Chamado
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

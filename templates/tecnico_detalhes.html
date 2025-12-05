@@ -1,0 +1,269 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ tecnico.nome }} - Gestão de Técnicos{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('tecnicos') }}">Técnicos</a></li>
+            <li class="breadcrumb-item active">{{ tecnico.nome }}</li>
+        </ol>
+    </nav>
+    <div class="d-flex justify-content-between align-items-center">
+        <h1><i class="bi bi-person-badge"></i> {{ tecnico.nome }}</h1>
+        <div>
+            <a href="{{ url_for('editar_tecnico', id=tecnico.id) }}" class="btn btn-outline-primary">
+                <i class="bi bi-pencil"></i> Editar
+            </a>
+            {% if tecnico.total_a_pagar > 0 %}
+            <a href="{{ url_for('gerar_pagamento') }}?tecnico={{ tecnico.id }}" class="btn btn-success">
+                <i class="bi bi-cash"></i> Gerar Pagamento
+            </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-6 col-lg-3">
+        <div class="card metric-card blue h-100">
+            <div class="card-body text-center">
+                <div class="metric-value">{{ tecnico.total_atendimentos }}</div>
+                <div class="metric-label">Total Atendimentos</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-lg-3">
+        <div class="card metric-card green h-100">
+            <div class="card-body text-center">
+                <div class="metric-value">{{ tecnico.total_atendimentos_concluidos }}</div>
+                <div class="metric-label">Concluídos</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-lg-3">
+        <div class="card metric-card orange h-100">
+            <div class="card-body text-center">
+                <div class="metric-value">{{ tecnico.total_atendimentos_nao_pagos }}</div>
+                <div class="metric-label">Não Pagos</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-lg-3">
+        <div class="card metric-card {% if tecnico.total_a_pagar > 0 %}red{% else %}green{% endif %} h-100">
+            <div class="card-body text-center">
+                <div class="metric-value">R$ {{ "%.2f"|format(tecnico.total_a_pagar) }}</div>
+                <div class="metric-label">A Pagar</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-4">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-person"></i> Informações</h5>
+            </div>
+            <div class="card-body">
+                <div class="detail-item">
+                    <div class="label">ID do Técnico</div>
+                    <div class="value"><code>{{ tecnico.id_tecnico }}</code></div>
+                </div>
+                <div class="detail-item">
+                    <div class="label">Contato</div>
+                    <div class="value">{{ tecnico.contato }}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="label">Localização</div>
+                    <div class="value">{{ tecnico.cidade }}/{{ tecnico.estado }}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="label">Status</div>
+                    <div class="value">
+                        <span class="badge badge-status badge-{{ tecnico.status|lower }}">{{ tecnico.status }}</span>
+                    </div>
+                </div>
+                <div class="detail-item">
+                    <div class="label">Valor por Atendimento</div>
+                    <div class="value">R$ {{ "%.2f"|format(tecnico.valor_por_atendimento) }}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="label">Data de Início</div>
+                    <div class="value">{{ tecnico.data_inicio.strftime('%d/%m/%Y') if tecnico.data_inicio else '-' }}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="label">Status de Pagamento</div>
+                    <div class="value">
+                        <span class="badge badge-status badge-{{ tecnico.status_pagamento|lower }}">{{ tecnico.status_pagamento }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-cash"></i> Dados de Pagamento</h5>
+            </div>
+            <div class="card-body">
+                <div class="detail-item">
+                    <div class="label">Forma de Pagamento</div>
+                    <div class="value">{{ tecnico.forma_pagamento or '-' }}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="label">Chave de Pagamento</div>
+                    <div class="value"><code>{{ tecnico.chave_pagamento or '-' }}</code></div>
+                </div>
+            </div>
+        </div>
+        
+        {% if tecnico.tecnico_principal %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-diagram-3"></i> Técnico Principal</h5>
+            </div>
+            <div class="card-body">
+                <a href="{{ url_for('tecnico_detalhes', id=tecnico.tecnico_principal.id) }}" class="text-decoration-none">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-person-circle fs-3 me-2"></i>
+                        <div>
+                            <strong>{{ tecnico.tecnico_principal.nome }}</strong><br>
+                            <small class="text-muted">{{ tecnico.tecnico_principal.cidade }}/{{ tecnico.tecnico_principal.estado }}</small>
+                        </div>
+                    </div>
+                </a>
+            </div>
+        </div>
+        {% endif %}
+        
+        {% if sub_tecnicos %}
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-people"></i> Técnicos Vinculados</h5>
+            </div>
+            <div class="card-body">
+                {% for sub in sub_tecnicos %}
+                <a href="{{ url_for('tecnico_detalhes', id=sub.id) }}" class="text-decoration-none d-block mb-2">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-person me-2"></i>
+                        <div>
+                            <strong>{{ sub.nome }}</strong><br>
+                            <small class="text-muted">{{ sub.cidade }}/{{ sub.estado }}</small>
+                        </div>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    
+    <div class="col-lg-8">
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-clipboard-check"></i> Histórico de Chamados</h5>
+                <a href="{{ url_for('novo_chamado') }}?tecnico={{ tecnico.id }}" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-plus"></i> Novo Chamado
+                </a>
+            </div>
+            <div class="card-body">
+                {% if chamados %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Código</th>
+                                <th>Data</th>
+                                <th>Tipo</th>
+                                <th>Status</th>
+                                <th>Valor</th>
+                                <th>Pago?</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for chamado in chamados %}
+                            <tr>
+                                <td><code>{{ chamado.id_chamado }}</code></td>
+                                <td>{{ chamado.codigo_chamado or '-' }}</td>
+                                <td>{{ chamado.data_atendimento.strftime('%d/%m/%Y') }}</td>
+                                <td>{{ chamado.tipo_servico }}</td>
+                                <td>
+                                    <span class="badge badge-status badge-{{ chamado.status_chamado|lower|replace(' ', '-') }}">
+                                        {{ chamado.status_chamado }}
+                                    </span>
+                                </td>
+                                <td>R$ {{ "%.2f"|format(chamado.valor) }}</td>
+                                <td>
+                                    {% if chamado.pago %}
+                                    <span class="badge bg-success"><i class="bi bi-check"></i> Sim</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary"><i class="bi bi-x"></i> Não</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-4">
+                    <i class="bi bi-clipboard fs-1 opacity-50"></i>
+                    <p class="mt-2">Nenhum chamado registrado.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-cash-stack"></i> Histórico de Pagamentos</h5>
+            </div>
+            <div class="card-body">
+                {% if pagamentos %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Período</th>
+                                <th>Chamados</th>
+                                <th>Valor Total</th>
+                                <th>Status</th>
+                                <th>Data Pagamento</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for pagamento in pagamentos %}
+                            <tr>
+                                <td>
+                                    <a href="{{ url_for('pagamento_detalhes', id=pagamento.id) }}">
+                                        <code>{{ pagamento.id_pagamento }}</code>
+                                    </a>
+                                </td>
+                                <td>{{ pagamento.periodo_inicio.strftime('%d/%m') }} - {{ pagamento.periodo_fim.strftime('%d/%m/%Y') }}</td>
+                                <td>{{ pagamento.numero_chamados }}</td>
+                                <td>R$ {{ "%.2f"|format(pagamento.valor_total) }}</td>
+                                <td>
+                                    <span class="badge badge-status badge-{{ pagamento.status_pagamento|lower }}">
+                                        {{ pagamento.status_pagamento }}
+                                    </span>
+                                </td>
+                                <td>{{ pagamento.data_pagamento.strftime('%d/%m/%Y') if pagamento.data_pagamento else '-' }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-4">
+                    <i class="bi bi-cash fs-1 opacity-50"></i>
+                    <p class="mt-2">Nenhum pagamento registrado.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ 'Editar' if chamado else 'Novo' }} Chamado - Gestão de Técnicos{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('chamados') }}">Chamados</a></li>
+            <li class="breadcrumb-item active">{{ 'Editar' if chamado else 'Novo' }} Chamado</li>
+        </ol>
+    </nav>
+    <h1><i class="bi bi-clipboard-{{ 'check' if chamado else 'plus' }}"></i> {{ 'Editar' if chamado else 'Novo' }} Chamado</h1>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-body">
+                <form method="POST">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Técnico *</label>
+                            <select name="tecnico_id" class="form-select" required>
+                                <option value="">Selecione...</option>
+                                {% for t in tecnicos %}
+                                <option value="{{ t.id }}" {% if chamado and chamado.tecnico_id == t.id %}selected{% endif %}>
+                                    {{ t.nome }} ({{ t.cidade }}/{{ t.estado }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Código do Chamado</label>
+                            <input type="text" name="codigo_chamado" class="form-control"
+                                   value="{{ chamado.codigo_chamado if chamado else '' }}" placeholder="Código de referência">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Data do Atendimento *</label>
+                            <input type="date" name="data_atendimento" class="form-control" required
+                                   value="{{ chamado.data_atendimento.strftime('%Y-%m-%d') if chamado and chamado.data_atendimento else '' }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Tipo de Serviço *</label>
+                            <select name="tipo_servico" class="form-select" required>
+                                <option value="">Selecione...</option>
+                                {% for tipo in tipos_servico %}
+                                <option value="{{ tipo }}" {% if chamado and chamado.tipo_servico == tipo %}selected{% endif %}>{{ tipo }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Status *</label>
+                            <select name="status_chamado" class="form-select" required>
+                                {% for s in status_options %}
+                                <option value="{{ s }}" {% if chamado and chamado.status_chamado == s %}selected{% elif not chamado and s == 'Pendente' %}selected{% endif %}>{{ s }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Endereço</label>
+                            <input type="text" name="endereco" class="form-control"
+                                   value="{{ chamado.endereco if chamado else '' }}" placeholder="Endereço do atendimento">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Observações</label>
+                            <textarea name="observacoes" class="form-control" rows="3" placeholder="Observações do chamado...">{{ chamado.observacoes if chamado else '' }}</textarea>
+                        </div>
+                    </div>
+                    
+                    <hr class="my-4">
+                    
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('chamados') }}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left"></i> Cancelar
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check"></i> {{ 'Salvar Alterações' if chamado else 'Criar Chamado' }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card bg-light">
+            <div class="card-body">
+                <h5><i class="bi bi-info-circle"></i> Informações</h5>
+                <p class="text-muted small mb-2">
+                    <strong>Campos obrigatórios</strong> estão marcados com *.
+                </p>
+                <p class="text-muted small mb-2">
+                    <strong>Código do Chamado:</strong> Informe o código de referência do chamado no sistema do cliente.
+                </p>
+                <p class="text-muted small mb-2">
+                    <strong>Tipos de Serviço:</strong>
+                </p>
+                <ul class="text-muted small">
+                    <li><strong>Americanas:</strong> Serviços para Americanas</li>
+                    <li><strong>Escolas:</strong> Serviços em escolas</li>
+                    <li><strong>Telmex:</strong> Serviços Telmex</li>
+                    <li><strong>Esteira:</strong> Serviços de esteira</li>
+                </ul>
+                <p class="text-muted small mb-0">
+                    <strong>Valor:</strong> O valor do chamado é automaticamente baseado no valor por atendimento do técnico selecionado.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

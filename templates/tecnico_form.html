@@ -1,0 +1,144 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ 'Editar' if tecnico else 'Novo' }} Técnico - Gestão de Técnicos{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('tecnicos') }}">Técnicos</a></li>
+            <li class="breadcrumb-item active">{{ 'Editar' if tecnico else 'Novo' }} Técnico</li>
+        </ol>
+    </nav>
+    <h1><i class="bi bi-person-{{ 'gear' if tecnico else 'plus' }}"></i> {{ 'Editar' if tecnico else 'Novo' }} Técnico</h1>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-body">
+                <form method="POST">
+                    <h6 class="text-muted mb-3"><i class="bi bi-person"></i> Dados Pessoais</h6>
+                    <div class="row g-3">
+                        <div class="col-md-8">
+                            <label class="form-label">Nome Completo *</label>
+                            <input type="text" name="nome" class="form-control" required 
+                                   value="{{ tecnico.nome if tecnico else '' }}" placeholder="Digite o nome completo">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Contato *</label>
+                            <input type="tel" name="contato" class="form-control" required
+                                   value="{{ tecnico.contato if tecnico else '' }}" placeholder="(11) 99999-9999">
+                        </div>
+                    </div>
+                    
+                    <hr class="my-4">
+                    <h6 class="text-muted mb-3"><i class="bi bi-geo-alt"></i> Localização</h6>
+                    <div class="row g-3">
+                        <div class="col-md-8">
+                            <label class="form-label">Cidade *</label>
+                            <input type="text" name="cidade" class="form-control" required 
+                                   value="{{ tecnico.cidade if tecnico else '' }}" placeholder="Nome da cidade">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Estado *</label>
+                            <select name="estado" class="form-select" required>
+                                <option value="">Selecione...</option>
+                                {% for e in estados %}
+                                <option value="{{ e }}" {% if tecnico and tecnico.estado == e %}selected{% endif %}>{{ e }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <hr class="my-4">
+                    <h6 class="text-muted mb-3"><i class="bi bi-cash"></i> Dados de Pagamento</h6>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Forma de Pagamento</label>
+                            <select name="forma_pagamento" class="form-select">
+                                <option value="">Selecione...</option>
+                                {% for f in formas_pagamento %}
+                                <option value="{{ f }}" {% if tecnico and tecnico.forma_pagamento == f %}selected{% endif %}>{{ f }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label">Chave de Pagamento</label>
+                            <input type="text" name="chave_pagamento" class="form-control"
+                                   value="{{ tecnico.chave_pagamento if tecnico else '' }}" placeholder="CPF, CNPJ, E-mail, Telefone ou Chave aleatória">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Valor por Atendimento (R$) *</label>
+                            <input type="number" name="valor_por_atendimento" class="form-control" required
+                                   step="0.01" min="0" value="{{ tecnico.valor_por_atendimento if tecnico else '150.00' }}">
+                        </div>
+                    </div>
+                    
+                    <hr class="my-4">
+                    <h6 class="text-muted mb-3"><i class="bi bi-gear"></i> Configurações</h6>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Status *</label>
+                            <select name="status" class="form-select" required>
+                                {% for s in status_options %}
+                                <option value="{{ s }}" {% if tecnico and tecnico.status == s %}selected{% elif not tecnico and s == 'Ativo' %}selected{% endif %}>{{ s }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Data de Início *</label>
+                            <input type="date" name="data_inicio" class="form-control" required
+                                   value="{{ tecnico.data_inicio.strftime('%Y-%m-%d') if tecnico and tecnico.data_inicio else '' }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Técnico Principal</label>
+                            <select name="tecnico_principal_id" class="form-select">
+                                <option value="">Nenhum (é principal)</option>
+                                {% for t in tecnicos_principais %}
+                                <option value="{{ t.id }}" {% if tecnico and tecnico.tecnico_principal_id == t.id %}selected{% endif %}>
+                                    {{ t.nome }} ({{ t.cidade }}/{{ t.estado }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <hr class="my-4">
+                    
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('tecnicos') }}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left"></i> Cancelar
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check"></i> {{ 'Salvar Alterações' if tecnico else 'Cadastrar Técnico' }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card bg-light">
+            <div class="card-body">
+                <h5><i class="bi bi-info-circle"></i> Informações</h5>
+                <p class="text-muted small mb-2">
+                    <strong>Campos obrigatórios</strong> estão marcados com *.
+                </p>
+                <p class="text-muted small mb-2">
+                    <strong>Valor por Atendimento:</strong> Este valor será usado para calcular os pagamentos do técnico.
+                </p>
+                <p class="text-muted small mb-2">
+                    <strong>Chave de Pagamento:</strong> Informe a chave PIX ou dados bancários para pagamento.
+                </p>
+                <p class="text-muted small mb-2">
+                    <strong>Técnico Principal:</strong> Se este técnico está vinculado a uma empresa ou outro técnico, selecione aqui.
+                </p>
+                <p class="text-muted small mb-0">
+                    <strong>Status:</strong> Técnicos inativos não aparecerão nas listas de seleção para novos chamados.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

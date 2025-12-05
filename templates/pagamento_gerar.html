@@ -1,0 +1,168 @@
+{% extends 'base.html' %}
+
+{% block title %}Gerar Pagamento - Gestão de Técnicos{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('pagamentos') }}">Pagamentos</a></li>
+            <li class="breadcrumb-item active">Gerar Pagamento</li>
+        </ol>
+    </nav>
+    <h1><i class="bi bi-cash-coin"></i> Gerar Pagamento</h1>
+</div>
+
+{% if error %}
+<div class="alert alert-danger alert-dismissible fade show" role="alert">
+    <i class="bi bi-exclamation-triangle"></i> {{ error }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-body">
+                {% if tecnicos %}
+                <form method="POST">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label">Técnico *</label>
+                            <select name="tecnico_id" class="form-select" required id="tecnicoSelect">
+                                <option value="">Selecione um técnico...</option>
+                                {% for t in tecnicos %}
+                                <option value="{{ t.id }}" 
+                                        data-valor="{{ t.valor_por_atendimento }}"
+                                        data-pendente="{{ t.total_atendimentos_nao_pagos }}"
+                                        data-total="{{ t.total_a_pagar }}">
+                                    {{ t.nome }} - {{ t.total_atendimentos_nao_pagos }} chamados pendentes (R$ {{ "%.2f"|format(t.total_a_pagar) }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Período Início *</label>
+                            <input type="date" name="periodo_inicio" class="form-control" required id="periodoInicio">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Período Fim *</label>
+                            <input type="date" name="periodo_fim" class="form-control" required id="periodoFim">
+                        </div>
+                    </div>
+                    
+                    <div class="card bg-light mt-4" id="previewCard" style="display: none;">
+                        <div class="card-body">
+                            <h5 class="card-title"><i class="bi bi-receipt"></i> Resumo do Pagamento</h5>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <p class="mb-1"><strong>Técnico:</strong> <span id="previewTecnico">-</span></p>
+                                    <p class="mb-1"><strong>Período:</strong> <span id="previewPeriodo">-</span></p>
+                                </div>
+                                <div class="col-md-6">
+                                    <p class="mb-1"><strong>Chamados Pendentes:</strong> <span id="previewChamados">-</span></p>
+                                    <p class="mb-1"><strong>Valor Máximo:</strong> <span id="previewValor" class="text-success fw-bold">-</span></p>
+                                </div>
+                            </div>
+                            <p class="text-muted small mb-0 mt-2">
+                                <i class="bi bi-info-circle"></i> O valor final será calculado com base nos chamados concluídos no período selecionado.
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <hr class="my-4">
+                    
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('pagamentos') }}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left"></i> Cancelar
+                        </a>
+                        <button type="submit" class="btn btn-success">
+                            <i class="bi bi-check"></i> Gerar Pagamento
+                        </button>
+                    </div>
+                </form>
+                {% else %}
+                <div class="empty-state">
+                    <i class="bi bi-check-circle"></i>
+                    <h5>Todos os pagamentos em dia!</h5>
+                    <p>Não há técnicos com chamados concluídos pendentes de pagamento.</p>
+                    <a href="{{ url_for('pagamentos') }}" class="btn btn-outline-primary">
+                        <i class="bi bi-arrow-left"></i> Voltar para Pagamentos
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card bg-light">
+            <div class="card-body">
+                <h5><i class="bi bi-info-circle"></i> Como Funciona</h5>
+                <ol class="text-muted small mb-0">
+                    <li class="mb-2">Selecione o técnico que receberá o pagamento</li>
+                    <li class="mb-2">Defina o período de referência</li>
+                    <li class="mb-2">O sistema buscará todos os chamados <strong>Concluídos</strong> e <strong>Não Pagos</strong> no período</li>
+                    <li class="mb-2">O valor será calculado automaticamente</li>
+                    <li>Os chamados serão marcados como pagos</li>
+                </ol>
+            </div>
+        </div>
+        
+        {% if tecnicos %}
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-people"></i> Técnicos com Pendências</h6>
+            </div>
+            <div class="card-body p-0">
+                <ul class="list-group list-group-flush">
+                    {% for t in tecnicos %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>{{ t.nome }}</strong>
+                            <small class="d-block text-muted">{{ t.total_atendimentos_nao_pagos }} chamados</small>
+                        </div>
+                        <span class="badge bg-warning text-dark">R$ {{ "%.2f"|format(t.total_a_pagar) }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const tecnicoSelect = document.getElementById('tecnicoSelect');
+    const periodoInicio = document.getElementById('periodoInicio');
+    const periodoFim = document.getElementById('periodoFim');
+    const previewCard = document.getElementById('previewCard');
+    
+    if (!tecnicoSelect || !periodoInicio || !periodoFim || !previewCard) {
+        return;
+    }
+    
+    function updatePreview() {
+        const option = tecnicoSelect.options[tecnicoSelect.selectedIndex];
+        
+        if (tecnicoSelect.value && periodoInicio.value && periodoFim.value) {
+            previewCard.style.display = 'block';
+            document.getElementById('previewTecnico').textContent = option.text.split(' - ')[0];
+            document.getElementById('previewPeriodo').textContent = 
+                new Date(periodoInicio.value).toLocaleDateString('pt-BR') + ' - ' + 
+                new Date(periodoFim.value).toLocaleDateString('pt-BR');
+            document.getElementById('previewChamados').textContent = option.dataset.pendente;
+            document.getElementById('previewValor').textContent = 'R$ ' + parseFloat(option.dataset.total).toFixed(2);
+        } else {
+            previewCard.style.display = 'none';
+        }
+    }
+    
+    tecnicoSelect.addEventListener('change', updatePreview);
+    periodoInicio.addEventListener('change', updatePreview);
+    periodoFim.addEventListener('change', updatePreview);
+});
+</script>
+{% endblock %}
