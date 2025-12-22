@@ -10,4 +10,5 @@ dependencies = [
     "psycopg2-binary>=2.9.11",
     "flask-migrate>=4.0.7",
     "flask-login>=0.6.3",
+    "flask-executor>=1.0.0",
 ]

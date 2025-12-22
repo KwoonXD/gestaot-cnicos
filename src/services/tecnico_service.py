@@ -6,8 +6,8 @@ class TecnicoService:
     def get_all(filters=None, page=1, per_page=20):
         query = Tecnico.query
         
-        # Filtros SQL
         if filters:
+            # Filtros Simples
             if filters.get('estado'):
                 query = query.filter_by(estado=filters['estado'])
             if filters.get('cidade'):
@@ -16,12 +16,26 @@ class TecnicoService:
                 query = query.filter_by(status=filters['status'])
             if filters.get('search'):
                 query = query.filter(Tecnico.nome.ilike(f"%{filters['search']}%"))
-        
-        # Ordenação
-        query = query.order_by(Tecnico.nome)
-        
-        # Paginação via Banco de Dados
-        return query.paginate(page=page, per_page=per_page, error_out=False)
+            
+            # Filtro Avançado: Pagamento (Recuperado via SQL)
+            if filters.get('pagamento') == 'Pendente':
+                # Filtra técnicos que possuem pelo menos um chamado Concluído e Não Pago
+                query = query.join(Chamado).filter(
+                    Chamado.status_chamado == 'Concluído',
+                    Chamado.pago == False
+                ).group_by(Tecnico.id)
+            
+            elif filters.get('pagamento') == 'Pago':
+                # Filtra técnicos que NÃO estão no grupo de pendentes (usando NOT IN ou LEFT JOIN null)
+                # Para performance simples neste estágio, vamos usar except_
+                pendentes_subquery = db.session.query(Tecnico.id).join(Chamado).filter(
+                    Chamado.status_chamado == 'Concluído',
+                    Chamado.pago == False
+                ).subquery()
+                query = query.filter(Tecnico.id.notin_(pendentes_subquery))
+
+        # Ordenação e Paginação
+        return query.order_by(Tecnico.nome).paginate(page=page, per_page=per_page, error_out=False)
 
     @staticmethod
     def get_by_id(id):

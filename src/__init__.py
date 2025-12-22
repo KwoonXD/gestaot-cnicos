@@ -5,6 +5,7 @@ from logging.handlers import RotatingFileHandler
 from flask import Flask
 from flask_login import LoginManager
 from flask_migrate import Migrate
+from flask_executor import Executor
 from dotenv import load_dotenv
 from .models import db, User
 
@@ -29,10 +30,15 @@ def create_app():
         "pool_pre_ping": True,
     }
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+    app.config['EXECUTOR_TYPE'] = 'thread'
+    app.config['EXECUTOR_MAX_WORKERS'] = 2
+
 
     # Init Extensions
     db.init_app(app)
     migrate = Migrate(app, db) # Task 1: Flask-Migrate
+    executor = Executor(app)
+
     
     login_manager = LoginManager()
     login_manager.init_app(app)
