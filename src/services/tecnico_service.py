@@ -70,3 +70,10 @@ class TecnicoService:
             'ativos': Tecnico.query.filter_by(status='Ativo').count(),
             'total_pendente': sum(t.total_a_pagar for t in Tecnico.query.all())
         }
+
+    @staticmethod
+    def get_pendencias(id):
+        tecnico = TecnicoService.get_by_id(id)
+        # Use simple property or query logic.
+        # Assuming Chamado has 'pago' boolean field.
+        return Chamado.query.filter_by(tecnico_id=id, pago=False).order_by(Chamado.data_atendimento.desc()).all()

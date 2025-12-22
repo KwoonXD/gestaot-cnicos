@@ -12,6 +12,35 @@ def api_tecnicos():
     tecnicos = TecnicoService.get_all()
     return jsonify([t.to_dict() for t in tecnicos])
 
+@api_bp.route('/tecnicos/<int:id>/pendencias')
+@login_required
+def api_tecnico_pendencias(id):
+    tecnico = TecnicoService.get_by_id(id)
+    if not tecnico:
+        return jsonify({'error': 'Técnico não encontrado'}), 404
+        
+    pendencias = TecnicoService.get_pendencias(id)
+    
+    # Format response for the frontend
+    response = {
+        'tecnico': {
+            'id': tecnico.id,
+            'nome': tecnico.nome,
+            'chave_pagamento': tecnico.chave_pagamento,
+            'forma_pagamento': tecnico.forma_pagamento
+        },
+        'total_pendente': float(sum(c.valor for c in pendencias)),
+        'chamados': [{
+            'data': c.data_atendimento.strftime('%d/%m/%Y'),
+            'codigo': c.codigo_chamado or str(c.id),
+            'tipo': c.tipo_servico,
+            'endereco': c.localizacao,
+            'valor': float(c.valor)
+        } for c in pendencias]
+    }
+    
+    return jsonify(response)
+
 @api_bp.route('/chamados')
 @login_required
 def api_chamados():

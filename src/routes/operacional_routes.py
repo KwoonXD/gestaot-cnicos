@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
-from ..models import ESTADOS_BRASIL, FORMAS_PAGAMENTO
+# CORREÇÃO AQUI: Importamos Chamado, Pagamento e Tecnico explicitamente
+from ..models import ESTADOS_BRASIL, FORMAS_PAGAMENTO, Chamado, Pagamento, Tecnico
 from ..services.tecnico_service import TecnicoService
 from ..services.chamado_service import ChamadoService
 from ..services.financeiro_service import FinanceiroService
@@ -40,7 +41,7 @@ def tecnicos():
     
     tecnicos_list = TecnicoService.get_all(filters)
     
-    # Get states for dropdown - simplified for now
+    # Get states for dropdown
     estados_usados = sorted(list(set([t.estado for t in tecnicos_list if t.estado])))
     
     return render_template('tecnicos.html',
@@ -77,13 +78,17 @@ def novo_tecnico():
 @login_required
 def tecnico_detalhes(id):
     tecnico = TecnicoService.get_by_id(id)
-    # Lazy loading relationships accessed in template, but best practice is service.
-    # We will pass the object and let the template access relationships for now to minimize refactor impact.
+    
+    # CORREÇÃO AQUI: Uso direto da classe Chamado importada
+    chamados = tecnico.chamados.order_by(Chamado.data_atendimento.desc()).all()
+    pagamentos = tecnico.pagamentos.all()
+    sub_tecnicos = tecnico.sub_tecnicos
+    
     return render_template('tecnico_detalhes.html',
         tecnico=tecnico,
-        chamados=tecnico.chamados.order_by(ChamadoService.get_all.__globals__['Chamado'].data_atendimento.desc()).all(),
-        pagamentos=tecnico.pagamentos.all(),
-        sub_tecnicos=tecnico.sub_tecnicos
+        chamados=chamados,
+        pagamentos=pagamentos,
+        sub_tecnicos=sub_tecnicos
     )
 
 @operacional_bp.route('/tecnicos/<int:id>/editar', methods=['GET', 'POST'])
@@ -96,7 +101,6 @@ def editar_tecnico(id):
         return redirect(url_for('operacional.tecnico_detalhes', id=id))
     
     tecnicos_principais = TecnicoService.get_all({'status': 'Ativo'})
-    # Exclude self
     tecnicos_principais = [t for t in tecnicos_principais if t.id != id]
     
     return render_template('tecnico_form.html',

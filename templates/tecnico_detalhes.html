@@ -18,7 +18,7 @@
                 <i class="bi bi-pencil"></i> Editar
             </a>
             {% if tecnico.total_a_pagar > 0 %}
-            <a href="{{ url_for('gerar_pagamento') }}?tecnico={{ tecnico.id }}" class="btn btn-success">
+            <a href="{{ url_for('financeiro.gerar_pagamento') }}?tecnico={{ tecnico.id }}" class="btn btn-success">
                 <i class="bi bi-cash"></i> Gerar Pagamento
             </a>
             {% endif %}
@@ -127,7 +127,7 @@
                 <h5 class="mb-0"><i class="bi bi-diagram-3"></i> Técnico Principal</h5>
             </div>
             <div class="card-body">
-                <a href="{{ url_for('tecnico_detalhes', id=tecnico.tecnico_principal.id) }}"
+                <a href="{{ url_for('operacional.tecnico_detalhes', id=tecnico.tecnico_principal.id) }}"
                     class="text-decoration-none">
                     <div class="d-flex align-items-center">
                         <i class="bi bi-person-circle fs-3 me-2"></i>
@@ -344,7 +344,7 @@
                             {% for pagamento in pagamentos %}
                             <tr>
                                 <td>
-                                    <a href="{{ url_for('pagamento_detalhes', id=pagamento.id) }}">
+                                    <a href="{{ url_for('financeiro.pagamento_detalhes', id=pagamento.id) }}">
                                         <code>{{ pagamento.id_pagamento }}</code>
                                     </a>
                                 </td>

@@ -35,7 +35,7 @@
                 <div class="detail-item">
                     <div class="label">Técnico</div>
                     <div class="value">
-                        <a href="{{ url_for('tecnico_detalhes', id=pagamento.tecnico.id) }}">
+                        <a href="{{ url_for('operacional.tecnico_detalhes', id=pagamento.tecnico.id) }}">
                             {{ pagamento.tecnico.nome }}
                         </a>
                     </div>
@@ -151,7 +151,7 @@
 <div class="modal fade" id="pagarModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
-            <form method="POST" action="{{ url_for('marcar_como_pago', id=pagamento.id) }}">
+            <form method="POST" action="{{ url_for('financeiro.marcar_como_pago', id=pagamento.id) }}">
                 <div class="modal-header">
                     <h5 class="modal-title">Confirmar Pagamento</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
