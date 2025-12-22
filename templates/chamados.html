@@ -10,6 +10,17 @@
     </a>
 </div>
 
+<!-- Saved Views Toolbar -->
+<div class="mb-3 d-flex gap-2 overflow-auto pb-2">
+    {% for view in saved_views %}
+    <a href="{{ url_for('operacional.chamados') }}{{ view.query_string }}"
+        class="btn btn-outline-secondary btn-sm rounded-pill d-flex align-items-center gap-2">
+        <span>{{ view.name }}</span>
+        <!-- Optional: Delete button logic could go here -->
+    </a>
+    {% endfor %}
+</div>
+
 <div class="filter-section">
     <form method="GET" action="{{ url_for('operacional.chamados') }}" class="row g-3">
         <div class="col-md-3">
@@ -54,6 +65,9 @@
             <a href="{{ url_for('operacional.chamados') }}" class="btn btn-outline-secondary">
                 <i class="bi bi-x"></i> Limpar
             </a>
+            <button type="button" class="btn btn-outline-info" id="btnSaveView" title="Salvar Filtro Atual">
+                <i class="bi bi-bookmark-plus"></i>
+            </button>
         </div>
     </form>
 </div>
@@ -96,7 +110,7 @@
                                 {{ chamado.status_chamado }}
                             </span>
                         </td>
-                        <td>R$ {{ "%.2f"|format(chamado.valor) }}</td>
+                        <td class="font-numeric">R$ {{ "%.2f"|format(chamado.valor) }}</td>
                         <td>
                             {% if chamado.pago %}
                             <span class="badge bg-success"><i class="bi bi-check"></i></span>
@@ -140,4 +154,96 @@
         {% endif %}
     </div>
 </div>
+</div>
+</div>
+
+<!-- Offcanvas Técnico -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasTecnico" aria-labelledby="offcanvasTecnicoLabel">
+    <div class="offcanvas-header">
+        <h5 class="offcanvas-title" id="offcanvasTecnicoLabel">Detalhes do Técnico</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body" id="offcanvasTecnicoBody">
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Carregando...</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Save View Logic
+    document.getElementById('btnSaveView').addEventListener('click', async () => {
+        const name = prompt("Nome do Filtro:");
+        if (!name) return;
+
+        const queryString = window.location.search;
+        if (!queryString) {
+            alert("Aplique um filtro primeiro.");
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/views/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    page_route: 'chamados',
+                    name: name,
+                    query_string: queryString
+                })
+            });
+
+            if (res.ok) {
+                location.reload();
+            } else {
+                alert("Erro ao salvar filtro.");
+            }
+        } catch (e) {
+            console.error(e);
+            alert("Erro ao conectar.");
+        }
+    });
+
+    // Offcanvas Logic
+    const offcanvasEl = document.getElementById('offcanvasTecnico');
+    const offcanvas = new bootstrap.Offcanvas(offcanvasEl);
+
+    // Add logic to click technician name
+    // We need to change the links in the table to open offcanvas
+    // Or we can cheat and use Javascript to intercept clicks
+    // But since I can't easily replace all links in the table with click handlers without modifying the table rows logic extensively (and regex is risky), 
+    // I will use event delegation on the table.
+
+    document.addEventListener('click', function (e) {
+        // Check if clicked element is a technician link inside the table
+        const link = e.target.closest('a[href*="/tecnicos/"]');
+        if (link && document.querySelector('table').contains(link)) {
+            e.preventDefault();
+            const url = link.href;
+            const tecnicoId = url.split('/').pop(); // Extract ID
+
+            // Show offcanvas
+            offcanvas.show();
+
+            // Fetch partial content
+            // Currently I don't have a partial route, but I can fetch the full page and extract content, or better, use the existing details page but asking for JSON?
+            // User asked: "Use JS para buscar o conteúdo /tecnicos/<id>/resumo (crie essa rota parcial se precisar)"
+            // I need to create the route /tecnicos/<id>/resumo.
+
+            fetch(`/tecnicos/${tecnicoId}/resumo`)
+                .then(res => res.text())
+                .then(html => {
+                    document.getElementById('offcanvasTecnicoBody').innerHTML = html;
+                })
+                .catch(err => {
+                    document.getElementById('offcanvasTecnicoBody').innerHTML = '<p class="text-danger">Erro ao carregar.</p>';
+                });
+        }
+    });
+</script>
 {% endblock %}

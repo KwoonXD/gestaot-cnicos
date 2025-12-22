@@ -45,6 +45,7 @@ class Tecnico(db.Model):
     tecnico_principal = db.relationship('Tecnico', remote_side=[id], backref='sub_tecnicos', foreign_keys=[tecnico_principal_id])
     chamados = db.relationship('Chamado', backref='tecnico', lazy='dynamic', foreign_keys='Chamado.tecnico_id')
     pagamentos = db.relationship('Pagamento', backref='tecnico', lazy='dynamic')
+    tags_list = db.relationship('Tag', backref='tecnico', lazy='dynamic')
     
     @property
     def id_tecnico(self):
@@ -106,7 +107,8 @@ class Tecnico(db.Model):
             'total_atendimentos_concluidos': self.total_atendimentos_concluidos,
             'total_atendimentos_nao_pagos': self.total_atendimentos_nao_pagos,
             'total_a_pagar': self.total_a_pagar,
-            'status_pagamento': self.status_pagamento
+            'status_pagamento': self.status_pagamento,
+            'tags': [t.to_dict() for t in self.tags_list]
         }
 
 
@@ -247,3 +249,30 @@ class Lancamento(db.Model):
             'valor': float(self.valor),
             'descricao': self.descricao
         }
+
+class Tag(db.Model):
+    __tablename__ = 'tags'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(50), nullable=False)
+    cor = db.Column(db.String(7), nullable=False)
+    tecnico_id = db.Column(db.Integer, db.ForeignKey('tecnicos.id'), nullable=False)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'nome': self.nome,
+            'cor': self.cor,
+            'tecnico_id': self.tecnico_id
+        }
+
+class SavedView(db.Model):
+    __tablename__ = 'saved_views'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    page_route = db.Column(db.String(100), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    query_string = db.Column(db.Text, nullable=False)
+    
+    user = db.relationship('User', backref='saved_views')

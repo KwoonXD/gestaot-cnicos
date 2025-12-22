@@ -59,6 +59,17 @@ def create_app():
 
     # Removed db.create_all() as per Task 1
 
+    # Context Processor for Alerts
+    @app.context_processor
+    def inject_alerts():
+        try:
+            from .services.alert_service import AlertService
+            alerts = AlertService.get_alerts()
+            return dict(alertas=alerts, alerta_count=len(alerts))
+        except Exception as e:
+            app.logger.error(f"Error injecting alerts: {e}")
+            return dict(alertas=[], alerta_count=0)
+
     # Register Blueprints
     from .routes.auth_routes import auth_bp
     from .routes.operacional_routes import operacional_bp

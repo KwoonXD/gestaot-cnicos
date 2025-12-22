@@ -1,0 +1,38 @@
+<div class="text-center mb-4">
+    <div class="bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-3"
+        style="width: 64px; height: 64px; font-size: 24px;">
+        {{ tecnico.nome[0] }}
+    </div>
+    <h4>{{ tecnico.nome }}</h4>
+    <span class="badge badge-tecnico">{{ tecnico.id_tecnico }}</span>
+</div>
+
+<div class="list-group list-group-flush">
+    <div class="list-group-item d-flex justify-content-between">
+        <span class="text-muted">Status</span>
+        <span class="badge badge-{{ tecnico.status|lower }}">{{ tecnico.status }}</span>
+    </div>
+    <div class="list-group-item d-flex justify-content-between">
+        <span class="text-muted">Localização</span>
+        <span>{{ tecnico.localizacao }}</span>
+    </div>
+    <div class="list-group-item d-flex justify-content-between">
+        <span class="text-muted">Contato</span>
+        <span>{{ tecnico.contato }}</span>
+    </div>
+    <div class="list-group-item d-flex justify-content-between">
+        <span class="text-muted">A Pagar</span>
+        <span class="fw-bold {{ 'text-danger' if tecnico.total_a_pagar > 0 else 'text-success' }}">
+            R$ {{ "%.2f"|format(tecnico.total_a_pagar) }}
+        </span>
+    </div>
+</div>
+
+<div class="mt-4 d-grid gap-2">
+    <a href="{{ url_for('operacional.tecnico_detalhes', id=tecnico.id) }}" class="btn btn-primary">
+        Ver Detalhes Completos
+    </a>
+    <a href="{{ url_for('operacional.novo_chamado') }}?tecnico={{ tecnico.id }}" class="btn btn-outline-success">
+        Novo Chamado
+    </a>
+</div>

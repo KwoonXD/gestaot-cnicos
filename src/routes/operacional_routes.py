@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, Response
-from flask_login import login_required
+from flask_login import login_required, current_user
 import csv
 import io
 # CORREÇÃO AQUI: Importamos Chamado, Pagamento e Tecnico explicitamente
@@ -20,6 +20,7 @@ def dashboard():
     tecnico_stats = TecnicoService.get_stats()
     chamado_stats = ChamadoService.get_dashboard_stats()
     financeiro_stats = FinanceiroService.get_pendentes_stats()
+    projecao_stats = FinanceiroService.calcular_projecao_mensal()
     
     return render_template('dashboard.html',
         total_tecnicos_ativos=tecnico_stats['ativos'],
@@ -27,7 +28,8 @@ def dashboard():
         valor_total_pendente=tecnico_stats['total_pendente'],
         pagamentos_pendentes=financeiro_stats,
         chamados_por_status=chamado_stats['chamados_por_status'],
-        ultimos_chamados=chamado_stats['ultimos']
+        ultimos_chamados=chamado_stats['ultimos'],
+        projecao_financeira=projecao_stats
     )
 
 @operacional_bp.route('/tecnicos')
@@ -167,6 +169,13 @@ def chamados():
     chamados_list = ChamadoService.get_all(filters)
     tecnicos_list = TecnicoService.get_all({'status': 'Ativo'})
     
+    chamados_list = ChamadoService.get_all(filters)
+    tecnicos_list = TecnicoService.get_all({'status': 'Ativo'})
+    
+    # Task 2: Saved Views
+    from ..models import SavedView
+    saved_views = SavedView.query.filter_by(user_id=current_user.id, page_route='chamados').all()
+    
     return render_template('chamados.html',
         chamados=chamados_list,
         tecnicos=tecnicos_list,
@@ -175,8 +184,28 @@ def chamados():
         tecnico_filter=filters['tecnico_id'],
         status_filter=filters['status'],
         tipo_filter=filters['tipo'],
-        pago_filter=filters['pago']
+        pago_filter=filters['pago'],
+        saved_views=saved_views
     )
+
+@operacional_bp.route('/api/views/save', methods=['POST'])
+@login_required
+def salvar_view():
+    try:
+        data = request.get_json()
+        from ..models import SavedView, db
+        
+        view = SavedView(
+            user_id=current_user.id,
+            page_route=data.get('page_route'),
+            name=data.get('name'),
+            query_string=data.get('query_string')
+        )
+        db.session.add(view)
+        db.session.commit()
+        return {'status': 'success', 'id': view.id}
+    except Exception as e:
+        return {'status': 'error', 'message': str(e)}, 400
 
 @operacional_bp.route('/chamados/novo', methods=['GET', 'POST'])
 @login_required
@@ -271,5 +300,12 @@ def atualizar_status_chamado(id):
         ChamadoService.update_status(id, request.form.get('status'))
         flash('Status do chamado atualizado.', 'info')
     except Exception as e:
+
             flash(f'Erro ao atualizar status: {str(e)}', 'danger')
     return redirect(url_for('operacional.chamados'))
+
+@operacional_bp.route('/tecnicos/<int:id>/resumo')
+@login_required
+def tecnico_resumo(id):
+    tecnico = TecnicoService.get_by_id(id)
+    return render_template('tecnico_resumo.html', tecnico=tecnico)

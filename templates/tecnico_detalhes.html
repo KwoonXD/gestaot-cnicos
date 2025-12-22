@@ -12,7 +12,35 @@
         </ol>
     </nav>
     <div class="d-flex justify-content-between align-items-center">
-        <h1>{{ tecnico.nome }}</h1>
+        <div>
+            <h1>{{ tecnico.nome }}</h1>
+            <div class="d-flex flex-wrap gap-2 mb-2 align-items-center">
+                {% for tag in tecnico.tags_list %}
+                <span class="badge" style="background-color: {{ tag.cor }};">
+                    {{ tag.nome }}
+                    <form action="{{ url_for('operacional.deletar_tag', id=tag.id) }}" method="POST"
+                        class="d-inline ms-1">
+                        <button type="submit" class="btn btn-link text-white p-0"
+                            style="font-size: 0.7em; text-decoration: none;">&times;</button>
+                    </form>
+                </span>
+                {% endfor %}
+                <button class="btn btn-sm btn-outline-secondary rounded-circle" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#addTagForm" style="width: 24px; height: 24px; padding: 0;">
+                    <i class="bi bi-plus"></i>
+                </button>
+            </div>
+            <div class="collapse" id="addTagForm">
+                <form action="{{ url_for('operacional.criar_tag', id=tecnico.id) }}" method="POST"
+                    class="d-flex gap-2 align-items-center mt-2 no-loading">
+                    <input type="text" name="nome" class="form-control form-control-sm" placeholder="Nova Tag..."
+                        style="width: 150px;" required>
+                    <input type="color" name="cor" class="form-control form-control-color form-control-sm"
+                        value="#3B82F6" title="Cor da Tag">
+                    <button type="submit" class="btn btn-sm btn-primary">Adicionar</button>
+                </form>
+            </div>
+        </div>
         <div>
             <a href="{{ url_for('operacional.editar_tecnico', id=tecnico.id) }}" class="btn btn-outline-primary">
                 <i class="bi bi-pencil"></i> Editar
@@ -54,7 +82,7 @@
     <div class="col-md-6 col-lg-3">
         <div class="card metric-card {% if tecnico.total_a_pagar > 0 %}red{% else %}green{% endif %} h-100">
             <div class="card-body text-center">
-                <div class="metric-value">R$ {{ "%.2f"|format(tecnico.total_a_pagar) }}</div>
+                <div class="metric-value font-numeric">R$ {{ "%.2f"|format(tecnico.total_a_pagar) }}</div>
                 <div class="metric-label">A Pagar</div>
             </div>
         </div>
@@ -88,7 +116,7 @@
                 </div>
                 <div class="detail-item">
                     <div class="label">Valor por Atendimento</div>
-                    <div class="value">R$ {{ "%.2f"|format(tecnico.valor_por_atendimento) }}</div>
+                    <div class="value font-numeric">R$ {{ "%.2f"|format(tecnico.valor_por_atendimento) }}</div>
                 </div>
                 <div class="detail-item">
                     <div class="label">Data de Início</div>

@@ -1,29 +1,66 @@
-from ..models import db, Pagamento, Chamado, Tecnico, Lancamento
-from datetime import datetime, date
+from datetime import datetime, timedelta
+import calendar
+from sqlalchemy import func
+
+from src.models import db, Chamado, Pagamento, Tecnico, Lancamento
 
 class FinanceiroService:
     @staticmethod
-    def criar_lancamento(data):
-        lancamento = Lancamento(
-            tecnico_id=int(data['tecnico_id']),
-            tipo=data['tipo'],
-            valor=float(data['valor']),
-            descricao=data['descricao'],
-            data=datetime.strptime(data['data'], '%Y-%m-%d').date() if data.get('data') else date.today()
-        )
-        db.session.add(lancamento)
-        db.session.commit()
-        return lancamento
+    def calcular_projecao_mensal():
+        hoje = datetime.now()
+        ano = hoje.year
+        mes = hoje.month
+        
+        # Último dia do mês
+        _, ult_dia = calendar.monthrange(ano, mes)
+        
+        # Média diária (evitar divisão por zero se for dia 1)
+        dia_hoje = hoje.day
+        if dia_hoje == 1:
+            dia_divisor = 1
+        else:
+            dia_divisor = dia_hoje
+            
+        # Total gasto neste mês até agora
+        inicio_mes = datetime(ano, mes, 1)
+        
+        # Query total value of Chamados in current month
+        # Assuming we count based on 'data_atendimento' or 'data_criacao'. 
+        # User said "total_gasto", usually related to completed services.
+        total_atual = db.session.query(func.sum(Chamado.valor))\
+            .filter(Chamado.data_atendimento >= inicio_mes)\
+            .filter(Chamado.data_atendimento <= hoje)\
+            .scalar() or 0.0
+            
+        total_atual = float(total_atual)
+        
+        media_diaria = total_atual / dia_divisor
+        projecao = media_diaria * ult_dia
+        
+        return {
+            'atual': total_atual,
+            'projecao': projecao,
+            'media_diaria': media_diaria
+
+        }
+
+    @staticmethod
+    def get_pendentes_stats():
+        """
+        Retorna a quantidade de pagamentos pendentes
+        """
+        return Pagamento.query.filter_by(status_pagamento='Pendente').count()
 
     @staticmethod
     def get_all(filters=None):
         query = Pagamento.query
+        
         if filters:
             if filters.get('tecnico_id'):
-                query = query.filter(Pagamento.tecnico_id == int(filters['tecnico_id']))
+                query = query.filter_by(tecnico_id=filters['tecnico_id'])
             if filters.get('status'):
-                query = query.filter(Pagamento.status_pagamento == filters['status'])
-        
+                query = query.filter_by(status_pagamento=filters['status'])
+                
         return query.order_by(Pagamento.data_criacao.desc()).all()
 
     @staticmethod
@@ -31,100 +68,120 @@ class FinanceiroService:
         return Pagamento.query.get_or_404(id)
 
     @staticmethod
-    def get_pendentes_stats():
-        return Pagamento.query.filter_by(status_pagamento='Pendente').count()
-
-    @staticmethod
     def gerar_pagamento(data):
-        tecnico_id = int(data['tecnico_id'])
-        periodo_inicio = datetime.strptime(data['periodo_inicio'], '%Y-%m-%d').date()
-        periodo_fim = datetime.strptime(data['periodo_fim'], '%Y-%m-%d').date()
+        tecnico_id = data.get('tecnico_id')
+        tecnico = Tecnico.query.get(tecnico_id)
         
-        tecnico = Tecnico.query.get_or_404(tecnico_id)
+        if not tecnico:
+            return None, "Técnico não encontrado."
+            
+        # Get unpaid completed chamados
+        chamados = tecnico.chamados.filter_by(status_chamado='Concluído', pago=False).all()
         
-        # 1. Get closed tickets
-        chamados_para_pagar = Chamado.query.filter(
-            Chamado.tecnico_id == tecnico_id,
-            Chamado.status_chamado == 'Concluído',
-            Chamado.pago == False,
-            Chamado.data_atendimento >= periodo_inicio,
-            Chamado.data_atendimento <= periodo_fim
-        ).all()
+        if not chamados:
+            return None, "Não há chamados pendentes para este técnico."
+            
+        valor_total = sum(c.valor for c in chamados)
         
-        # 2. Get pending adjustments (Lancamentos)
-        # We include lancamentos that are NOT linked to a payment yet
-        # OR we could limit by date. Usually adjustments are "pending" until paid.
-        # Let's assume we pick up all pending lancamentos for this technician up to the end date
-        lancamentos_pendentes = Lancamento.query.filter(
-            Lancamento.tecnico_id == tecnico_id,
-            Lancamento.pagamento_id == None,
-            Lancamento.data <= periodo_fim
-        ).all()
-        
-        if not chamados_para_pagar and not lancamentos_pendentes:
-            return None, "Nenhum chamado ou lançamento pendente encontrado para este técnico no período."
+        # Determine dates
+        if chamados:
+            dates = [c.data_atendimento for c in chamados]
+            periodo_inicio = min(dates)
+            periodo_fim = max(dates)
+        else:
+            periodo_inicio = datetime.now()
+            periodo_fim = datetime.now()
             
         pagamento = Pagamento(
             tecnico_id=tecnico_id,
             periodo_inicio=periodo_inicio,
             periodo_fim=periodo_fim,
             valor_por_atendimento=tecnico.valor_por_atendimento,
-            status_pagamento='Pago',
-            data_pagamento=date.today()
+            status_pagamento='Pendente'
         )
-        db.session.add(pagamento)
-        db.session.flush()
         
-        for chamado in chamados_para_pagar:
-            chamado.pago = True
-            chamado.pagamento_id = pagamento.id
-            
-        for lancamento in lancamentos_pendentes:
-            lancamento.pagamento_id = pagamento.id
+        db.session.add(pagamento)
+        db.session.flush() # get ID
+        
+        # Link chamados to pagamento
+        for c in chamados:
+            c.pago = False # Will be true when payment is paid? Or immediately? 
+            # Re-reading logic: 'pago' in Chamado usually means "Included in a Payment record that is Paid" OR just "Included in Payment"?
+            # Let's assume "Included in Payment" marks it as processed, but 'pago' boolean might be redundant if we check pagamento status.
+            # However, typically validation queries check 'pago=False'.
+            # If we link to a Pending Payment, is the Chamado 'pago'? Probably not yet.
+            c.pagamento_id = pagamento.id
             
         db.session.commit()
         return pagamento, None
 
     @staticmethod
-    def gerar_pagamento_lote(dados_lote):
-        """
-        Gera pagamentos para uma lista de técnicos.
-        dados_lote: {
-            'periodo_inicio': 'YYYY-MM-DD',
-            'periodo_fim': 'YYYY-MM-DD',
-            'tecnicos_ids': [1, 2, 3]
-        }
-        """
-        generated_count = 0
-        errors = []
-        
-        periodo_inicio = dados_lote['periodo_inicio']
-        periodo_fim = dados_lote['periodo_fim']
-        
-        for tecnico_id in dados_lote['tecnicos_ids']:
-            data_individual = {
-                'tecnico_id': tecnico_id,
-                'periodo_inicio': periodo_inicio,
-                'periodo_fim': periodo_fim
-            }
-            # We reuse the logic, but catch errors to not stop the batch
-            try:
-                pagamento, error = FinanceiroService.gerar_pagamento(data_individual)
-                if pagamento:
-                    generated_count += 1
-                elif error:
-                    # Optional: Log which technicians had no data
-                     pass
-            except Exception as e:
-                errors.append(f"Erro ao gerar para técnico {tecnico_id}: {str(e)}")
-                
-        return generated_count, errors
-
-    @staticmethod
-    def marcar_como_pago(id, observacoes=''):
-        pagamento = FinanceiroService.get_by_id(id)
+    def marcar_como_pago(id, observacoes=None):
+        pagamento = Pagamento.query.get_or_404(id)
         pagamento.status_pagamento = 'Pago'
-        pagamento.data_pagamento = date.today()
-        pagamento.observacoes = observacoes
+        pagamento.data_pagamento = datetime.now()
+        if observacoes:
+            pagamento.observacoes = observacoes
+            
+        # Mark all chamados as paid
+        for chamado in pagamento.chamados_incluidos:
+            chamado.pago = True
+            
         db.session.commit()
         return pagamento
+
+    @staticmethod
+    def criar_lancamento(data):
+        lancamento = Lancamento(
+            tecnico_id=data.get('tecnico_id'),
+            tipo=data.get('tipo'),
+            valor=float(data.get('valor')),
+            data=datetime.strptime(data.get('data'), '%Y-%m-%d').date() if data.get('data') else datetime.now().date(),
+            descricao=data.get('descricao')
+        )
+        db.session.add(lancamento)
+        db.session.commit()
+        return lancamento
+
+    @staticmethod
+    def gerar_pagamento_lote(data):
+        tecnicos_ids = data.get('tecnicos_ids', [])
+        inicio = datetime.strptime(data.get('periodo_inicio'), '%Y-%m-%d').date()
+        fim = datetime.strptime(data.get('periodo_fim'), '%Y-%m-%d').date()
+        
+        count = 0
+        errors = []
+        
+        for t_id in tecnicos_ids:
+            tecnico = Tecnico.query.get(t_id)
+            if not tecnico: 
+                continue
+                
+            chamados_periodo = tecnico.chamados.filter(
+                Chamado.status_chamado == 'Concluído',
+                Chamado.pago == False,
+                Chamado.data_atendimento >= inicio,
+                Chamado.data_atendimento <= fim
+            ).all()
+            
+            if not chamados_periodo:
+                errors.append(f"Técnico {tecnico.nome}: Sem chamados no período.")
+                continue
+                
+            pagamento = Pagamento(
+                tecnico_id=tecnico.id,
+                periodo_inicio=inicio,
+                periodo_fim=fim,
+                valor_por_atendimento=tecnico.valor_por_atendimento,
+                status_pagamento='Pendente'
+            )
+            db.session.add(pagamento)
+            db.session.flush()
+            
+            for c in chamados_periodo:
+                c.pagamento_id = pagamento.id
+                
+            count += 1
+            
+        db.session.commit()
+        return count, errors
