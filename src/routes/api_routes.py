@@ -33,6 +33,7 @@ def api_tecnico_pendencias(id):
         'chamados': [{
             'data': c.data_atendimento.strftime('%d/%m/%Y'),
             'codigo': c.codigo_chamado or str(c.id),
+            'fsa_codes': c.fsa_codes or '',
             'tipo': c.tipo_servico,
             'endereco': c.localizacao,
             'valor': float(c.valor)

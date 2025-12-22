@@ -5,7 +5,15 @@ from ..services.financeiro_service import FinanceiroService
 from ..services.tecnico_service import TecnicoService
 from ..models import ESTADOS_BRASIL, Chamado, Lancamento
 
+from ..decorators import admin_required
+
 financeiro_bp = Blueprint('financeiro', __name__)
+
+@financeiro_bp.before_request
+@login_required
+@admin_required
+def before_request():
+    pass
 
 STATUS_PAGAMENTO = ['Pendente', 'Pago', 'Cancelado']
 
@@ -17,17 +25,36 @@ def pagamentos():
         'status': request.args.get('status', '')
     }
     
+    sort_by = request.args.get('sort_by', 'nome_asc')
+    
     pagamentos_list = FinanceiroService.get_all(filters)
     tecnicos_list = TecnicoService.get_all()
     tecnicos_com_pendente = [t for t in tecnicos_list if t.total_a_pagar > 0]
+    
+    # Sorting Logic
+    if sort_by == 'nome_asc':
+        tecnicos_com_pendente.sort(key=lambda t: t.nome)
+    elif sort_by == 'valor_desc':
+        tecnicos_com_pendente.sort(key=lambda t: t.total_a_pagar, reverse=True)
+    elif sort_by == 'antiguidade':
+        # Sort by oldest service date (None values last)
+        tecnicos_com_pendente.sort(key=lambda t: t.oldest_pending_atendimento or datetime.max.date())
+    elif sort_by == 'recente':
+        # Sort by newest service date
+        tecnicos_com_pendente.sort(key=lambda t: t.newest_pending_atendimento or datetime.min.date(), reverse=True)
+    elif sort_by == 'upload_antigo':
+        # Sort by oldest upload (creation) date
+        tecnicos_com_pendente.sort(key=lambda t: t.oldest_pending_criacao or datetime.max)
+    elif sort_by == 'upload_recente':
+        # Sort by newest upload (creation) date
+        tecnicos_com_pendente.sort(key=lambda t: t.newest_pending_criacao or datetime.min, reverse=True)
     
     return render_template('pagamentos.html',
         pagamentos=pagamentos_list,
         tecnicos=tecnicos_list,
         tecnicos_com_pendente=tecnicos_com_pendente,
-        status_options=STATUS_PAGAMENTO,
-        tecnico_filter=filters['tecnico_id'],
-        status_filter=filters['status']
+        status_filter=filters['status'],
+        current_sort=sort_by
     )
 
 @financeiro_bp.route('/pagamentos/gerar', methods=['GET', 'POST'])

@@ -19,12 +19,17 @@ class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(120), nullable=False)
+    role = db.Column(db.String(20), nullable=False, default='Operador') 
     
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
         
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+
+    @property
+    def is_admin(self):
+        return self.role in ['Admin', 'Financeiro']
 
 class Tecnico(db.Model):
     __tablename__ = 'tecnicos'
@@ -102,6 +107,62 @@ class Tecnico(db.Model):
     def total_a_pagar(self):
         return self.get_total_a_pagar()
     
+    @property
+    def pending_chamados_list(self):
+        """Helper to get all pending chamados objects efficiently."""
+        if self.tecnico_principal_id:
+            return []
+            
+        chamados = list(self.chamados.filter(Chamado.status_chamado == 'Concluído', Chamado.pago == False, Chamado.pagamento_id == None))
+        for sub in self.sub_tecnicos:
+            chamados.extend(list(sub.chamados.filter(Chamado.status_chamado == 'Concluído', Chamado.pago == False, Chamado.pagamento_id == None)))
+        return chamados
+
+    @property
+    def pending_fsas(self):
+        codes = []
+        for c in self.pending_chamados_list:
+            if c.codigo_chamado:
+                codes.append(c.codigo_chamado)
+            if c.fsa_codes:
+                # fsa_codes might be comma separated or single
+                extras = [x.strip() for x in c.fsa_codes.replace(';', ',').split(',') if x.strip()]
+                codes.extend(extras)
+        # Unique and sorted
+        return sorted(list(set(codes)))
+
+    @property
+    def oldest_pending_atendimento(self):
+        chamados = self.pending_chamados_list
+        if not chamados:
+            return None
+        dates = [c.data_atendimento for c in chamados if c.data_atendimento]
+        return min(dates) if dates else None
+
+    @property
+    def oldest_pending_criacao(self):
+        chamados = self.pending_chamados_list
+        if not chamados:
+            return None
+        dates = [c.data_criacao for c in chamados if c.data_criacao]
+        return min(dates) if dates else None
+    
+    @property
+    def newest_pending_atendimento(self):
+        chamados = self.pending_chamados_list
+        if not chamados:
+            return None
+        dates = [c.data_atendimento for c in chamados if c.data_atendimento]
+        return max(dates) if dates else None
+
+    @property
+    def newest_pending_criacao(self):
+        chamados = self.pending_chamados_list
+        if not chamados:
+            return None
+        dates = [c.data_criacao for c in chamados if c.data_criacao]
+        return max(dates) if dates else None
+
     @property
     def status_pagamento(self):
         return "Pendente" if self.total_a_pagar > 0 else "Pago"

@@ -29,6 +29,29 @@
     <div class="tab-pane fade show active" id="pendentes" role="tabpanel">
         <div class="card border-top-0 rounded-0 rounded-bottom">
             <div class="card-body">
+                <div class="d-flex justify-content-end mb-3">
+                    <form method="GET" action="{{ url_for('financeiro.pagamentos') }}"
+                        class="d-flex gap-2 align-items-center">
+                        <!-- Keep filters if they exist (optional) but for now just sort -->
+                        <label class="text-muted small">Ordenar por:</label>
+                        <select name="sort_by" class="form-select form-select-sm" style="width: 200px;"
+                            onchange="this.form.submit()">
+                            <option value="nome_asc" {% if current_sort=='nome_asc' %}selected{% endif %}>Nome (A-Z)
+                            </option>
+                            <option value="valor_desc" {% if current_sort=='valor_desc' %}selected{% endif %}>Valor
+                                Pendente (Maior)</option>
+                            <option value="antiguidade" {% if current_sort=='antiguidade' %}selected{% endif %}>
+                                Atendimento (+ Antigo)</option>
+                            <option value="recente" {% if current_sort=='recente' %}selected{% endif %}>Atendimento (+
+                                Recente)</option>
+                            <option value="upload_antigo" {% if current_sort=='upload_antigo' %}selected{% endif %}>
+                                Upload (+ Antigo)</option>
+                            <option value="upload_recente" {% if current_sort=='upload_recente' %}selected{% endif %}>
+                                Upload (+ Recente)</option>
+                        </select>
+                    </form>
+                </div>
+
                 {% if tecnicos_com_pendente %}
                 <div class="table-responsive">
                     <table class="table table-hover align-middle mb-0">
@@ -47,6 +70,13 @@
                                 <td>
                                     <div class="fw-bold">{{ t.nome }}</div>
                                     <small class="text-muted">{{ t.id_tecnico }}</small>
+                                    {% if t.pending_fsas %}
+                                    <div class="mt-1" style="font-size: 0.75rem;">
+                                        {% for fsa in t.pending_fsas %}
+                                        <span class="badge bg-light text-dark border me-1 mb-1">{{ fsa }}</span>
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
                                 </td>
                                 <td>{{ t.localizacao }}</td>
                                 <td class="text-center"><span class="badge bg-secondary">{{
@@ -310,7 +340,7 @@
             modalContent.style.display = 'none';
 
             // Fetch Details
-            fetch(`/api/tecnicos/${tecnicoId}/pendencias`)
+            fetch(`/api/tecnicos/${tecnicoId}/pendencias?t=${new Date().getTime()}`)
                 .then(response => response.json())
                 .then(data => {
                     // Populate Header
@@ -332,10 +362,16 @@
                         const [day, month, year] = c.data.split('/');
                         dates.push(new Date(`${year}-${month}-${day}`));
 
+                        // Combine main code and extras
+                        let displayCode = c.codigo;
+                        if (c.fsa_codes) {
+                            displayCode += `<br><small class="text-muted">${c.fsa_codes}</small>`;
+                        }
+
                         const row = `
                             <tr>
                                 <td>${c.data}</td>
-                                <td>${c.codigo}</td>
+                                <td>${displayCode}</td>
                                 <td>${c.tipo}</td>
                                 <td class="small text-muted text-truncate" style="max-width: 200px;">${c.endereco}</td>
                                 <td class="text-end">R$ ${c.valor.toFixed(2)}</td>
