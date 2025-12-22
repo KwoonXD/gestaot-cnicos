@@ -5,52 +5,44 @@
 {% block content %}
 <div class="page-header d-flex justify-content-between align-items-center">
     <h1><i class="bi bi-people"></i> Técnicos</h1>
-    <a href="{{ url_for('novo_tecnico') }}" class="btn btn-primary">
-        <i class="bi bi-plus"></i> Novo Técnico
+    <a href="{{ url_for('operacional.novo_tecnico') }}" class="btn btn-primary">
+        <i class="bi bi-person-plus"></i> Novo Técnico
     </a>
 </div>
 
-<div class="filter-section">
-    <form method="GET" class="row g-3">
-        <div class="col-md-3">
-            <label class="form-label">Buscar por Nome</label>
-            <input type="text" name="search" class="form-control" placeholder="Digite o nome..." value="{{ search }}">
-        </div>
-        <div class="col-md-2">
-            <label class="form-label">Estado</label>
-            <select name="estado" class="form-select">
-                <option value="">Todos</option>
-                {% for e in estados %}
-                <option value="{{ e }}" {% if estado_filter == e %}selected{% endif %}>{{ e }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-md-2">
-            <label class="form-label">Status</label>
-            <select name="status" class="form-select">
-                <option value="">Todos</option>
-                {% for s in status_options %}
-                <option value="{{ s }}" {% if status_filter == s %}selected{% endif %}>{{ s }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-md-2">
-            <label class="form-label">Pagamento</label>
-            <select name="pagamento" class="form-select">
-                <option value="">Todos</option>
-                <option value="Pendente" {% if pagamento_filter == 'Pendente' %}selected{% endif %}>Pendente</option>
-                <option value="Pago" {% if pagamento_filter == 'Pago' %}selected{% endif %}>Pago</option>
-            </select>
-        </div>
-        <div class="col-md-3 d-flex align-items-end gap-2">
-            <button type="submit" class="btn btn-primary">
-                <i class="bi bi-search"></i> Filtrar
-            </button>
-            <a href="{{ url_for('tecnicos') }}" class="btn btn-outline-secondary">
-                <i class="bi bi-x"></i> Limpar
-            </a>
-        </div>
-    </form>
+<select name="estado" class="form-select">
+    <option value="">Todos</option>
+    {% for e in estados %}
+    <option value="{{ e }}" {% if estado_filter==e %}selected{% endif %}>{{ e }}</option>
+    {% endfor %}
+</select>
+</div>
+<div class="col-md-2">
+    <label class="form-label">Status</label>
+    <select name="status" class="form-select">
+        <option value="">Todos</option>
+        {% for s in status_options %}
+        <option value="{{ s }}" {% if status_filter==s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+    </select>
+</div>
+<div class="col-md-2">
+    <label class="form-label">Pagamento</label>
+    <select name="pagamento" class="form-select">
+        <option value="">Todos</option>
+        <option value="Pendente" {% if pagamento_filter=='Pendente' %}selected{% endif %}>Pendente</option>
+        <option value="Pago" {% if pagamento_filter=='Pago' %}selected{% endif %}>Pago</option>
+    </select>
+</div>
+<div class="col-md-3 d-flex align-items-end gap-2">
+    <button type="submit" class="btn btn-primary">
+        <i class="bi bi-search"></i> Filtrar
+    </button>
+    <a href="{{ url_for('operacional.tecnicos') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-x"></i> Limpar
+    </a>
+</div>
+</form>
 </div>
 
 <div class="card">
@@ -66,7 +58,6 @@
                         <th>Forma Pagamento</th>
                         <th>Status</th>
                         <th>Atendimentos</th>
-                        <th>A Pagar</th>
                         <th>Pagamento</th>
                         <th>Ações</th>
                     </tr>
@@ -74,49 +65,38 @@
                 <tbody>
                     {% for tecnico in tecnicos %}
                     <tr>
-                        <td><code>{{ tecnico.id_tecnico }}</code></td>
+                        <td>{{ tecnico.id_tecnico }}</td>
                         <td>
-                            <a href="{{ url_for('tecnico_detalhes', id=tecnico.id) }}" class="text-decoration-none fw-semibold">
+                            <a href="{{ url_for('operacional.tecnico_detalhes', id=tecnico.id) }}"
+                                class="text-decoration-none fw-bold">
                                 {{ tecnico.nome }}
                             </a>
                             {% if tecnico.tecnico_principal %}
-                            <br><small class="text-muted"><i class="bi bi-arrow-return-right"></i> {{ tecnico.tecnico_principal.nome }}</small>
+                            <br><small class="text-muted"><i class="bi bi-arrow-return-right"></i> {{
+                                tecnico.tecnico_principal.nome }}</small>
                             {% endif %}
                         </td>
-                        <td>{{ tecnico.cidade }}/{{ tecnico.estado }}</td>
-                        <td>{{ tecnico.forma_pagamento or '-' }}</td>
+                        <td>{{ tecnico.localizacao }}</td>
+                        <td>{{ tecnico.contato }}</td>
                         <td>
-                            <span class="badge badge-status badge-{{ tecnico.status|lower }}">
+                            <span class="badge bg-{{ 'success' if tecnico.status == 'Ativo' else 'secondary' }}">
                                 {{ tecnico.status }}
                             </span>
                         </td>
                         <td>
-                            <span class="badge bg-secondary">{{ tecnico.total_atendimentos }}</span>
-                            {% if tecnico.total_atendimentos_concluidos > 0 %}
-                            <small class="text-success">({{ tecnico.total_atendimentos_concluidos }} concluídos)</small>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if tecnico.total_a_pagar > 0 %}
-                            <span class="money-pending">R$ {{ "%.2f"|format(tecnico.total_a_pagar) }}</span>
-                            {% else %}
-                            <span class="text-muted">R$ 0,00</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <span class="badge badge-status badge-{{ tecnico.status_pagamento|lower }}">
+                            <span
+                                class="badge bg-{{ 'warning' if tecnico.status_pagamento == 'Pendente' else 'success' }}">
                                 {{ tecnico.status_pagamento }}
                             </span>
-                        </td>
-                        <td class="action-buttons">
-                            <a href="{{ url_for('tecnico_detalhes', id=tecnico.id) }}" class="btn btn-sm btn-outline-primary btn-action" title="Ver Detalhes">
-                                <i class="bi bi-eye"></i>
+                            <i class="bi bi-eye"></i>
                             </a>
-                            <a href="{{ url_for('editar_tecnico', id=tecnico.id) }}" class="btn btn-sm btn-outline-secondary btn-action" title="Editar">
+                            <a href="{{ url_for('operacional.editar_tecnico', id=tecnico.id) }}"
+                                class="btn btn-sm btn-outline-secondary btn-action" title="Editar">
                                 <i class="bi bi-pencil"></i>
                             </a>
                             {% if tecnico.total_a_pagar > 0 %}
-                            <a href="{{ url_for('gerar_pagamento') }}?tecnico={{ tecnico.id }}" class="btn btn-sm btn-outline-success btn-action" title="Gerar Pagamento">
+                            <a href="{{ url_for('financeiro.gerar_pagamento') }}?tecnico={{ tecnico.id }}"
+                                class="btn btn-sm btn-outline-success btn-action" title="Gerar Pagamento">
                                 <i class="bi bi-cash"></i>
                             </a>
                             {% endif %}
@@ -131,8 +111,8 @@
             <i class="bi bi-people"></i>
             <h5>Nenhum técnico encontrado</h5>
             <p>Adicione um novo técnico para começar.</p>
-            <a href="{{ url_for('novo_tecnico') }}" class="btn btn-primary">
-                <i class="bi bi-plus"></i> Novo Técnico
+            <a href="{{ url_for('operacional.novo_tecnico') }}" class="btn btn-primary">
+                <i class="bi bi-person-plus"></i> Novo Técnico
             </a>
         </div>
         {% endif %}

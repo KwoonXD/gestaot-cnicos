@@ -79,7 +79,7 @@
         <div class="card h-100">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="bi bi-clock-history"></i> Últimos Chamados</h5>
-                <a href="{{ url_for('chamados') }}" class="btn btn-sm btn-outline-primary">Ver Todos</a>
+                <a href="{{ url_for('operacional.chamados') }}" class="btn btn-sm btn-outline-primary">Ver Todos</a>
             </div>
             <div class="card-body">
                 {% if ultimos_chamados %}
@@ -100,7 +100,8 @@
                                 <td>{{ chamado.tecnico.nome }}</td>
                                 <td>{{ chamado.tipo_servico }}</td>
                                 <td>
-                                    <span class="badge badge-status badge-{{ chamado.status_chamado|lower|replace(' ', '-') }}">
+                                    <span
+                                        class="badge badge-status badge-{{ chamado.status_chamado|lower|replace(' ', '-') }}">
                                         {{ chamado.status_chamado }}
                                     </span>
                                 </td>
@@ -114,7 +115,7 @@
                     <i class="bi bi-clipboard"></i>
                     <h5>Nenhum chamado registrado</h5>
                     <p>Comece adicionando um novo chamado.</p>
-                    <a href="{{ url_for('novo_chamado') }}" class="btn btn-primary">
+                    <a href="{{ url_for('operacional.novo_chamado') }}" class="btn btn-primary">
                         <i class="bi bi-plus"></i> Novo Chamado
                     </a>
                 </div>
@@ -133,19 +134,20 @@
             <div class="card-body">
                 <div class="row g-3">
                     <div class="col-md-4">
-                        <a href="{{ url_for('novo_tecnico') }}" class="btn btn-outline-primary w-100 py-3">
+                        <a href="{{ url_for('operacional.novo_tecnico') }}" class="btn btn-outline-primary w-100 py-3">
                             <i class="bi bi-person-plus fs-4 d-block mb-2"></i>
                             Novo Técnico
                         </a>
                     </div>
                     <div class="col-md-4">
-                        <a href="{{ url_for('novo_chamado') }}" class="btn btn-outline-success w-100 py-3">
+                        <a href="{{ url_for('operacional.novo_chamado') }}" class="btn btn-outline-success w-100 py-3">
                             <i class="bi bi-clipboard-plus fs-4 d-block mb-2"></i>
                             Novo Chamado
                         </a>
                     </div>
                     <div class="col-md-4">
-                        <a href="{{ url_for('gerar_pagamento') }}" class="btn btn-outline-warning w-100 py-3">
+                        <a href="{{ url_for('financeiro.gerar_pagamento') }}"
+                            class="btn btn-outline-warning w-100 py-3">
                             <i class="bi bi-cash-coin fs-4 d-block mb-2"></i>
                             Gerar Pagamento
                         </a>
@@ -159,33 +161,33 @@
 
 {% block scripts %}
 <script>
-const chamadosData = {{ chamados_por_status | tojson }};
+    const chamadosData = {{ chamados_por_status | tojson }};
 
-const ctx = document.getElementById('chamadosStatusChart').getContext('2d');
-new Chart(ctx, {
-    type: 'doughnut',
-    data: {
-        labels: Object.keys(chamadosData),
-        datasets: [{
-            data: Object.values(chamadosData),
-            backgroundColor: [
-                '#ffc107',
-                '#0dcaf0',
-                '#198754',
-                '#dc3545'
-            ],
-            borderWidth: 0
-        }]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: {
-                position: 'bottom'
+    const ctx = document.getElementById('chamadosStatusChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: Object.keys(chamadosData),
+            datasets: [{
+                data: Object.values(chamadosData),
+                backgroundColor: [
+                    '#F59E0B', // Warning/Pendente
+                    '#3B82F6', // Info/Em Andamento (Primary)
+                    '#10B981', // Success/Concluído
+                    '#EF4444'  // Danger/Cancelado
+                ],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                }
             }
         }
-    }
-});
+    });
 </script>
 {% endblock %}

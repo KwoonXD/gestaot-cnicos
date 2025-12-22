@@ -1,7 +1,7 @@
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime, date
-from flask_login import UserMixin
+from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
+from flask_login import UserMixin
 
 db = SQLAlchemy()
 
@@ -15,9 +15,10 @@ FORMAS_PAGAMENTO = ['PIX', 'Transferência Bancária', 'Boleto', 'Dinheiro']
 
 class User(UserMixin, db.Model):
     __tablename__ = 'users'
+    
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(100), unique=True, nullable=False)
-    password_hash = db.Column(db.String(200), nullable=False)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash = db.Column(db.String(120), nullable=False)
     
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -65,11 +66,16 @@ class Tecnico(db.Model):
     def total_atendimentos_nao_pagos(self):
         return self.chamados.filter_by(status_chamado='Concluído', pago=False).count()
     
+    def get_total_a_pagar(self):
+        # Calculation moved to method to allow flexibility if logic changes in service
+        # But keeping property for template compatibility if needed, calling service logic pref.
+        # For model, we stick to data
+        chamados_pendentes = self.chamados.filter_by(status_chamado='Concluído', pago=False).all()
+        return float(sum(c.valor for c in chamados_pendentes))
+
     @property
     def total_a_pagar(self):
-        # Calculates total from pending completed calls
-        chamados_pendentes = self.chamados.filter_by(status_chamado='Concluído', pago=False).all()
-        return sum(float(c.valor) for c in chamados_pendentes)
+        return self.get_total_a_pagar()
     
     @property
     def status_pagamento(self):
@@ -114,9 +120,9 @@ class Chamado(db.Model):
     pagamento_id = db.Column(db.Integer, db.ForeignKey('pagamentos.id'), nullable=True)
     endereco = db.Column(db.Text, nullable=True)
     observacoes = db.Column(db.Text, nullable=True)
+    fsa_codes = db.Column(db.Text, nullable=True)
     horario_inicio = db.Column(db.Time, nullable=True)
     horario_saida = db.Column(db.Time, nullable=True)
-    fsa_codes = db.Column(db.Text, nullable=True) # Stores codes separated by commas
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
     
     @property
@@ -177,9 +183,7 @@ class Pagamento(db.Model):
     
     @property
     def valor_total(self):
-        # Calculate sum of values from included calls
-        chamados = self.chamados_incluidos.all()
-        return sum(float(c.valor) for c in chamados)
+        return float(sum(c.valor for c in self.chamados_incluidos))
     
     def to_dict(self):
         return {

@@ -6,15 +6,16 @@
 <div class="page-header">
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="{{ url_for('pagamentos') }}">Pagamentos</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('operacional.dashboard') }}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('financeiro.pagamentos') }}">Pagamentos</a></li>
             <li class="breadcrumb-item active">{{ pagamento.id_pagamento }}</li>
         </ol>
     </nav>
     <div class="d-flex justify-content-between align-items-center">
-        <h1><i class="bi bi-receipt"></i> {{ pagamento.id_pagamento }}</h1>
-        {% if pagamento.status_pagamento == 'Pendente' %}
-        <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#pagarModal">
-            <i class="bi bi-check"></i> Marcar como Pago
+        <h1>Detalhes do Pagamento</h1>
+        {% if pagamento.status_pagamento != 'Pago' %}
+        <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#confirmPayModal">
+            <i class="bi bi-check-lg"></i> Marcar como Pago
         </button>
         {% endif %}
     </div>
@@ -45,7 +46,8 @@
                 </div>
                 <div class="detail-item">
                     <div class="label">Período</div>
-                    <div class="value">{{ pagamento.periodo_inicio.strftime('%d/%m/%Y') }} - {{ pagamento.periodo_fim.strftime('%d/%m/%Y') }}</div>
+                    <div class="value">{{ pagamento.periodo_inicio.strftime('%d/%m/%Y') }} - {{
+                        pagamento.periodo_fim.strftime('%d/%m/%Y') }}</div>
                 </div>
                 <div class="detail-item">
                     <div class="label">Número de Chamados</div>
@@ -57,7 +59,8 @@
                 </div>
                 <div class="detail-item">
                     <div class="label">Valor Total</div>
-                    <div class="value fs-4 {% if pagamento.status_pagamento == 'Pago' %}text-success{% else %}text-warning{% endif %}">
+                    <div
+                        class="value fs-4 {% if pagamento.status_pagamento == 'Pago' %}text-success{% else %}text-warning{% endif %}">
                         <strong>R$ {{ "%.2f"|format(pagamento.valor_total) }}</strong>
                     </div>
                 </div>
@@ -88,7 +91,7 @@
             </div>
         </div>
     </div>
-    
+
     <div class="col-lg-8">
         <div class="card">
             <div class="card-header">
@@ -116,7 +119,8 @@
                                 <td>{{ chamado.tipo_servico }}</td>
                                 <td>{{ chamado.cliente or '-' }}</td>
                                 <td>
-                                    <span class="badge badge-status badge-{{ chamado.status_chamado|lower|replace(' ', '-') }}">
+                                    <span
+                                        class="badge badge-status badge-{{ chamado.status_chamado|lower|replace(' ', '-') }}">
                                         {{ chamado.status_chamado }}
                                     </span>
                                 </td>
@@ -156,12 +160,14 @@
                     <p>Confirmar pagamento para <strong>{{ pagamento.tecnico.nome }}</strong>?</p>
                     <p class="mb-3">
                         <strong>Valor:</strong> R$ {{ "%.2f"|format(pagamento.valor_total) }}<br>
-                        <strong>Período:</strong> {{ pagamento.periodo_inicio.strftime('%d/%m/%Y') }} - {{ pagamento.periodo_fim.strftime('%d/%m/%Y') }}<br>
+                        <strong>Período:</strong> {{ pagamento.periodo_inicio.strftime('%d/%m/%Y') }} - {{
+                        pagamento.periodo_fim.strftime('%d/%m/%Y') }}<br>
                         <strong>Chamados:</strong> {{ pagamento.numero_chamados }}
                     </p>
                     <div class="mb-3">
                         <label class="form-label">Observações</label>
-                        <textarea name="observacoes" class="form-control" rows="2" placeholder="Ex: Pago via PIX"></textarea>
+                        <textarea name="observacoes" class="form-control" rows="2"
+                            placeholder="Ex: Pago via PIX"></textarea>
                     </div>
                 </div>
                 <div class="modal-footer">

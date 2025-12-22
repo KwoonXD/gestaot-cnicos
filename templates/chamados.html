@@ -5,19 +5,19 @@
 {% block content %}
 <div class="page-header d-flex justify-content-between align-items-center">
     <h1><i class="bi bi-clipboard-check"></i> Chamados</h1>
-    <a href="{{ url_for('novo_chamado') }}" class="btn btn-primary">
+    <a href="{{ url_for('operacional.novo_chamado') }}" class="btn btn-primary">
         <i class="bi bi-plus"></i> Novo Chamado
     </a>
 </div>
 
 <div class="filter-section">
-    <form method="GET" class="row g-3">
+    <form method="GET" action="{{ url_for('operacional.chamados') }}" class="row g-3">
         <div class="col-md-3">
             <label class="form-label">Técnico</label>
             <select name="tecnico" class="form-select">
                 <option value="">Todos</option>
                 {% for t in tecnicos %}
-                <option value="{{ t.id }}" {% if tecnico_filter == t.id|string %}selected{% endif %}>{{ t.nome }}</option>
+                <option value="{{ t.id }}" {% if tecnico_filter==t.id|string %}selected{% endif %}>{{ t.nome }}</option>
                 {% endfor %}
             </select>
         </div>
@@ -26,7 +26,7 @@
             <select name="status" class="form-select">
                 <option value="">Todos</option>
                 {% for s in status_options %}
-                <option value="{{ s }}" {% if status_filter == s %}selected{% endif %}>{{ s }}</option>
+                <option value="{{ s }}" {% if status_filter==s %}selected{% endif %}>{{ s }}</option>
                 {% endfor %}
             </select>
         </div>
@@ -35,7 +35,7 @@
             <select name="tipo" class="form-select">
                 <option value="">Todos</option>
                 {% for tipo in tipos_servico %}
-                <option value="{{ tipo }}" {% if tipo_filter == tipo %}selected{% endif %}>{{ tipo }}</option>
+                <option value="{{ tipo }}" {% if tipo_filter==tipo %}selected{% endif %}>{{ tipo }}</option>
                 {% endfor %}
             </select>
         </div>
@@ -43,8 +43,8 @@
             <label class="form-label">Pago?</label>
             <select name="pago" class="form-select">
                 <option value="">Todos</option>
-                <option value="sim" {% if pago_filter == 'sim' %}selected{% endif %}>Sim</option>
-                <option value="nao" {% if pago_filter == 'nao' %}selected{% endif %}>Não</option>
+                <option value="sim" {% if pago_filter=='sim' %}selected{% endif %}>Sim</option>
+                <option value="nao" {% if pago_filter=='nao' %}selected{% endif %}>Não</option>
             </select>
         </div>
         <div class="col-md-3 d-flex align-items-end gap-2">
@@ -83,7 +83,8 @@
                         <td><code>{{ chamado.id_chamado }}</code></td>
                         <td>{{ chamado.codigo_chamado or '-' }}</td>
                         <td>
-                            <a href="{{ url_for('tecnico_detalhes', id=chamado.tecnico.id) }}" class="text-decoration-none">
+                            <a href="{{ url_for('operacional.tecnico_detalhes', id=chamado.tecnico.id) }}"
+                                class="text-decoration-none">
                                 {{ chamado.tecnico.nome }}
                             </a>
                         </td>
@@ -104,14 +105,20 @@
                             {% endif %}
                         </td>
                         <td class="action-buttons">
-                            <a href="{{ url_for('editar_chamado', id=chamado.id) }}" class="btn btn-sm btn-outline-secondary btn-action" title="Editar">
-                                <i class="bi bi-pencil"></i>
+                            <a href="{{ url_for('operacional.editar_chamado', id=chamado.id) }}"
+                                class="btn btn-sm btn-outline-secondary btn-action" title="Editar"
+                                aria-label="Editar Chamado {{ chamado.codigo_chamado or chamado.id }}">
+                                <i class="bi bi-pencil" aria-hidden="true"></i>
                             </a>
                             {% if chamado.status_chamado != 'Concluído' and chamado.status_chamado != 'Cancelado' %}
-                            <form method="POST" action="{{ url_for('atualizar_status_chamado', id=chamado.id) }}" class="d-inline">
+                            <form method="POST"
+                                action="{{ url_for('operacional.atualizar_status_chamado', id=chamado.id) }}"
+                                class="d-inline">
                                 <input type="hidden" name="status" value="Concluído">
-                                <button type="submit" class="btn btn-sm btn-outline-success btn-action" title="Marcar como Concluído">
-                                    <i class="bi bi-check-lg"></i>
+                                <button type="submit" class="btn btn-sm btn-outline-success btn-action"
+                                    title="Marcar como Concluído"
+                                    aria-label="Marcar Chamado {{ chamado.codigo_chamado or chamado.id }} como Concluído">
+                                    <i class="bi bi-check-lg" aria-hidden="true"></i>
                                 </button>
                             </form>
                             {% endif %}
@@ -126,7 +133,7 @@
             <i class="bi bi-clipboard"></i>
             <h5>Nenhum chamado encontrado</h5>
             <p>Adicione um novo chamado para começar.</p>
-            <a href="{{ url_for('novo_chamado') }}" class="btn btn-primary">
+            <a href="{{ url_for('operacional.novo_chamado') }}" class="btn btn-primary">
                 <i class="bi bi-plus"></i> Novo Chamado
             </a>
         </div>

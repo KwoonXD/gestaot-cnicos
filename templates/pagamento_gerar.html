@@ -4,7 +4,7 @@
 <div class="page-header">
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="{{ url_for('pagamentos') }}">Pagamentos</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('financeiro.pagamentos') }}">Pagamentos</a></li>
             <li class="breadcrumb-item active">Gerar Pagamento</li>
         </ol>
     </nav>
@@ -118,7 +118,7 @@
                         </table>
                     </div>
                     <!-- Form for Submission -->
-                    <form method="POST" id="paymentForm">
+                    <form method="POST" action="{{ url_for('financeiro.gerar_pagamento') }}" id="paymentForm">
                         <input type="hidden" name="tecnico_id" id="formTecnicoId">
                         <input type="hidden" name="periodo_inicio" id="formPeriodoInicio">
                         <input type="hidden" name="periodo_fim" id="formPeriodoFim">

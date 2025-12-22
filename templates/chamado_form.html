@@ -6,7 +6,7 @@
 <div class="page-header">
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="{{ url_for('chamados') }}">Chamados</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('operacional.chamados') }}">Chamados</a></li>
             <li class="breadcrumb-item active">{{ 'Editar' if chamado else 'Novo' }} Chamado</li>
         </ol>
     </nav>
@@ -187,7 +187,7 @@
                     <hr class="my-4">
 
                     <div class="d-flex justify-content-between">
-                        <a href="{{ url_for('chamados') }}" class="btn btn-outline-secondary">
+                        <a href="{{ url_for('operacional.chamados') }}" class="btn btn-outline-secondary">
                             <i class="bi bi-arrow-left"></i> Cancelar
                         </a>
                         <button type="submit" class="btn btn-primary">

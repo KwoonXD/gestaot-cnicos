@@ -77,7 +77,7 @@
     <!-- Tab 2: History (Pagamentos Table) -->
     <div class="tab-pane fade" id="historico" role="tabpanel">
         <div class="filter-section mb-4">
-            <form method="GET" class="row g-3">
+            <form method="GET" action="{{ url_for('financeiro.pagamentos') }}" class="row g-3">
                 <div class="col-md-4">
                     <label class="form-label">Técnico</label>
                     <select name="tecnico" class="form-select">
@@ -129,12 +129,12 @@
                             {% for pagamento in pagamentos %}
                             <tr>
                                 <td>
-                                    <a href="{{ url_for('pagamento_detalhes', id=pagamento.id) }}">
+                                    <a href="{{ url_for('financeiro.pagamento_detalhes', id=pagamento.id) }}">
                                         <code>{{ pagamento.id_pagamento }}</code>
                                     </a>
                                 </td>
                                 <td>
-                                    <a href="{{ url_for('tecnico_detalhes', id=pagamento.tecnico.id) }}"
+                                    <a href="{{ url_for('operacional.tecnico_detalhes', id=pagamento.tecnico.id) }}"
                                         class="text-decoration-none">
                                         {{ pagamento.tecnico.nome }}
                                     </a>
@@ -154,7 +154,7 @@
                                 <td>{{ pagamento.data_pagamento.strftime('%d/%m/%Y') if pagamento.data_pagamento else
                                     '-' }}</td>
                                 <td class="action-buttons">
-                                    <a href="{{ url_for('pagamento_detalhes', id=pagamento.id) }}"
+                                    <a href="{{ url_for('financeiro.pagamento_detalhes', id=pagamento.id) }}"
                                         class="btn btn-sm btn-outline-primary btn-action" title="Ver Detalhes">
                                         <i class="bi bi-eye"></i>
                                     </a>
@@ -172,7 +172,8 @@
                             <div class="modal fade" id="pagarModal{{ pagamento.id }}" tabindex="-1">
                                 <div class="modal-dialog">
                                     <div class="modal-content">
-                                        <form method="POST" action="{{ url_for('marcar_como_pago', id=pagamento.id) }}">
+                                        <form method="POST"
+                                            action="{{ url_for('financeiro.marcar_como_pago', id=pagamento.id) }}">
                                             <div class="modal-header">
                                                 <h5 class="modal-title">Confirmar Pagamento</h5>
                                                 <button type="button" class="btn-close"
@@ -273,7 +274,7 @@
                     </div>
                     <!-- Form for Submission -->
                     <!-- Changed action to point to existing route, defaulting to POST -->
-                    <form method="POST" action="{{ url_for('gerar_pagamento') }}" id="paymentForm">
+                    <form method="POST" action="{{ url_for('financeiro.gerar_pagamento') }}" id="paymentForm">
                         <input type="hidden" name="tecnico_id" id="formTecnicoId">
                         <input type="hidden" name="periodo_inicio" id="formPeriodoInicio">
                         <input type="hidden" name="periodo_fim" id="formPeriodoFim">
