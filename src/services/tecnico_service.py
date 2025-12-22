@@ -22,7 +22,9 @@ class TecnicoService:
                 # Filtra técnicos que possuem pelo menos um chamado Concluído e Não Pago
                 query = query.join(Chamado).filter(
                     Chamado.status_chamado == 'Concluído',
-                    Chamado.pago == False
+                    Chamado.pago == False,
+                    Chamado.pagamento_id == None,
+                    Tecnico.tecnico_principal_id == None
                 ).group_by(Tecnico.id)
             
             elif filters.get('pagamento') == 'Pago':
@@ -30,7 +32,9 @@ class TecnicoService:
                 # Para performance simples neste estágio, vamos usar except_
                 pendentes_subquery = db.session.query(Tecnico.id).join(Chamado).filter(
                     Chamado.status_chamado == 'Concluído',
-                    Chamado.pago == False
+                    Chamado.pago == False,
+                    Chamado.pagamento_id == None,
+                    Tecnico.tecnico_principal_id == None
                 ).subquery()
                 query = query.filter(Tecnico.id.notin_(pendentes_subquery))
 
@@ -85,6 +89,26 @@ class TecnicoService:
     @staticmethod
     def get_pendencias(id):
         tecnico = TecnicoService.get_by_id(id)
-        # Use simple property or query logic.
-        # Assuming Chamado has 'pago' boolean field.
-        return Chamado.query.filter_by(tecnico_id=id, pago=False).order_by(Chamado.data_atendimento.desc()).all()
+        
+        # Get own pending calls
+        chamados_proprios = Chamado.query.filter(
+            Chamado.tecnico_id == id,
+            Chamado.pago == False,
+            Chamado.status_chamado == 'Concluído',
+            Chamado.pagamento_id == None
+        ).order_by(Chamado.data_atendimento.desc()).all()
+        
+        # Get sub-technicians' pending calls
+        chamados_sub = []
+        for sub in tecnico.sub_tecnicos:
+            chamados_sub.extend(sub.chamados.filter(
+                Chamado.status_chamado == 'Concluído',
+                Chamado.pago == False,
+                Chamado.pagamento_id == None
+            ).order_by(Chamado.data_atendimento.desc()).all())
+            
+        # Combine and sort by date descending
+        todos_chamados = chamados_proprios + chamados_sub
+        todos_chamados.sort(key=lambda x: x.data_atendimento, reverse=True)
+        
+        return todos_chamados

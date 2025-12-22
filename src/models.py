@@ -69,14 +69,34 @@ class Tecnico(db.Model):
     
     @property
     def total_atendimentos_nao_pagos(self):
-        return self.chamados.filter_by(status_chamado='Concluído', pago=False).count()
+        # If I am a sub-technician (have a principal), my debts are handled by him.
+        if self.tecnico_principal_id:
+            return 0
+        
+        # Start with my own count
+        count = self.chamados.filter(Chamado.status_chamado == 'Concluído', Chamado.pago == False, Chamado.pagamento_id == None).count()
+        
+        # Add counts from sub-technicians
+        for sub in self.sub_tecnicos:
+            count += sub.chamados.filter(Chamado.status_chamado == 'Concluído', Chamado.pago == False, Chamado.pagamento_id == None).count()
+            
+        return count
     
     def get_total_a_pagar(self):
-        # Calculation moved to method to allow flexibility if logic changes in service
-        # But keeping property for template compatibility if needed, calling service logic pref.
-        # For model, we stick to data
-        chamados_pendentes = self.chamados.filter_by(status_chamado='Concluído', pago=False).all()
-        return float(sum(c.valor for c in chamados_pendentes))
+        # If I am a sub-technician (have a principal), my debts are handled by him.
+        if self.tecnico_principal_id:
+            return 0.0
+            
+        # Start with my own debt
+        chamados_pendentes = self.chamados.filter(Chamado.status_chamado == 'Concluído', Chamado.pago == False, Chamado.pagamento_id == None).all()
+        total = sum(c.valor for c in chamados_pendentes)
+        
+        # Add debt from sub-technicians
+        for sub in self.sub_tecnicos:
+            sub_pendentes = sub.chamados.filter(Chamado.status_chamado == 'Concluído', Chamado.pago == False, Chamado.pagamento_id == None).all()
+            total += sum(c.valor for c in sub_pendentes)
+            
+        return float(total)
 
     @property
     def total_a_pagar(self):

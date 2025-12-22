@@ -9,6 +9,9 @@ from flask_executor import Executor
 from dotenv import load_dotenv
 from .models import db, User
 
+# CRÍTICO: Inicializar globalmente para permitir importação nos serviços
+executor = Executor() 
+
 def create_app():
     load_dotenv()
 
@@ -37,7 +40,7 @@ def create_app():
     # Init Extensions
     db.init_app(app)
     migrate = Migrate(app, db) # Task 1: Flask-Migrate
-    executor = Executor(app)
+    executor.init_app(app) # Apenas init_app aqui dentro
 
     
     login_manager = LoginManager()

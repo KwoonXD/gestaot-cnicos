@@ -62,7 +62,6 @@ def marcar_como_pago(id):
 @login_required
 def fechamento_lote():
     if request.method == 'POST':
-        # Expecting form data with list of tecnicos and date range
         tecnicos_ids = request.form.getlist('tecnicos_ids')
         periodo_inicio = request.form.get('periodo_inicio')
         periodo_fim = request.form.get('periodo_fim')
@@ -77,14 +76,11 @@ def fechamento_lote():
             'periodo_fim': periodo_fim
         }
         
-        count, errors = FinanceiroService.gerar_pagamento_lote(dados_lote)
+        # Chama o serviço (que agora é assíncrono)
+        FinanceiroService.gerar_pagamento_lote(dados_lote)
         
-        if count > 0:
-            flash(f'{count} pagamentos gerados com sucesso!', 'success')
-        
-        if errors:
-            for erro in errors:
-                flash(erro, 'warning') # Show as warnings
+        # Feedback adaptado
+        flash(f'O processamento de {len(tecnicos_ids)} técnicos foi iniciado em segundo plano. Atualize a página em instantes.', 'info')
                 
         return redirect(url_for('financeiro.pagamentos'))
 
@@ -113,6 +109,7 @@ def fechamento_lote():
             chamados_periodo = t.chamados.filter(
                 Chamado.status_chamado == 'Concluído',
                 Chamado.pago == False,
+                Chamado.pagamento_id == None,
                 Chamado.data_atendimento >= datetime.strptime(periodo_inicio, '%Y-%m-%d').date(),
                 Chamado.data_atendimento <= datetime.strptime(periodo_fim, '%Y-%m-%d').date()
             ).all()

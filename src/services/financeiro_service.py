@@ -1,8 +1,76 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 import calendar
 from sqlalchemy import func
+# Importamos o executor global que criamos acima
+from src import executor, db 
+from src.models import Chamado, Pagamento, Tecnico, Lancamento
 
-from src.models import db, Chamado, Pagamento, Tecnico, Lancamento
+# Função isolada (fora da classe) para rodar em background
+def task_processar_lote(tecnicos_ids, inicio_str, fim_str):
+    print(f"--> Iniciando processamento background para {len(tecnicos_ids)} técnicos.")
+    
+    # É necessário recriar o contexto se não for thread-local, mas o Flask-Executor cuida disso.
+    # Convertemos strings de volta para data
+    inicio = datetime.strptime(inicio_str, '%Y-%m-%d').date()
+    fim = datetime.strptime(fim_str, '%Y-%m-%d').date()
+    
+    count = 0
+    errors = []
+    
+    try:
+        for t_id in tecnicos_ids:
+            tecnico = Tecnico.query.get(t_id)
+            if not tecnico: continue
+                
+            # Se for um sub-técnico (tem principal), pular (será processado pelo principal)
+            if tecnico.tecnico_principal_id:
+                continue
+
+            chamados_proprios = tecnico.chamados.filter(
+                Chamado.status_chamado == 'Concluído',
+                Chamado.pago == False,
+                Chamado.pagamento_id == None,
+                Chamado.data_atendimento >= inicio,
+                Chamado.data_atendimento <= fim
+            ).all()
+            
+            chamados_sub = []
+            for sub in tecnico.sub_tecnicos:
+                chamados_sub.extend(sub.chamados.filter(
+                    Chamado.status_chamado == 'Concluído',
+                    Chamado.pago == False,
+                    Chamado.pagamento_id == None,
+                    Chamado.data_atendimento >= inicio,
+                    Chamado.data_atendimento <= fim
+                ).all())
+                
+            chamados_todos = chamados_proprios + chamados_sub
+            
+            if not chamados_todos:
+                continue
+                
+            pagamento = Pagamento(
+                tecnico_id=tecnico.id,
+                periodo_inicio=inicio,
+                periodo_fim=fim,
+                valor_por_atendimento=tecnico.valor_por_atendimento,
+                status_pagamento='Pendente',
+                observacoes='Processado via Lote em Background'
+            )
+            db.session.add(pagamento)
+            db.session.flush()
+            
+            for c in chamados_todos:
+                c.pagamento_id = pagamento.id
+            
+            count += 1
+            
+        db.session.commit()
+        print(f"--> Lote finalizado. {count} pagamentos gerados.")
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"--> Erro no lote: {str(e)}")
 
 class FinanceiroService:
     @staticmethod
@@ -75,22 +143,31 @@ class FinanceiroService:
         if not tecnico:
             return None, "Técnico não encontrado."
             
-        # Get unpaid completed chamados
-        chamados = tecnico.chamados.filter_by(status_chamado='Concluído', pago=False).all()
+        # Get unpaid completed chamados (not yet assigned to a payment) for the Tecnico
+        chamados_proprios = tecnico.chamados.filter(
+            Chamado.status_chamado == 'Concluído', 
+            Chamado.pago == False,
+            Chamado.pagamento_id == None
+        ).all()
         
-        if not chamados:
-            return None, "Não há chamados pendentes para este técnico."
+        # Get unpaid completed chamados from Sub-Tecnicos
+        chamados_sub = []
+        for sub in tecnico.sub_tecnicos:
+            chamados_sub.extend(sub.chamados.filter(
+                Chamado.status_chamado == 'Concluído', 
+                Chamado.pago == False,
+                Chamado.pagamento_id == None
+            ).all())
             
-        valor_total = sum(c.valor for c in chamados)
+        chamados_todos = chamados_proprios + chamados_sub
         
-        # Determine dates
-        if chamados:
-            dates = [c.data_atendimento for c in chamados]
-            periodo_inicio = min(dates)
-            periodo_fim = max(dates)
-        else:
-            periodo_inicio = datetime.now()
-            periodo_fim = datetime.now()
+        if not chamados_todos:
+            return None, "Não há chamados pendentes para este técnico ou afiliados."
+            
+        # Determine dates based on all calls
+        dates = [c.data_atendimento for c in chamados_todos]
+        periodo_inicio = min(dates)
+        periodo_fim = max(dates)
             
         pagamento = Pagamento(
             tecnico_id=tecnico_id,
@@ -103,13 +180,9 @@ class FinanceiroService:
         db.session.add(pagamento)
         db.session.flush() # get ID
         
-        # Link chamados to pagamento
-        for c in chamados:
-            c.pago = False # Will be true when payment is paid? Or immediately? 
-            # Re-reading logic: 'pago' in Chamado usually means "Included in a Payment record that is Paid" OR just "Included in Payment"?
-            # Let's assume "Included in Payment" marks it as processed, but 'pago' boolean might be redundant if we check pagamento status.
-            # However, typically validation queries check 'pago=False'.
-            # If we link to a Pending Payment, is the Chamado 'pago'? Probably not yet.
+        # Link all chamados to this payment
+        for c in chamados_todos:
+            c.pago = False 
             c.pagamento_id = pagamento.id
             
         db.session.commit()
@@ -145,43 +218,15 @@ class FinanceiroService:
 
     @staticmethod
     def gerar_pagamento_lote(data):
+        """
+        Agora este método apenas dispara a tarefa e retorna imediatamente.
+        """
         tecnicos_ids = data.get('tecnicos_ids', [])
-        inicio = datetime.strptime(data.get('periodo_inicio'), '%Y-%m-%d').date()
-        fim = datetime.strptime(data.get('periodo_fim'), '%Y-%m-%d').date()
+        periodo_inicio = data.get('periodo_inicio')
+        periodo_fim = data.get('periodo_fim')
         
-        count = 0
-        errors = []
+        # Dispara a tarefa em background (Fire and Forget)
+        executor.submit(task_processar_lote, tecnicos_ids, periodo_inicio, periodo_fim)
         
-        for t_id in tecnicos_ids:
-            tecnico = Tecnico.query.get(t_id)
-            if not tecnico: 
-                continue
-                
-            chamados_periodo = tecnico.chamados.filter(
-                Chamado.status_chamado == 'Concluído',
-                Chamado.pago == False,
-                Chamado.data_atendimento >= inicio,
-                Chamado.data_atendimento <= fim
-            ).all()
-            
-            if not chamados_periodo:
-                errors.append(f"Técnico {tecnico.nome}: Sem chamados no período.")
-                continue
-                
-            pagamento = Pagamento(
-                tecnico_id=tecnico.id,
-                periodo_inicio=inicio,
-                periodo_fim=fim,
-                valor_por_atendimento=tecnico.valor_por_atendimento,
-                status_pagamento='Pendente'
-            )
-            db.session.add(pagamento)
-            db.session.flush()
-            
-            for c in chamados_periodo:
-                c.pagamento_id = pagamento.id
-                
-            count += 1
-            
-        db.session.commit()
-        return count, errors
+        # Retorna sucesso imediato (0 erros, pois erros serão logados no console/banco depois)
+        return len(tecnicos_ids), []
