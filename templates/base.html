@@ -5,6 +5,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Gestão de Técnicos{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
     <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
@@ -171,37 +174,45 @@
             }
         });
 
-        // Dark Mode Logic
-        const themeToggle = document.getElementById('theme-toggle');
-        const themeIcon = document.getElementById('theme-icon');
+        // Lógica Robusta de Dark Mode
+        const toggleButton = document.getElementById('theme-toggle');
+        const icon = toggleButton.querySelector('i');
         const html = document.documentElement;
 
-        // Load saved preference
-        const savedTheme = localStorage.getItem('theme') || 'light';
-        html.setAttribute('data-theme', savedTheme);
-        updateIcon(savedTheme);
+        function setTheme(theme) {
+            // Ativa o modo escuro no Bootstrap (Nativo)
+            html.setAttribute('data-bs-theme', theme);
+            // Ativa o modo escuro no CSS Customizado
+            html.setAttribute('data-theme', theme);
 
-        if (themeToggle) {
-            themeToggle.addEventListener('click', () => {
-                const currentTheme = html.getAttribute('data-theme');
-                const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+            localStorage.setItem('theme', theme);
 
-                html.setAttribute('data-theme', newTheme);
-                localStorage.setItem('theme', newTheme);
-                updateIcon(newTheme);
-            });
-        }
-
-        function updateIcon(theme) {
-            if (!themeIcon) return;
+            // Atualiza ícone
             if (theme === 'dark') {
-                themeIcon.classList.remove('bi-moon-stars-fill');
-                themeIcon.classList.add('bi-sun-fill');
+                icon.classList.remove('bi-moon-stars');
+                icon.classList.add('bi-sun');
             } else {
-                themeIcon.classList.remove('bi-sun-fill');
-                themeIcon.classList.add('bi-moon-stars-fill');
+                icon.classList.remove('bi-sun');
+                icon.classList.add('bi-moon-stars');
             }
         }
+
+        // Carregar preferência salva ou padrão do sistema
+        const savedTheme = localStorage.getItem('theme');
+        const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+        if (savedTheme) {
+            setTheme(savedTheme);
+        } else if (systemPrefersDark) {
+            setTheme('dark');
+        }
+
+        // Evento de clique
+        toggleButton.addEventListener('click', () => {
+            const currentTheme = html.getAttribute('data-bs-theme') || 'light';
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            setTheme(newTheme);
+        });
 
         // Click-to-Copy Logic
         document.querySelectorAll('.copy-trigger').forEach(trigger => {
