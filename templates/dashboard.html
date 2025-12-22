@@ -7,25 +7,29 @@
     <h1><i class="bi bi-speedometer2"></i> Dashboard</h1>
 </div>
 
+<!-- Cards de Métricas -->
 <div class="row g-4 mb-4">
+    <!-- Projeção (Custom Purple) -->
     <div class="col-md-6 col-lg">
         <div class="card metric-card h-100" style="border-left: 4px solid #8B5CF6;">
             <div class="card-body d-flex justify-content-between align-items-center">
                 <div>
-                    <div class="metric-value font-numeric" style="color: #8B5CF6;">R$ {{
-                        "%.2f"|format(projecao_financeira.projecao)
-                        }}</div>
+                    <div class="metric-value font-numeric" style="color: #8B5CF6;">
+                        R$ {{ "%.2f"|format(projecao_financeira.projecao) }}
+                    </div>
                     <div class="metric-label">Projeção do Mês</div>
                     <small class="text-muted" style="font-size: 0.75rem;">
                         Atual: R$ {{ "%.2f"|format(projecao_financeira.atual) }}
                     </small>
                 </div>
-                <div class="metric-icon" style="background-color: #F3E8FF; color: #8B5CF6;">
+                <div class="metric-icon" style="color: #8B5CF6;">
                     <i class="bi bi-graph-up-arrow"></i>
                 </div>
             </div>
         </div>
     </div>
+
+    <!-- Técnicos Ativos (Blue) -->
     <div class="col-md-6 col-lg">
         <div class="card metric-card blue h-100">
             <div class="card-body d-flex justify-content-between align-items-center">
@@ -39,6 +43,8 @@
             </div>
         </div>
     </div>
+
+    <!-- Chamados Mês (Green) -->
     <div class="col-md-6 col-lg">
         <div class="card metric-card green h-100">
             <div class="card-body d-flex justify-content-between align-items-center">
@@ -52,6 +58,8 @@
             </div>
         </div>
     </div>
+
+    <!-- Valor Pendente (Orange) -->
     <div class="col-md-6 col-lg">
         <div class="card metric-card orange h-100">
             <div class="card-body d-flex justify-content-between align-items-center">
@@ -65,6 +73,8 @@
             </div>
         </div>
     </div>
+
+    <!-- Pagamentos Pendentes (Red) -->
     <div class="col-md-6 col-lg">
         <div class="card metric-card red h-100">
             <div class="card-body d-flex justify-content-between align-items-center">
@@ -80,6 +90,7 @@
     </div>
 </div>
 
+<!-- Charts Row 1 -->
 <div class="row g-4 mb-4">
     <div class="col-lg-6">
         <div class="card h-100">
@@ -93,6 +104,7 @@
             </div>
         </div>
     </div>
+
     <div class="col-lg-6">
         <div class="card h-100">
             <div class="card-header d-flex justify-content-between align-items-center">
@@ -140,179 +152,168 @@
                 {% endif %}
             </div>
         </div>
+    </div>
+</div>
 
-        <div class="row g-4 mb-4">
-            <div class="col-12">
-                <div class="card h-100">
-                    <div class="card-header">
-                        <h5 class="mb-0"><i class="bi bi-graph-up"></i> Evolução de Custos e Volume (6 Meses)</h5>
+<!-- Charts Row 2: Evolução -->
+<div class="row g-4 mb-4">
+    <div class="col-12">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-graph-up"></i> Evolução de Custos e Volume (6 Meses)</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container" style="height: 300px;">
+                    <canvas id="evolucaoChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Actions Row -->
+<div class="row g-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-lightning"></i> Ações Rápidas</h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <a href="{{ url_for('operacional.novo_tecnico') }}" class="btn btn-outline-primary w-100 py-3">
+                            <i class="bi bi-person-plus fs-4 d-block mb-2"></i>
+                            Novo Técnico
+                        </a>
                     </div>
-                    <div class="card-body">
-                        <div class="chart-container" style="height: 300px;">
-                            <canvas id="evolucaoChart"></canvas>
-                        </div>
+                    <div class="col-md-4">
+                        <a href="{{ url_for('operacional.novo_chamado') }}" class="btn btn-outline-success w-100 py-3">
+                            <i class="bi bi-clipboard-plus fs-4 d-block mb-2"></i>
+                            Novo Chamado
+                        </a>
+                    </div>
+                    <div class="col-md-4">
+                        <a href="{{ url_for('financeiro.gerar_pagamento') }}"
+                            class="btn btn-outline-warning w-100 py-3">
+                            <i class="bi bi-cash-coin fs-4 d-block mb-2"></i>
+                            Gerar Pagamento
+                        </a>
                     </div>
                 </div>
             </div>
         </div>
+    </div>
+</div>
+{% endblock %}
 
-        <div class="row g-4">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0"><i class="bi bi-lightning"></i> Ações Rápidas</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="row g-3">
-                            <div class="col-md-4">
-                                <a href="{{ url_for('operacional.novo_tecnico') }}"
-                                    class="btn btn-outline-primary w-100 py-3">
-                                    <i class="bi bi-person-plus fs-4 d-block mb-2"></i>
-                                    Novo Técnico
-                                </a>
-                            </div>
-                            <div class="col-md-4">
-                                <a href="{{ url_for('operacional.novo_chamado') }}"
-                                    class="btn btn-outline-success w-100 py-3">
-                                    <i class="bi bi-clipboard-plus fs-4 d-block mb-2"></i>
-                                    Novo Chamado
-                                </a>
-                            </div>
-                            <div class="col-md-4">
-                                <a href="{{ url_for('financeiro.gerar_pagamento') }}"
-                                    class="btn btn-outline-warning w-100 py-3">
-                                    <i class="bi bi-cash-coin fs-4 d-block mb-2"></i>
-                                    Gerar Pagamento
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        {% endblock %}
+{% block scripts %}
+<script>
+    const chamadosData = {{ chamados_por_status | tojson }};
 
-        {% block scripts %}
-        <script>
-            const chamadosData = {{ chamados_por_status | tojson }};
+    const ctx = document.getElementById('chamadosStatusChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: Object.keys(chamadosData),
+            datasets: [{
+                data: Object.values(chamadosData),
+                backgroundColor: [
+                    '#F59E0B', // Warning/Pendente
+                    '#3B82F6', // Info/Em Andamento (Primary)
+                    '#10B981', // Success/Concluído
+                    '#EF4444'  // Danger/Cancelado
+                ],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        color: typeof getComputedStyle !== 'undefined' ? getComputedStyle(document.body).getPropertyValue('--text-primary').trim() : '#666'
+                    }
+                }
+            }
+        }
+    });
 
-            const ctx = document.getElementById('chamadosStatusChart').getContext('2d');
-            new Chart(ctx, {
-                type: 'doughnut',
+    // Fetch Evolution Data
+    fetch('/api/dashboard/evolucao')
+        .then(response => response.json())
+        .then(data => {
+            const ctxEvolucao = document.getElementById('evolucaoChart').getContext('2d');
+            const isDark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
+            const gridColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)';
+            const textColor = isDark ? '#94A3B8' : '#64748B';
+
+            new Chart(ctxEvolucao, {
+                type: 'bar',
                 data: {
-                    labels: Object.keys(chamadosData),
-                    datasets: [{
-                        data: Object.values(chamadosData),
-                        backgroundColor: [
-                            '#F59E0B', // Warning/Pendente
-                            '#3B82F6', // Info/Em Andamento (Primary)
-                            '#10B981', // Success/Concluído
-                            '#EF4444'  // Danger/Cancelado
-                        ],
-                        borderWidth: 0
-                    }]
+                    labels: data.labels,
+                    datasets: [
+                        {
+                            label: 'Volume (Qtd)',
+                            data: data.volume,
+                            type: 'bar',
+                            yAxisID: 'yVolume',
+                            backgroundColor: 'rgba(59, 130, 246, 0.5)',
+                            borderColor: '#3B82F6',
+                            borderWidth: 1,
+                            order: 1
+                        },
+                        {
+                            label: 'Custos (R$)',
+                            data: data.custos,
+                            type: 'line',
+                            yAxisID: 'yCustos',
+                            borderColor: '#10B981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.3,
+                            order: 0
+                        }
+                    ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            grid: { color: gridColor },
+                            ticks: { color: textColor }
+                        },
+                        yVolume: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            grid: { display: false },
+                            ticks: { color: textColor }
+                        },
+                        yCustos: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            grid: { color: gridColor },
+                            ticks: {
+                                color: textColor,
+                                callback: function (value) {
+                                    return 'R$ ' + value;
+                                }
+                            }
+                        }
+                    },
                     plugins: {
                         legend: {
-                            position: 'bottom'
+                            labels: { color: textColor }
                         }
                     }
                 }
             });
-
-            // Fetch Evolution Data
-            fetch('/api/dashboard/evolucao')
-                .then(response => response.json())
-                .then(data => {
-                    const ctxEvolucao = document.getElementById('evolucaoChart').getContext('2d');
-                    new Chart(ctxEvolucao, {
-                        type: 'bar',
-                        data: {
-                            labels: data.labels,
-                            datasets: [
-                                {
-                                    label: 'Volume (Qtd)',
-                                    data: data.volume,
-                                    type: 'bar',
-                                    yAxisID: 'yVolume',
-                                    backgroundColor: 'rgba(59, 130, 246, 0.5)',
-                                    borderColor: '#3B82F6',
-                                    borderWidth: 1,
-                                    order: 1
-                                },
-                                {
-                                    label: 'Custos (R$)',
-                                    data: data.custos,
-                                    type: 'line',
-                                    yAxisID: 'yCustos',
-                                    borderColor: '#10B981',
-                                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                                    borderWidth: 2,
-                                    fill: true,
-                                    tension: 0.3,
-                                    order: 0
-                                }
-                            ]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            interaction: {
-                                mode: 'index',
-                                intersect: false,
-                            },
-                            scales: {
-                                yVolume: {
-                                    type: 'linear',
-                                    display: true,
-                                    position: 'right',
-                                    grid: {
-                                        drawOnChartArea: false
-                                    },
-                                    title: {
-                                        display: true,
-                                        text: 'Quantidade'
-                                    }
-                                },
-                                yCustos: {
-                                    type: 'linear',
-                                    display: true,
-                                    position: 'left',
-                                    title: {
-                                        display: true,
-                                        text: 'Valor (R$)'
-                                    },
-                                    ticks: {
-                                        callback: function (value) {
-                                            return 'R$ ' + value;
-                                        }
-                                    }
-                                }
-                            },
-                            plugins: {
-                                tooltip: {
-                                    callbacks: {
-                                        label: function (context) {
-                                            let label = context.dataset.label || '';
-                                            if (label) {
-                                                label += ': ';
-                                            }
-                                            if (context.dataset.yAxisID === 'yCustos') {
-                                                label += new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(context.raw);
-                                            } else {
-                                                label += context.raw;
-                                            }
-                                            return label;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    });
-                })
-                .catch(err => console.error('Erro ao carregar gráfico de evolução:', err));
-        </script>
-        {% endblock %}
+        })
+        .catch(err => console.error('Erro ao carregar gráfico de evolução:', err));
+</script>
+{% endblock %}

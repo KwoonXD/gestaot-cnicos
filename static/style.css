@@ -1,44 +1,53 @@
 :root {
     --primary-color: #3B82F6;
+    --primary-hover: #2563EB;
     --secondary-color: #0F172A;
+    /* Sidebar/Navbar */
     --background-color: #F8FAFC;
+    /* Light Mode BG */
+    --card-bg: #FFFFFF;
     --text-primary: #1E293B;
     --text-secondary: #64748B;
+    --border-color: #E2E8F0;
+
     --success-color: #10B981;
     --warning-color: #F59E0B;
     --danger-color: #EF4444;
+    --info-color: #3B82F6;
 
-    --card-bg: #FFFFFF;
-    --border-color: #E2E8F0;
     --border-radius: 0.75rem;
-    /* Bordas um pouco mais arredondadas */
-    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
-    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
-/* TEMA ESCURO: Definições de cor completas */
+/* HIGH CONTRAST DARK MODE */
 [data-bs-theme="dark"] {
-    --background-color: #0F172A;
-    /* Azul Noturno Profundo */
-    --text-primary: #F1F5F9;
-    /* Branco Gelo */
+    --background-color: #020617;
+    /* Very Dark Slate */
+    --card-bg: #0F172A;
+    /* Dark Slate */
+    --text-primary: #F8FAFC;
+    /* White-ish */
     --text-secondary: #94A3B8;
-    /* Cinza Claro */
-    --card-bg: #1E293B;
-    /* Azul Petróleo para Cards */
-    --border-color: #334155;
-    /* Bordas sutis */
+    /* Light Slate */
+    --border-color: #475569;
+    /* Lighter border for visibility */
 
-    /* Sobrescreve variáveis do Bootstrap para consistência */
+    --primary-color: #60A5FA;
+    /* Lighter Blue for contrast */
+    --primary-hover: #3B82F6;
+
     --bs-body-bg: var(--background-color);
     --bs-body-color: var(--text-primary);
+    --bs-border-color: var(--border-color);
 }
 
+/* GLOBAL RESET & LAYOUT */
 html,
 body {
     height: 100%;
-    /* Garante que o fundo cubra 100% da tela */
     margin: 0;
+    padding: 0;
 }
 
 body {
@@ -46,121 +55,140 @@ body {
     color: var(--text-primary);
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     display: flex;
-    /* Flexbox para empurrar o rodapé */
     flex-direction: column;
+    min-height: 100vh;
 }
 
 main {
     flex: 1;
-    /* Ocupa todo o espaço vazio disponível */
+    width: 100%;
+    padding-bottom: 2rem;
 }
 
-/* Correção para inputs no modo escuro */
-[data-bs-theme="dark"] .form-control,
-[data-bs-theme="dark"] .form-select {
-    background-color: #334155;
-    border-color: #475569;
-    color: white;
-}
-
-/* Tipografia e Layout */
+/* TYPOGRAPHY */
 h1,
 h2,
 h3,
 h4,
-h5 {
+h5,
+h6 {
     color: var(--text-primary);
     font-weight: 700;
     letter-spacing: -0.025em;
-    /* Tight tracking para modernidade */
 }
 
-.page-header {
-    margin-bottom: 2rem;
-    padding-top: 1rem;
+.text-muted {
+    color: var(--text-secondary) !important;
 }
 
-/* Cards Melhorados */
+.font-numeric {
+    font-variant-numeric: tabular-nums;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: -0.05em;
+}
+
+/* COMPONENTS */
+
+/* Cards */
 .card {
     background-color: var(--card-bg);
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius);
     box-shadow: var(--shadow-sm);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-    border: none;
-    /* Remove borda padrão do bootstrap para usar sombra */
-    height: 100%;
-    /* Garante altura igual em colunas */
-}
-
-.card:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-md);
+    transition: transform 0.2s, box-shadow 0.2s;
 }
 
 .card-header {
-    background-color: white;
+    background-color: transparent;
     border-bottom: 1px solid var(--border-color);
-    padding: 1.25rem 1.5rem;
-    border-top-left-radius: var(--border-radius) !important;
-    border-top-right-radius: var(--border-radius) !important;
+    padding: 1.25rem;
     font-weight: 600;
 }
 
-/* Dark Mode Card Header Override */
-[data-bs-theme="dark"] .card-header {
-    background-color: rgba(255, 255, 255, 0.03);
-    border-bottom-color: var(--border-color);
+/* Inputs & Forms */
+.form-control,
+.form-select {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 0.625rem 0.75rem;
+    border-radius: 0.5rem;
 }
 
-.card-body {
-    padding: 1.5rem;
+.form-control:focus,
+.form-select:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
 }
 
-/* Tabelas Alinhadas */
+.form-check-input {
+    background-color: var(--card-bg);
+    border: 1px solid var(--text-secondary);
+    /* Higher contrast for checkbox borders */
+}
+
+.form-check-input:checked {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+/* Tables */
+.table {
+    margin-bottom: 0;
+    color: var(--text-primary);
+    border-color: var(--border-color);
+}
+
 .table th {
-    font-weight: 600;
+    background-color: var(--background-color);
+    /* Slight contrast header */
     color: var(--text-secondary);
+    font-weight: 600;
     text-transform: uppercase;
-    font-size: 0.7rem;
-    letter-spacing: 0.05em;
-    background-color: #F8FAFC;
+    font-size: 0.75rem;
+    padding: 1rem;
     border-bottom: 1px solid var(--border-color);
 }
 
 [data-bs-theme="dark"] .table th {
-    background-color: var(--card-bg);
-    color: var(--text-secondary);
+    background-color: rgba(255, 255, 255, 0.02);
 }
 
 .table td {
+    padding: 1rem;
     vertical-align: middle;
-    color: var(--text-primary);
-    font-size: 0.875rem;
+    border-bottom: 1px solid var(--border-color);
 }
 
-/* Navbar Profissional */
+.table-hover tbody tr:hover {
+    background-color: rgba(59, 130, 246, 0.05);
+}
+
+/* Navbar */
 .navbar {
     background-color: var(--secondary-color) !important;
-    box-shadow: var(--shadow-md);
     padding: 0.75rem 0;
-}
-
-[data-bs-theme="dark"] .navbar {
-    background-color: #1E293B !important;
     border-bottom: 1px solid var(--border-color);
 }
 
 .navbar-brand {
     font-weight: 700;
-    font-size: 1.1rem;
-    letter-spacing: -0.01em;
+    font-size: 1.25rem;
+    color: white !important;
 }
 
 .nav-link {
-    font-size: 0.9rem;
+    color: #cbd5e1 !important;
+    /* Slate-300 */
     font-weight: 500;
-    margin: 0 0.2rem;
+    padding: 0.5rem 1rem !important;
+    border-radius: 0.375rem;
+    transition: all 0.2s;
+}
+
+.nav-link:hover {
+    color: white !important;
+    background-color: rgba(255, 255, 255, 0.1);
 }
 
 .nav-link.active {
@@ -168,13 +196,10 @@ h5 {
     color: white !important;
 }
 
-/* Metric Cards (Os quadrados coloridos) */
+/* Metric Cards */
 .metric-card {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
+    height: 100%;
     border-left: 4px solid transparent;
-    /* Identidade visual */
 }
 
 .metric-card.blue {
@@ -196,45 +221,122 @@ h5 {
 .metric-value {
     font-size: 2rem;
     font-weight: 800;
+    line-height: 1;
+    margin-bottom: 0.25rem;
     color: var(--text-primary);
-    line-height: 1.2;
 }
 
 .metric-label {
+    font-size: 0.875rem;
     color: var(--text-secondary);
-    font-size: 0.8rem;
     font-weight: 600;
     text-transform: uppercase;
-    margin-top: 0.25rem;
 }
 
-/* Badge Técnico */
-.badge-tecnico {
-    font-family: 'Courier New', monospace;
-    /* Fonte mono para códigos */
-    background-color: var(--secondary-color);
-    color: #E2E8F0;
-    padding: 0.25em 0.5em;
-    border-radius: 4px;
-    font-size: 0.85em;
+.metric-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    background-color: var(--background-color);
+    color: var(--text-secondary);
+}
+
+[data-bs-theme="dark"] .metric-icon {
+    background-color: rgba(255, 255, 255, 0.05);
+    /* Proper contrast in dark mode */
+}
+
+/* Badges */
+.badge {
+    padding: 0.35em 0.65em;
     font-weight: 600;
+    border-radius: 0.375rem;
+}
+
+.badge-status {
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    letter-spacing: 0.05em;
+}
+
+/* Specific Badge Colors - Light Mode Defaults */
+.badge-concluído {
+    background-color: #d1fae5;
+    color: #065f46;
+}
+
+/* Green-100/800 */
+.badge-pendente {
+    background-color: #fef3c7;
+    color: #92400e;
+}
+
+/* Amber-100/800 */
+.badge-em-andamento {
+    background-color: #dbeafe;
+    color: #1e40af;
+}
+
+/* Blue-100/800 */
+.badge-cancelado {
+    background-color: #fee2e2;
+    color: #991b1b;
+}
+
+/* Red-100/800 */
+
+/* Specific Badge Colors - Dark Mode Overrides */
+[data-bs-theme="dark"] .badge-concluído {
+    background-color: rgba(16, 185, 129, 0.2);
+    color: #34d399;
+}
+
+[data-bs-theme="dark"] .badge-pendente {
+    background-color: rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
+}
+
+[data-bs-theme="dark"] .badge-em-andamento {
+    background-color: rgba(59, 130, 246, 0.2);
+    color: #60a5fa;
+}
+
+[data-bs-theme="dark"] .badge-cancelado {
+    background-color: rgba(239, 68, 68, 0.2);
+    color: #f87171;
+}
+
+.badge-tecnico {
+    background-color: var(--secondary-color);
+    color: #e2e8f0;
+    font-family: monospace;
 }
 
 [data-bs-theme="dark"] .badge-tecnico {
     background-color: #334155;
-    color: #F8FAFC;
+    color: white;
 }
 
-/* Chart Container Fix */
+/* Utility */
+.empty-state {
+    text-align: center;
+    padding: 3rem;
+    color: var(--text-secondary);
+}
+
+.empty-state i {
+    font-size: 3rem;
+    opacity: 0.5;
+    margin-bottom: 1rem;
+    display: block;
+}
+
 .chart-container {
     position: relative;
     height: 300px;
     width: 100%;
-}
-
-/* Utility */
-.font-numeric {
-    font-variant-numeric: tabular-nums;
-    font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
-    letter-spacing: -0.05em;
 }

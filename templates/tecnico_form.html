@@ -38,14 +38,32 @@
                     <hr class="my-4">
                     <h6 class="text-muted mb-3"><i class="bi bi-geo-alt"></i> Localização</h6>
                     <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">CEP</label>
+                            <input type="text" name="cep" id="cep" class="form-control" maxlength="9"
+                                placeholder="00000-000">
+                            <small class="text-muted">Digite o CEP para buscar o endereço automaticamente</small>
+                        </div>
+                        <div class="col-md-8">
+                            <!-- Spacer or empty col -->
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Endereço (Logradouro)</label>
+                            <input type="text" name="logradouro" id="logradouro" class="form-control"
+                                placeholder="Rua, Av...">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Bairro</label>
+                            <input type="text" name="bairro" id="bairro" class="form-control" placeholder="Bairro">
+                        </div>
                         <div class="col-md-8">
                             <label class="form-label">Cidade *</label>
-                            <input type="text" name="cidade" class="form-control" required
+                            <input type="text" name="cidade" id="cidade" class="form-control" required
                                 value="{{ tecnico.cidade if tecnico else '' }}" placeholder="Nome da cidade">
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">Estado *</label>
-                            <select name="estado" class="form-select" required>
+                            <select name="estado" id="estado" class="form-select" required>
                                 <option value="">Selecione...</option>
                                 {% for e in estados %}
                                 <option value="{{ e }}" {% if tecnico and tecnico.estado==e %}selected{% endif %}>{{ e
@@ -136,7 +154,7 @@
         </div>
     </div>
     <div class="col-lg-4">
-        <div class="card bg-light">
+        <div class="card">
             <div class="card-body">
                 <h5><i class="bi bi-info-circle"></i> Informações</h5>
                 <p class="text-muted small mb-2">
@@ -165,27 +183,110 @@
 {% block scripts %}
 <script>
     document.addEventListener('DOMContentLoaded', function () {
+        // --- Custom Rate Logic ---
         const checkbox = document.getElementById('customRateCheck');
         const container = document.getElementById('customRateInput');
         const input = document.getElementById('valorField');
 
-        function toggleInput() {
-            if (checkbox.checked) {
+        if (checkbox && container && input) {
+            function toggleInput() {
+                if (checkbox.checked) {
+                    container.style.display = 'block';
+                } else {
+                    container.style.display = 'none';
+                    input.value = '150.00';
+                }
+            }
+
+            checkbox.addEventListener('change', toggleInput);
+
+            // Initial State Check
+            const currentVal = parseFloat(input.value);
+            if (Math.abs(currentVal - 150.00) > 0.01) {
+                checkbox.checked = true;
                 container.style.display = 'block';
-            } else {
-                container.style.display = 'none';
-                input.value = '150.00';
             }
         }
 
-        checkbox.addEventListener('change', toggleInput);
+        // --- ViaCEP Integration ---
+        const cepInput = document.getElementById('cep');
+        const logradouroInput = document.getElementById('logradouro');
+        const bairroInput = document.getElementById('bairro');
+        const cidadeInput = document.getElementById('cidade');
+        const estadoSelect = document.getElementById('estado');
 
-        // Initial State Check
-        // If value is significantly different from 150.00, show it
-        const currentVal = parseFloat(input.value);
-        if (Math.abs(currentVal - 150.00) > 0.01) {
-            checkbox.checked = true;
-            container.style.display = 'block';
+        if (cepInput) {
+            // Masking
+            cepInput.addEventListener('input', function (e) {
+                let value = e.target.value.replace(/\D/g, '');
+                if (value.length > 5) {
+                    value = value.substring(0, 5) + '-' + value.substring(5, 8);
+                }
+                e.target.value = value;
+            });
+
+            // Blur event to fetch data
+            cepInput.addEventListener('blur', function () {
+                let cep = this.value.replace(/\D/g, '');
+
+                if (cep !== "") {
+                    // Refresh regex validation
+                    let validacep = /^[0-9]{8}$/;
+
+                    if (validacep.test(cep)) {
+                        // Loading feedback
+                        logradouroInput.value = "...";
+                        bairroInput.value = "...";
+                        cidadeInput.value = "...";
+
+                        logradouroInput.disabled = true;
+                        bairroInput.disabled = true;
+                        cidadeInput.disabled = true;
+                        estadoSelect.disabled = true;
+
+                        // Fetch ViaCEP
+                        fetch(`https://viacep.com.br/ws/${cep}/json/`)
+                            .then(response => response.json())
+                            .then(data => {
+                                if (!("erro" in data)) {
+                                    logradouroInput.value = data.logradouro;
+                                    bairroInput.value = data.bairro;
+                                    cidadeInput.value = data.localidade;
+                                    estadoSelect.value = data.uf;
+
+                                    // Focus next relevant field (e.g., number if we had one, or let user decide)
+                                    // There is no specific Number field in the request, so just focus logradouro or let be.
+                                } else {
+                                    alert("CEP não encontrado.");
+                                    cleanAddressForm();
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Erro ao buscar CEP:', error);
+                                alert("Erro ao buscar CEP.");
+                                cleanAddressForm();
+                            })
+                            .finally(() => {
+                                logradouroInput.disabled = false;
+                                bairroInput.disabled = false;
+                                cidadeInput.disabled = false;
+                                estadoSelect.disabled = false;
+                            });
+                    } else {
+                        alert("Formato de CEP inválido.");
+                        cleanAddressForm();
+                    }
+                } else {
+                    cleanAddressForm();
+                }
+            });
+        }
+
+        function cleanAddressForm() {
+            logradouroInput.value = "";
+            bairroInput.value = "";
+            cidadeInput.value = "";
+            estadoSelect.value = "";
         }
     });
 </script>

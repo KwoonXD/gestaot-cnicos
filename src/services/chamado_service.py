@@ -18,6 +18,19 @@ class ChamadoService:
                     query = query.filter(Chamado.pago == True)
                 elif filters['pago'] == 'nao':
                     query = query.filter(Chamado.pago == False)
+            if filters.get('search'):
+                s = filters['search']
+                # Search by code, technical name or id (partial)
+                from sqlalchemy import or_
+                # We need to construct the ID logically if possible or just string match
+                # Since id_chamado is a property, we can't query it directly in SQL easily without hybrid_property expression
+                # So we search codigo_chamado and Tecnico name
+                query = query.filter(
+                    or_(
+                        Chamado.codigo_chamado.ilike(f"%{s}%"),
+                        Tecnico.nome.ilike(f"%{s}%")
+                    )
+                )
                     
         return query.order_by(Chamado.data_atendimento.desc()).all()
 

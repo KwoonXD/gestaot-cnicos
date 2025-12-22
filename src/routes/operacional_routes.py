@@ -163,7 +163,8 @@ def chamados():
         'tecnico_id': request.args.get('tecnico', ''),
         'status': request.args.get('status', ''),
         'tipo': request.args.get('tipo', ''),
-        'pago': request.args.get('pago', '')
+        'pago': request.args.get('pago', ''),
+        'search': request.args.get('search', '')
     }
     
     chamados_list = ChamadoService.get_all(filters)
@@ -185,6 +186,7 @@ def chamados():
         status_filter=filters['status'],
         tipo_filter=filters['tipo'],
         pago_filter=filters['pago'],
+        search_filter=filters['search'],
         saved_views=saved_views
     )
 
@@ -309,3 +311,39 @@ def atualizar_status_chamado(id):
 def tecnico_resumo(id):
     tecnico = TecnicoService.get_by_id(id)
     return render_template('tecnico_resumo.html', tecnico=tecnico)
+
+@operacional_bp.route('/tecnicos/<int:id>/tags/criar', methods=['POST'])
+@login_required
+def criar_tag(id):
+    try:
+        from ..models import Tag, db
+        nome = request.form.get('nome')
+        cor = request.form.get('cor', '#3B82F6')
+        
+        if nome:
+            tag = Tag(nome=nome, cor=cor, tecnico_id=id)
+            db.session.add(tag)
+            db.session.commit()
+            flash('Tag adicionada com sucesso!', 'success')
+    except Exception as e:
+        flash(f'Erro ao adicionar tag: {str(e)}', 'danger')
+        
+    return redirect(url_for('operacional.tecnico_detalhes', id=id))
+
+@operacional_bp.route('/tags/<int:id>/deletar', methods=['POST'])
+@login_required
+def deletar_tag(id):
+    try:
+        from ..models import Tag, db
+        tag = Tag.query.get_or_404(id)
+        tecnico_id = tag.tecnico_id
+        db.session.delete(tag)
+        db.session.commit()
+        flash('Tag removida com sucesso!', 'success')
+        return redirect(url_for('operacional.tecnico_detalhes', id=tecnico_id))
+    except Exception as e:
+        flash(f'Erro ao remover tag: {str(e)}', 'danger')
+        # In case of error, we might not have tecnico_id if tag fetch failed, 
+        # but here we assume tag exists or 404.
+        return redirect(url_for('operacional.tecnicos'))
+
