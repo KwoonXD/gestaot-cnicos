@@ -1,0 +1,172 @@
+{% extends 'base.html' %}
+
+{% block title %}Fechamento em Lote - Gestão de Técnicos{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('financeiro.pagamentos') }}">Financeiro</a></li>
+            <li class="breadcrumb-item active">Fechamento em Lote</li>
+        </ol>
+    </nav>
+    <h1><i class="bi bi-collection"></i> Fechamento em Lote</h1>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="GET" class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label">Data Início</label>
+                <input type="date" name="inicio" class="form-control" value="{{ inicio }}" required>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Data Fim</label>
+                <input type="date" name="fim" class="form-control" value="{{ fim }}" required>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-funnel"></i> Filtrar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if inicio and fim %}
+<form method="POST" id="fechamentoForm">
+    <input type="hidden" name="periodo_inicio" value="{{ inicio }}">
+    <input type="hidden" name="periodo_fim" value="{{ fim }}">
+
+    <div class="card mb-5">
+        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Técnicos com Pendências no Período</h5>
+            <span class="badge bg-secondary">{{ tecnicos|length }} encontrados</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 50px;" class="text-center">
+                            <input class="form-check-input" type="checkbox" id="selectAll">
+                        </th>
+                        <th>Técnico</th>
+                        <th class="text-center">Qtd Chamados</th>
+                        <th class="text-end">Total Previsto</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for t in tecnicos %}
+                    <tr class="selectable-row" onclick="toggleRow(this)">
+                        <td class="text-center" onclick="event.stopPropagation()">
+                            <input class="form-check-input tecnico-check" type="checkbox" name="tecnicos_ids"
+                                value="{{ t.id }}" data-valor="{{ t.total_previsto }}">
+                        </td>
+                        <td>
+                            <div>
+                                <span class="badge bg-secondary me-1">{{ t.id_tecnico }}</span>
+                                <span class="fw-bold">{{ t.nome }}</span>
+                            </div>
+                        </td>
+                        <td class="text-center">{{ t.qtd_chamados }}</td>
+                        <td class="text-end fw-bold text-success">
+                            R$ {{ "%.2f"|format(t.total_previsto)|replace('.', ',') }}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="4" class="text-center py-4 text-muted">
+                            <i class="bi bi-info-circle display-6 d-block mb-3"></i>
+                            Nenhum técnico com valores pendentes encontrado neste período.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Sticky Footer Summary -->
+    <div class="fixed-bottom bg-white border-top shadow-lg p-3" style="z-index: 1030;">
+        <div class="container-fluid d-flex justify-content-between align-items-center">
+            <div>
+                <span class="fw-bold fs-5 me-3" id="summaryCount">0 Técnicos selecionados</span>
+                <span class="text-muted border-start ps-3 fs-5">Total: <span class="fw-bold text-success"
+                        id="summaryTotal">R$ 0,00</span></span>
+            </div>
+            <div>
+                <button type="submit" class="btn btn-success btn-lg" id="btnGerar" disabled>
+                    <i class="bi bi-check-circle"></i> Gerar Pagamentos
+                </button>
+            </div>
+        </div>
+    </div>
+</form>
+{% endif %}
+
+<div style="margin-bottom: 80px;"></div> <!-- Spacer for fixed footer -->
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const selectAll = document.getElementById('selectAll');
+        const checkboxes = document.querySelectorAll('.tecnico-check');
+        const summaryCount = document.getElementById('summaryCount');
+        const summaryTotal = document.getElementById('summaryTotal');
+        const btnGerar = document.getElementById('btnGerar');
+        const form = document.getElementById('fechamentoForm');
+
+        if (!checkboxes.length) return;
+
+        function updateSummary() {
+            let count = 0;
+            let total = 0;
+
+            checkboxes.forEach(cb => {
+                if (cb.checked) {
+                    count++;
+                    total += parseFloat(cb.getAttribute('data-valor'));
+                }
+            });
+
+            summaryCount.textContent = count + (count === 1 ? ' Técnico selecionado' : ' Técnicos selecionados');
+            summaryTotal.textContent = 'R$ ' + total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+            btnGerar.disabled = count === 0;
+        }
+
+        selectAll.addEventListener('change', function () {
+            checkboxes.forEach(cb => {
+                cb.checked = selectAll.checked;
+            });
+            updateSummary();
+        });
+
+        checkboxes.forEach(cb => {
+            cb.addEventListener('change', updateSummary);
+        });
+
+        // Row click to toggle checkbox
+        window.toggleRow = function (row) {
+            const cb = row.querySelector('.tecnico-check');
+            cb.checked = !cb.checked;
+            updateSummary();
+        };
+
+        form.addEventListener('submit', function () {
+            // Show spinner interaction
+            const icon = btnGerar.querySelector('i');
+            icon.classList.remove('bi-check-circle');
+            icon.classList.add('bi-hourglass-split');
+            icon.classList.add('fa-spin'); // if fa is used, but here using bootstrap icons, might need custom animation or 'spinner-border'
+
+            // Better:
+            btnGerar.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processando...';
+            btnGerar.disabled = true;
+        });
+
+        updateSummary();
+    });
+</script>
+{% endblock %}

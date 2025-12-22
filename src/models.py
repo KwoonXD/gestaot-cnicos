@@ -1,5 +1,5 @@
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
+from datetime import datetime, date
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
 
@@ -53,6 +53,10 @@ class Tecnico(db.Model):
     @property
     def localizacao(self):
         return f"{self.cidade}/{self.estado}"
+    
+    @property
+    def identificacao_completa(self):
+        return f"[{self.id_tecnico}] {self.nome} - {self.localizacao}"
     
     @property
     def total_atendimentos(self):
@@ -201,4 +205,45 @@ class Pagamento(db.Model):
             'data_pagamento': self.data_pagamento.isoformat() if self.data_pagamento else None,
             'observacoes': self.observacoes,
             'data_criacao': self.data_criacao.isoformat() if self.data_criacao else None
+        }
+
+
+class AuditLog(db.Model):
+    __tablename__ = 'audit_logs'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    model_name = db.Column(db.String(50), nullable=False)
+    object_id = db.Column(db.String(50), nullable=False)
+    action = db.Column(db.String(20), nullable=False)  # CREATE, UPDATE, DELETE
+    changes = db.Column(db.Text, nullable=True)  # JSON string of changes
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    user = db.relationship('User', backref='audi_logs')
+
+
+class Lancamento(db.Model):
+    __tablename__ = 'lancamentos'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    tecnico_id = db.Column(db.Integer, db.ForeignKey('tecnicos.id'), nullable=False)
+    pagamento_id = db.Column(db.Integer, db.ForeignKey('pagamentos.id'), nullable=True)
+    data = db.Column(db.Date, nullable=False, default=date.today)
+    tipo = db.Column(db.String(20), nullable=False)  # Bonus, Desconto
+    valor = db.Column(db.Numeric(10, 2), nullable=False)
+    descricao = db.Column(db.String(200), nullable=False)
+    data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    tecnico = db.relationship('Tecnico', backref='lancamentos')
+    pagamento = db.relationship('Pagamento', backref='lancamentos')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'tecnico_id': self.tecnico_id,
+            'pagamento_id': self.pagamento_id,
+            'data': self.data.isoformat() if self.data else None,
+            'tipo': self.tipo,
+            'valor': float(self.valor),
+            'descricao': self.descricao
         }

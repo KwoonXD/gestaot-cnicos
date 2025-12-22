@@ -70,7 +70,7 @@
             <div class="card-body">
                 <div class="detail-item">
                     <div class="label">ID do Técnico</div>
-                    <div class="value"><code>{{ tecnico.id_tecnico }}</code></div>
+                    <div class="value"><span class="badge-tecnico">{{ tecnico.id_tecnico }}</span></div>
                 </div>
                 <div class="detail-item">
                     <div class="label">Contato</div>
@@ -322,6 +322,64 @@
             </div>
         </div>
 
+        <!-- Adjustments Section -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-sliders"></i> Lançamentos e Ajustes</h5>
+                <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal"
+                    data-bs-target="#modalAjuste">
+                    <i class="bi bi-plus-circle"></i> Adicionar Ajuste
+                </button>
+            </div>
+            <div class="card-body">
+                {% if tecnico.lancamentos %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead>
+                            <tr>
+                                <th>Data</th>
+                                <th>Tipo</th>
+                                <th>Descrição</th>
+                                <th>Valor</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for lancamento in tecnico.lancamentos %}
+                            <tr>
+                                <td>{{ lancamento.data.strftime('%d/%m/%Y') }}</td>
+                                <td>
+                                    {% if lancamento.tipo == 'Bônus' %}
+                                    <span class="badge bg-success">Bônus</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Desconto</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ lancamento.descricao }}</td>
+                                <td class="{{ 'text-success' if lancamento.tipo == 'Bônus' else 'text-danger' }}">
+                                    {{ '+' if lancamento.tipo == 'Bônus' else '-' }} R$ {{
+                                    "%.2f"|format(lancamento.valor) }}
+                                </td>
+                                <td>
+                                    {% if lancamento.pagamento_id %}
+                                    <span class="badge bg-secondary" title="Incluído em pagamento">Pago</span>
+                                    {% else %}
+                                    <span class="badge bg-warning text-dark">Pendente</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-3">
+                    <small>Nenhum ajuste lançado.</small>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
         <div class="card">
             <div class="card-header">
                 <h5 class="mb-0"><i class="bi bi-cash-stack"></i> Histórico de Pagamentos</h5>
@@ -374,4 +432,74 @@
         </div>
     </div>
 </div>
+</div>
+
+<!-- Modal Ajuste -->
+<div class="modal fade" id="modalAjuste" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="{{ url_for('financeiro.novo_lancamento') }}" method="POST">
+                <input type="hidden" name="tecnico_id" value="{{ tecnico.id }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">Adicionar Ajuste</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Tipo de Lançamento</label>
+                        <select name="tipo" class="form-select" id="selectTipoAjuste" required>
+                            <option value="Bônus">Bônus (Crédito)</option>
+                            <option value="Desconto">Desconto (Débito)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Valor (R$)</label>
+                        <input type="number" step="0.01" name="valor" class="form-control" placeholder="0.00" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Data</label>
+                        <input type="date" name="data" class="form-control" id="inputDataAjuste" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Descrição</label>
+                        <textarea name="descricao" class="form-control" rows="2" required
+                            placeholder="Motivo do ajuste..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success" id="btnSalvarAjuste">Salvar Bônus</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // Set default date to today
+        const dateInput = document.getElementById('inputDataAjuste');
+        if (dateInput) {
+            dateInput.valueAsDate = new Date();
+        }
+
+        // Toggle UI based on Type
+        const selectTipo = document.getElementById('selectTipoAjuste');
+        const btnSalvar = document.getElementById('btnSalvarAjuste');
+
+        if (selectTipo && btnSalvar) {
+            selectTipo.addEventListener('change', function () {
+                if (this.value === 'Desconto') {
+                    btnSalvar.classList.remove('btn-success');
+                    btnSalvar.classList.add('btn-danger');
+                    btnSalvar.textContent = 'Salvar Desconto';
+                } else {
+                    btnSalvar.classList.remove('btn-danger');
+                    btnSalvar.classList.add('btn-success');
+                    btnSalvar.textContent = 'Salvar Bônus';
+                }
+            });
+        }
+    });
+</script>
 {% endblock %}

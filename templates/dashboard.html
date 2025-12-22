@@ -125,6 +125,23 @@
     </div>
 </div>
 
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-12">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-graph-up"></i> Evolução de Custos e Volume (6 Meses)</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container" style="height: 300px;">
+                    <canvas id="evolucaoChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="row g-4">
     <div class="col-12">
         <div class="card">
@@ -189,5 +206,97 @@
             }
         }
     });
+
+    // Fetch Evolution Data
+    fetch('/api/dashboard/evolucao')
+        .then(response => response.json())
+        .then(data => {
+            const ctxEvolucao = document.getElementById('evolucaoChart').getContext('2d');
+            new Chart(ctxEvolucao, {
+                type: 'bar',
+                data: {
+                    labels: data.labels,
+                    datasets: [
+                        {
+                            label: 'Volume (Qtd)',
+                            data: data.volume,
+                            type: 'bar',
+                            yAxisID: 'yVolume',
+                            backgroundColor: 'rgba(59, 130, 246, 0.5)',
+                            borderColor: '#3B82F6',
+                            borderWidth: 1,
+                            order: 1
+                        },
+                        {
+                            label: 'Custos (R$)',
+                            data: data.custos,
+                            type: 'line',
+                            yAxisID: 'yCustos',
+                            borderColor: '#10B981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.3,
+                            order: 0
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    scales: {
+                        yVolume: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            grid: {
+                                drawOnChartArea: false
+                            },
+                            title: {
+                                display: true,
+                                text: 'Quantidade'
+                            }
+                        },
+                        yCustos: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: 'Valor (R$)'
+                            },
+                            ticks: {
+                                callback: function (value) {
+                                    return 'R$ ' + value;
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function (context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.dataset.yAxisID === 'yCustos') {
+                                        label += new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(context.raw);
+                                    } else {
+                                        label += context.raw;
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        })
+        .catch(err => console.error('Erro ao carregar gráfico de evolução:', err));
 </script>
 {% endblock %}

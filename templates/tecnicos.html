@@ -65,7 +65,7 @@
                 <tbody>
                     {% for tecnico in tecnicos %}
                     <tr>
-                        <td>{{ tecnico.id_tecnico }}</td>
+                        <td><span class="badge-tecnico">{{ tecnico.id_tecnico }}</span></td>
                         <td>
                             <a href="{{ url_for('operacional.tecnico_detalhes', id=tecnico.id) }}"
                                 class="text-decoration-none fw-bold">

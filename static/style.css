@@ -215,6 +215,16 @@ h6 {
     color: #475569 !important;
 }
 
+.badge-tecnico {
+    font-family: 'Courier New', Courier, monospace;
+    background-color: var(--primary-color);
+    color: white;
+    padding: 0.25em 0.6em;
+    border-radius: 0.375rem;
+    font-size: 0.9em;
+    font-weight: 700;
+}
+
 /* Dashboard Metrics Colors */
 .metric-card.blue .metric-icon {
     color: var(--primary-color);

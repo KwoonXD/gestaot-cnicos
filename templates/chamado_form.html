@@ -22,15 +22,24 @@
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label class="form-label">Técnico *</label>
-                            <select name="tecnico_id" class="form-select" required>
-                                <option value="">Selecione...</option>
+
+                            <!-- Hidden input for backend -->
+                            <input type="hidden" name="tecnico_id" id="tecnico_id_hidden"
+                                value="{{ chamado.tecnico_id if chamado else '' }}" required>
+
+                            <!-- Visible search input -->
+                            <input class="form-control" list="datalistOptions" id="tecnicoSearch"
+                                placeholder="Digite nome ou código (ex: T-042)..."
+                                value="{{ chamado.tecnico.identificacao_completa if chamado and chamado.tecnico else '' }}"
+                                required>
+
+                            <datalist id="datalistOptions">
                                 {% for t in tecnicos %}
-                                <option value="{{ t.id }}" {% if chamado and chamado.tecnico_id==t.id %}selected{% endif
-                                    %}>
-                                    {{ t.nome }} ({{ t.cidade }}/{{ t.estado }})
-                                </option>
+                                <!-- Value contains the text shown/completed, data-id holds the real ID -->
+                                <option data-id="{{ t.id }}" value="{{ t.identificacao_completa }}"></option>
                                 {% endfor %}
-                            </select>
+                            </datalist>
+                            <div class="invalid-feedback">Selecione um técnico válido da lista.</div>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Código do Chamado</label>
@@ -365,6 +374,41 @@
         if (tipoSelect.value === 'Americanas') {
             divAtivos.style.display = 'block';
         }
+
+        // Logic for Datalist Search (Hybrid Search)
+        const techSearch = document.getElementById('tecnicoSearch');
+        const techHidden = document.getElementById('tecnico_id_hidden');
+        const techDatalist = document.getElementById('datalistOptions');
+
+        techSearch.addEventListener('input', function () {
+            const val = this.value;
+            const options = techDatalist.childNodes;
+            let found = false;
+
+            for (let i = 0; i < options.length; i++) {
+                if (options[i].value === val) {
+                    techHidden.value = options[i].getAttribute('data-id');
+                    found = true;
+                    this.setCustomValidity(""); // Valid
+                    break;
+                }
+            }
+
+            if (!found) {
+                techHidden.value = "";
+                // Optional: setCustomValidity to force selection from list if desired
+                // this.setCustomValidity("Selecione um técnico da lista");
+            }
+        });
+
+        // Ensure hidden input has value on submit check
+        techSearch.addEventListener('change', function () {
+            if (!techHidden.value) {
+                this.setCustomValidity("Selecione um técnico válido da lista");
+            } else {
+                this.setCustomValidity("");
+            }
+        });
     });
 </script>
 {% endblock %}

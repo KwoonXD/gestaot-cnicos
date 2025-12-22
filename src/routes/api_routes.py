@@ -69,3 +69,9 @@ def api_dashboard():
         'pagamentos_pendentes': financeiro_stats,
         'chamados_por_status': chamado_stats['chamados_por_status']
     })
+
+@api_bp.route('/dashboard/evolucao')
+@login_required
+def api_dashboard_evolucao():
+    stats = ChamadoService.get_evolution_stats()
+    return jsonify(stats)

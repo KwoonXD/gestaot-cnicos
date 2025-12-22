@@ -1,7 +1,10 @@
 import os
 import secrets
+import logging
+from logging.handlers import RotatingFileHandler
 from flask import Flask
 from flask_login import LoginManager
+from flask_migrate import Migrate
 from dotenv import load_dotenv
 from .models import db, User
 
@@ -29,6 +32,7 @@ def create_app():
 
     # Init Extensions
     db.init_app(app)
+    migrate = Migrate(app, db) # Task 1: Flask-Migrate
     
     login_manager = LoginManager()
     login_manager.init_app(app)
@@ -36,12 +40,24 @@ def create_app():
     login_manager.login_message = 'Por favor, faça login para acessar esta página.'
     login_manager.login_message_category = 'warning'
 
+    # Task 2: Logging
+    if not os.path.exists('logs'):
+        os.mkdir('logs')
+    
+    file_handler = RotatingFileHandler('logs/sistema.log', maxBytes=10240000, backupCount=5)
+    file_handler.setFormatter(logging.Formatter(
+        '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'
+    ))
+    file_handler.setLevel(logging.INFO)
+    app.logger.addHandler(file_handler)
+    app.logger.setLevel(logging.INFO)
+    app.logger.info('Gestão de Técnicos startup')
+
     @login_manager.user_loader
     def load_user(user_id):
         return User.query.get(int(user_id))
 
-    with app.app_context():
-        db.create_all()
+    # Removed db.create_all() as per Task 1
 
     # Register Blueprints
     from .routes.auth_routes import auth_bp
