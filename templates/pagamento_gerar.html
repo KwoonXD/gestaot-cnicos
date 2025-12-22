@@ -1,7 +1,5 @@
 {% extends 'base.html' %}
-
 {% block title %}Gerar Pagamento - Gestão de Técnicos{% endblock %}
-
 {% block content %}
 <div class="page-header">
     <nav aria-label="breadcrumb">
@@ -12,157 +10,204 @@
     </nav>
     <h1><i class="bi bi-cash-coin"></i> Gerar Pagamento</h1>
 </div>
-
 {% if error %}
 <div class="alert alert-danger alert-dismissible fade show" role="alert">
     <i class="bi bi-exclamation-triangle"></i> {{ error }}
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
 </div>
 {% endif %}
-
 <div class="row">
-    <div class="col-lg-8">
+    <div class="col-12">
         <div class="card">
-            <div class="card-body">
+            <div class="card-header bg-white">
+                <h5 class="mb-0 text-secondary"><i class="bi bi-list-check"></i> Técnicos com Pendências</h5>
+            </div>
+            <div class="card-body p-0">
                 {% if tecnicos %}
-                <form method="POST">
-                    <div class="row g-3">
-                        <div class="col-12">
-                            <label class="form-label">Técnico *</label>
-                            <select name="tecnico_id" class="form-select" required id="tecnicoSelect">
-                                <option value="">Selecione um técnico...</option>
-                                {% for t in tecnicos %}
-                                <option value="{{ t.id }}" 
-                                        data-valor="{{ t.valor_por_atendimento }}"
-                                        data-pendente="{{ t.total_atendimentos_nao_pagos }}"
-                                        data-total="{{ t.total_a_pagar }}">
-                                    {{ t.nome }} - {{ t.total_atendimentos_nao_pagos }} chamados pendentes (R$ {{ "%.2f"|format(t.total_a_pagar) }})
-                                </option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Período Início *</label>
-                            <input type="date" name="periodo_inicio" class="form-control" required id="periodoInicio">
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Período Fim *</label>
-                            <input type="date" name="periodo_fim" class="form-control" required id="periodoFim">
-                        </div>
-                    </div>
-                    
-                    <div class="card bg-light mt-4" id="previewCard" style="display: none;">
-                        <div class="card-body">
-                            <h5 class="card-title"><i class="bi bi-receipt"></i> Resumo do Pagamento</h5>
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <p class="mb-1"><strong>Técnico:</strong> <span id="previewTecnico">-</span></p>
-                                    <p class="mb-1"><strong>Período:</strong> <span id="previewPeriodo">-</span></p>
-                                </div>
-                                <div class="col-md-6">
-                                    <p class="mb-1"><strong>Chamados Pendentes:</strong> <span id="previewChamados">-</span></p>
-                                    <p class="mb-1"><strong>Valor Máximo:</strong> <span id="previewValor" class="text-success fw-bold">-</span></p>
-                                </div>
-                            </div>
-                            <p class="text-muted small mb-0 mt-2">
-                                <i class="bi bi-info-circle"></i> O valor final será calculado com base nos chamados concluídos no período selecionado.
-                            </p>
-                        </div>
-                    </div>
-                    
-                    <hr class="my-4">
-                    
-                    <div class="d-flex justify-content-between">
-                        <a href="{{ url_for('pagamentos') }}" class="btn btn-outline-secondary">
-                            <i class="bi bi-arrow-left"></i> Cancelar
-                        </a>
-                        <button type="submit" class="btn btn-success">
-                            <i class="bi bi-check"></i> Gerar Pagamento
-                        </button>
-                    </div>
-                </form>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="bg-light">
+                            <tr>
+                                <th class="ps-4">Técnico</th>
+                                <th>Localização</th>
+                                <th class="text-center">Qtd. Chamados</th>
+                                <th class="text-end">Valor Pendente</th>
+                                <th class="text-end pe-4">Ação</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for t in tecnicos %}
+                            <tr>
+                                <td class="ps-4">
+                                    <div class="fw-bold">{{ t.nome }}</div>
+                                    <small class="text-muted">{{ t.id_tecnico }}</small>
+                                </td>
+                                <td>{{ t.localizacao }}</td>
+                                <td class="text-center"><span class="badge bg-secondary">{{
+                                        t.total_atendimentos_nao_pagos }}</span></td>
+                                <td class="text-end text-danger fw-bold">R$ {{ "%.2f"|format(t.total_a_pagar) }}</td>
+                                <td class="text-end pe-4">
+                                    <button class="btn btn-primary btn-sm btn-pagar" data-id="{{ t.id }}"
+                                        data-bs-toggle="modal" data-bs-target="#paymentModal">
+                                        <i class="bi bi-wallet2"></i> Visualizar e Pagar
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
                 {% else %}
-                <div class="empty-state">
-                    <i class="bi bi-check-circle"></i>
-                    <h5>Todos os pagamentos em dia!</h5>
-                    <p>Não há técnicos com chamados concluídos pendentes de pagamento.</p>
-                    <a href="{{ url_for('pagamentos') }}" class="btn btn-outline-primary">
-                        <i class="bi bi-arrow-left"></i> Voltar para Pagamentos
-                    </a>
+                <div class="text-center py-5">
+                    <i class="bi bi-check-circle text-success fs-1"></i>
+                    <h5 class="mt-3">Tudo em dia!</h5>
+                    <p class="text-muted">Não há técnicos com valores pendentes de pagamento.</p>
                 </div>
                 {% endif %}
             </div>
         </div>
     </div>
-    <div class="col-lg-4">
-        <div class="card bg-light">
-            <div class="card-body">
-                <h5><i class="bi bi-info-circle"></i> Como Funciona</h5>
-                <ol class="text-muted small mb-0">
-                    <li class="mb-2">Selecione o técnico que receberá o pagamento</li>
-                    <li class="mb-2">Defina o período de referência</li>
-                    <li class="mb-2">O sistema buscará todos os chamados <strong>Concluídos</strong> e <strong>Não Pagos</strong> no período</li>
-                    <li class="mb-2">O valor será calculado automaticamente</li>
-                    <li>Os chamados serão marcados como pagos</li>
-                </ol>
+</div>
+<!-- Payment Modal -->
+<div class="modal fade" id="paymentModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-cash-stack"></i> Detalhes do Pagamento</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-        </div>
-        
-        {% if tecnicos %}
-        <div class="card mt-3">
-            <div class="card-header">
-                <h6 class="mb-0"><i class="bi bi-people"></i> Técnicos com Pendências</h6>
-            </div>
-            <div class="card-body p-0">
-                <ul class="list-group list-group-flush">
-                    {% for t in tecnicos %}
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
+            <div class="modal-body">
+                <!-- Loading State -->
+                <div id="modalLoading" class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Carregando...</span>
+                    </div>
+                </div>
+
+                <!-- Content State -->
+                <div id="modalContent" style="display: none;">
+                    <!-- Technician Info & Bank -->
+                    <div class="alert alert-light border d-flex justify-content-between align-items-center mb-4">
                         <div>
-                            <strong>{{ t.nome }}</strong>
-                            <small class="d-block text-muted">{{ t.total_atendimentos_nao_pagos }} chamados</small>
+                            <h5 id="modalTechName" class="mb-1 fw-bold">Nome do Técnico</h5>
+                            <div class="text-muted small">
+                                <i class="bi bi-bank"></i> <span id="modalTechBank">Chave Pix: -</span>
+                            </div>
                         </div>
-                        <span class="badge bg-warning text-dark">R$ {{ "%.2f"|format(t.total_a_pagar) }}</span>
-                    </li>
-                    {% endfor %}
-                </ul>
+                        <div class="text-end">
+                            <small class="text-muted d-block uppercase">Valor Total a Pagar</small>
+                            <span id="modalTotalValue" class="fs-4 fw-bold text-success">R$ 0,00</span>
+                        </div>
+                    </div>
+                    <!-- Services List -->
+                    <h6 class="mb-3 text-secondary">Chamados Inclusos</h6>
+                    <div class="table-responsive mb-3" style="max-height: 300px; overflow-y: auto;">
+                        <table class="table table-sm table-bordered">
+                            <thead>
+                                <tr>
+                                    <th>Data</th>
+                                    <th>Cód. Chamado</th>
+                                    <th>Tipo</th>
+                                    <th>Endereço</th>
+                                    <th class="text-end">Valor</th>
+                                </tr>
+                            </thead>
+                            <tbody id="modalServicesList">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <!-- Form for Submission -->
+                    <form method="POST" id="paymentForm">
+                        <input type="hidden" name="tecnico_id" id="formTecnicoId">
+                        <input type="hidden" name="periodo_inicio" id="formPeriodoInicio">
+                        <input type="hidden" name="periodo_fim" id="formPeriodoFim">
+
+                        <div class="d-flex justify-content-end gap-2">
+                            <button type="button" class="btn btn-outline-secondary"
+                                data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="btn btn-success">
+                                <i class="bi bi-check-lg"></i> Confirmar Pagamento
+                            </button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
-        {% endif %}
     </div>
 </div>
 {% endblock %}
-
 {% block scripts %}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const tecnicoSelect = document.getElementById('tecnicoSelect');
-    const periodoInicio = document.getElementById('periodoInicio');
-    const periodoFim = document.getElementById('periodoFim');
-    const previewCard = document.getElementById('previewCard');
-    
-    if (!tecnicoSelect || !periodoInicio || !periodoFim || !previewCard) {
-        return;
-    }
-    
-    function updatePreview() {
-        const option = tecnicoSelect.options[tecnicoSelect.selectedIndex];
-        
-        if (tecnicoSelect.value && periodoInicio.value && periodoFim.value) {
-            previewCard.style.display = 'block';
-            document.getElementById('previewTecnico').textContent = option.text.split(' - ')[0];
-            document.getElementById('previewPeriodo').textContent = 
-                new Date(periodoInicio.value).toLocaleDateString('pt-BR') + ' - ' + 
-                new Date(periodoFim.value).toLocaleDateString('pt-BR');
-            document.getElementById('previewChamados').textContent = option.dataset.pendente;
-            document.getElementById('previewValor').textContent = 'R$ ' + parseFloat(option.dataset.total).toFixed(2);
-        } else {
-            previewCard.style.display = 'none';
-        }
-    }
-    
-    tecnicoSelect.addEventListener('change', updatePreview);
-    periodoInicio.addEventListener('change', updatePreview);
-    periodoFim.addEventListener('change', updatePreview);
-});
+    document.addEventListener('DOMContentLoaded', function () {
+        const modal = document.getElementById('paymentModal');
+        const modalLoading = document.getElementById('modalLoading');
+        const modalContent = document.getElementById('modalContent');
+
+        modal.addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+            const tecnicoId = button.getAttribute('data-id');
+
+            // Reset state
+            modalLoading.style.display = 'block';
+            modalContent.style.display = 'none';
+
+            // Fetch Details
+            fetch(`/api/tecnicos/${tecnicoId}/pendencias`)
+                .then(response => response.json())
+                .then(data => {
+                    // Populate Header
+                    document.getElementById('modalTechName').textContent = data.tecnico.nome;
+                    const bankInfo = data.tecnico.chave_pagamento
+                        ? `${data.tecnico.forma_pagamento || 'Pix'}: ${data.tecnico.chave_pagamento}`
+                        : 'Dados bancários não cadastrados';
+                    document.getElementById('modalTechBank').textContent = bankInfo;
+                    document.getElementById('modalTotalValue').textContent = `R$ ${data.total_pendente.toFixed(2)}`;
+
+                    // Populate Table
+                    const tbody = document.getElementById('modalServicesList');
+                    tbody.innerHTML = '';
+
+                    let dates = [];
+
+                    data.chamados.forEach(c => {
+                        // Parse date DD/MM/YYYY to create Date object for sorting min/max
+                        const [day, month, year] = c.data.split('/');
+                        dates.push(new Date(`${year}-${month}-${day}`));
+
+                        const row = `
+                            <tr>
+                                <td>${c.data}</td>
+                                <td>${c.codigo}</td>
+                                <td>${c.tipo}</td>
+                                <td class="small text-muted text-truncate" style="max-width: 200px;">${c.endereco}</td>
+                                <td class="text-end">R$ ${c.valor.toFixed(2)}</td>
+                            </tr>
+                        `;
+                        tbody.innerHTML += row;
+                    });
+
+                    // Set Hidden Form Values
+                    document.getElementById('formTecnicoId').value = data.tecnico.id;
+
+                    if (dates.length > 0) {
+                        // Find min and max dates
+                        const minDate = new Date(Math.min.apply(null, dates));
+                        const maxDate = new Date(Math.max.apply(null, dates));
+
+                        document.getElementById('formPeriodoInicio').value = minDate.toISOString().split('T')[0];
+                        document.getElementById('formPeriodoFim').value = maxDate.toISOString().split('T')[0];
+                    }
+
+                    // Show Content
+                    modalLoading.style.display = 'none';
+                    modalContent.style.display = 'block';
+                })
+                .catch(err => {
+                    console.error('Error fetching details:', err);
+                    modal.querySelector('.modal-body').innerHTML = '<div class="alert alert-danger">Erro ao carregar dados. Tente novamente.</div>';
+                });
+        });
+    });
 </script>
 {% endblock %}

@@ -10,7 +10,8 @@
             <li class="breadcrumb-item active">{{ 'Editar' if chamado else 'Novo' }} Chamado</li>
         </ol>
     </nav>
-    <h1><i class="bi bi-clipboard-{{ 'check' if chamado else 'plus' }}"></i> {{ 'Editar' if chamado else 'Novo' }} Chamado</h1>
+    <h1><i class="bi bi-clipboard-{{ 'check' if chamado else 'plus' }}"></i> {{ 'Editar' if chamado else 'Novo' }}
+        Chamado</h1>
 </div>
 
 <div class="row">
@@ -24,7 +25,8 @@
                             <select name="tecnico_id" class="form-select" required>
                                 <option value="">Selecione...</option>
                                 {% for t in tecnicos %}
-                                <option value="{{ t.id }}" {% if chamado and chamado.tecnico_id == t.id %}selected{% endif %}>
+                                <option value="{{ t.id }}" {% if chamado and chamado.tecnico_id==t.id %}selected{% endif
+                                    %}>
                                     {{ t.nome }} ({{ t.cidade }}/{{ t.estado }})
                                 </option>
                                 {% endfor %}
@@ -33,19 +35,21 @@
                         <div class="col-md-6">
                             <label class="form-label">Código do Chamado</label>
                             <input type="text" name="codigo_chamado" class="form-control"
-                                   value="{{ chamado.codigo_chamado if chamado else '' }}" placeholder="Código de referência">
+                                value="{{ chamado.codigo_chamado if chamado else '' }}"
+                                placeholder="Código de referência">
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Data do Atendimento *</label>
                             <input type="date" name="data_atendimento" class="form-control" required
-                                   value="{{ chamado.data_atendimento.strftime('%Y-%m-%d') if chamado and chamado.data_atendimento else '' }}">
+                                value="{{ chamado.data_atendimento.strftime('%Y-%m-%d') if chamado and chamado.data_atendimento else '' }}">
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Tipo de Serviço *</label>
                             <select name="tipo_servico" class="form-select" required>
                                 <option value="">Selecione...</option>
                                 {% for tipo in tipos_servico %}
-                                <option value="{{ tipo }}" {% if chamado and chamado.tipo_servico == tipo %}selected{% endif %}>{{ tipo }}</option>
+                                <option value="{{ tipo }}" {% if chamado and chamado.tipo_servico==tipo %}selected{%
+                                    endif %}>{{ tipo }}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -53,23 +57,135 @@
                             <label class="form-label">Status *</label>
                             <select name="status_chamado" class="form-select" required>
                                 {% for s in status_options %}
-                                <option value="{{ s }}" {% if chamado and chamado.status_chamado == s %}selected{% elif not chamado and s == 'Pendente' %}selected{% endif %}>{{ s }}</option>
+                                <option value="{{ s }}" {% if chamado and chamado.status_chamado==s %}selected{% elif
+                                    not chamado and s=='Pendente' %}selected{% endif %}>{{ s }}</option>
                                 {% endfor %}
                             </select>
+                        </div>
+
+
+                        <style>
+                            /* Tag Input Styles */
+                            .tag-container {
+                                border: 1px solid #ced4da;
+                                border-radius: 0.375rem;
+                                padding: 0.375rem 0.75rem;
+                                display: flex;
+                                flex-wrap: wrap;
+                                gap: 0.5rem;
+                                min-height: 38px;
+                                background-color: #fff;
+                                cursor: text;
+                                transition: border-color .15s ease-in-out, box-shadow .15s ease-in-out;
+                            }
+
+                            .tag-container:focus-within {
+                                border-color: #86b7fe;
+                                outline: 0;
+                                box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+                            }
+
+                            .tag {
+                                background-color: #e9ecef;
+                                color: #000;
+                                border-radius: 3px;
+                                padding: 2px 8px;
+                                font-size: 0.9rem;
+                                font-weight: 500;
+                                display: flex;
+                                align-items: center;
+                                gap: 0.5rem;
+                                user-select: none;
+                            }
+
+                            .tag .remove-tag {
+                                cursor: pointer;
+                                color: #6c757d;
+                                font-size: 1rem;
+                                line-height: 0.8;
+                                display: flex;
+                                align-items: center;
+                            }
+
+                            .tag .remove-tag:hover {
+                                color: #dc3545;
+                            }
+
+                            .tag-input {
+                                border: none;
+                                outline: none;
+                                flex-grow: 1;
+                                min-width: 100px;
+                                background: transparent;
+                                color: #212529;
+                                padding: 0;
+                                margin: 0;
+                            }
+                        </style>
+                        <!-- Pricing Section -->
+                        <div class="col-12 mt-4">
+                            <div class="card bg-light border-0">
+                                <div class="card-body">
+                                    <h6 class="card-title mb-3"><i class="bi bi-cash-coin"></i> Cálculo de Valor</h6>
+                                    <div class="row g-3">
+                                        <div class="col-md-3">
+                                            <label class="form-label">Horário Início</label>
+                                            <input type="time" name="horario_inicio" id="horario_inicio"
+                                                class="form-control"
+                                                value="{{ chamado.horario_inicio.strftime('%H:%M') if chamado and chamado.horario_inicio else '' }}">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label">Horário Saída</label>
+                                            <input type="time" name="horario_saida" id="horario_saida"
+                                                class="form-control"
+                                                value="{{ chamado.horario_saida.strftime('%H:%M') if chamado and chamado.horario_saida else '' }}">
+                                        </div>
+                                        <div class="col-md-6" id="div-ativos-adicionais" style="display: none;">
+                                            <label class="form-label">Códigos FSA (Ativos Adicionais)</label>
+
+                                            <div class="tag-container" id="fsa-tag-container">
+                                                <input type="text" class="tag-input" id="fsa-tag-input"
+                                                    placeholder="Digite e dê Enter...">
+                                            </div>
+                                            <input type="hidden" name="fsa_codes" id="fsa_codes"
+                                                value="{{ chamado.fsa_codes if chamado and chamado.fsa_codes else '' }}">
+
+                                            <div class="form-text">Digite o código e pressione Enter ou Espaço para
+                                                adicionar. R$ 20,00 cada.</div>
+                                        </div>
+
+                                        <div class="col-12">
+                                            <div class="alert alert-info py-2 mb-0 small">
+                                                <i class="bi bi-info-circle"></i>
+                                                Regras: 2 horas inclusas. Excedente: R$ 20,00/hora. Ativos adicionais:
+                                                R$ 20,00 cada.
+                                            </div>
+                                        </div>
+
+                                        <div class="col-md-4 offset-md-8">
+                                            <label class="form-label fw-bold">Valor Final (R$) *</label>
+                                            <input type="number" step="0.01" name="valor" id="valor_final"
+                                                class="form-control fw-bold" required
+                                                value="{{ '%.2f'|format(chamado.valor) if chamado else '0.00' }}">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Endereço</label>
                             <input type="text" name="endereco" class="form-control"
-                                   value="{{ chamado.endereco if chamado else '' }}" placeholder="Endereço do atendimento">
+                                value="{{ chamado.endereco if chamado else '' }}" placeholder="Endereço do atendimento">
                         </div>
                         <div class="col-12">
                             <label class="form-label">Observações</label>
-                            <textarea name="observacoes" class="form-control" rows="3" placeholder="Observações do chamado...">{{ chamado.observacoes if chamado else '' }}</textarea>
+                            <textarea name="observacoes" class="form-control" rows="3"
+                                placeholder="Observações do chamado...">{{ chamado.observacoes if chamado else '' }}</textarea>
                         </div>
                     </div>
-                    
+
                     <hr class="my-4">
-                    
+
                     <div class="d-flex justify-content-between">
                         <a href="{{ url_for('chamados') }}" class="btn btn-outline-secondary">
                             <i class="bi bi-arrow-left"></i> Cancelar
@@ -102,10 +218,153 @@
                     <li><strong>Esteira:</strong> Serviços de esteira</li>
                 </ul>
                 <p class="text-muted small mb-0">
-                    <strong>Valor:</strong> O valor do chamado é automaticamente baseado no valor por atendimento do técnico selecionado.
+                    <strong>Valor:</strong> O valor do chamado é automaticamente baseado no valor por atendimento do
+                    técnico selecionado e adicionais.
                 </p>
             </div>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const tipoSelect = document.querySelector('select[name="tipo_servico"]');
+        const inputInicio = document.getElementById('horario_inicio');
+        const inputSaida = document.getElementById('horario_saida');
+
+        // FSA Tag Elements
+        const fsaContainer = document.getElementById('fsa-tag-container');
+        const fsaInput = document.getElementById('fsa-tag-input');
+        const fsaHidden = document.getElementById('fsa_codes');
+
+        const divAtivos = document.getElementById('div-ativos-adicionais');
+        const inputValor = document.getElementById('valor_final');
+
+        // Base prices
+        const PRICES = {
+            'Americanas': 120,
+            'Telmex': 130,
+            'Telmex Urgente': 150,
+            'Escolas': 140,
+            'Esteira': 140
+        };
+
+        // Initialize Tags
+        let fsaTags = [];
+        if (fsaHidden.value) {
+            fsaTags = fsaHidden.value.split(',').map(s => s.trim()).filter(s => s);
+        }
+
+        function renderTags() {
+            // Remove all tags but keep input
+            const tags = fsaContainer.querySelectorAll('.tag');
+            tags.forEach(t => t.remove());
+
+            // Re-add tags before simple input
+            fsaTags.forEach((tagText, index) => {
+                const tagEl = document.createElement('div');
+                tagEl.classList.add('tag');
+                tagEl.innerHTML = `
+                    ${tagText}
+                    <span class="remove-tag" data-index="${index}">&times;</span>
+                `;
+                fsaContainer.insertBefore(tagEl, fsaInput);
+            });
+
+            // Update hidden input
+            fsaHidden.value = fsaTags.join(', ');
+
+            // Recalc price whenever tags change
+            calculatePrice();
+        }
+
+        function addTag(text) {
+            // Clean text: remove commas, maybe uppercase
+            let cleanText = text.replace(/,/g, '').trim().toUpperCase();
+            if (cleanText && !fsaTags.includes(cleanText)) {
+                fsaTags.push(cleanText);
+                renderTags();
+            }
+            fsaInput.value = '';
+        }
+
+        function removeTag(index) {
+            fsaTags.splice(index, 1);
+            renderTags();
+        }
+
+        // Render initial state
+        renderTags();
+
+        // Event Listeners for Tags
+        fsaContainer.addEventListener('click', (e) => {
+            if (e.target.classList.contains('remove-tag')) {
+                const index = e.target.getAttribute('data-index');
+                removeTag(parseInt(index));
+            } else {
+                fsaInput.focus();
+            }
+        });
+
+        fsaInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ',' || e.key === ' ') {
+                e.preventDefault();
+                addTag(fsaInput.value);
+            } else if (e.key === 'Backspace' && !fsaInput.value && fsaTags.length > 0) {
+                removeTag(fsaTags.length - 1);
+            }
+        });
+
+        fsaInput.addEventListener('blur', () => {
+            if (fsaInput.value.trim()) {
+                addTag(fsaInput.value);
+            }
+        });
+
+        function calculatePrice() {
+            const tipo = tipoSelect.value;
+            let total = 0;
+
+            if (PRICES[tipo]) {
+                total = PRICES[tipo];
+            }
+
+            // Time Calculation
+            if (inputInicio.value && inputSaida.value) {
+                const start = new Date(`1970-01-01T${inputInicio.value}Z`);
+                const end = new Date(`1970-01-01T${inputSaida.value}Z`);
+
+                let diffMs = end - start;
+                if (diffMs > 0) {
+                    const diffHours = diffMs / (1000 * 60 * 60);
+                    if (diffHours > 2) {
+                        const extraHours = Math.max(0, Math.ceil(diffHours - 2));
+                        total += (extraHours * 20);
+                    }
+                }
+            }
+
+            // FSA / Assets Calculation (only for Americanas)
+            if (tipo === 'Americanas') {
+                divAtivos.style.display = 'block';
+                // Count tags
+                total += (fsaTags.length * 20);
+            } else {
+                divAtivos.style.display = 'none';
+            }
+
+            inputValor.value = total.toFixed(2);
+        }
+
+        tipoSelect.addEventListener('change', calculatePrice);
+        inputInicio.addEventListener('change', calculatePrice);
+        inputSaida.addEventListener('change', calculatePrice);
+
+        if (tipoSelect.value === 'Americanas') {
+            divAtivos.style.display = 'block';
+        }
+    });
+</script>
 {% endblock %}

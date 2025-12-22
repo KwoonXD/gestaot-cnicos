@@ -1,5 +1,7 @@
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, date
+from flask_login import UserMixin
+from werkzeug.security import generate_password_hash, check_password_hash
 
 db = SQLAlchemy()
 
@@ -10,6 +12,18 @@ ESTADOS_BRASIL = [
 ]
 
 FORMAS_PAGAMENTO = ['PIX', 'Transferência Bancária', 'Boleto', 'Dinheiro']
+
+class User(UserMixin, db.Model):
+    __tablename__ = 'users'
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(100), unique=True, nullable=False)
+    password_hash = db.Column(db.String(200), nullable=False)
+    
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+        
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
 
 class Tecnico(db.Model):
     __tablename__ = 'tecnicos'
@@ -53,7 +67,9 @@ class Tecnico(db.Model):
     
     @property
     def total_a_pagar(self):
-        return float(self.total_atendimentos_nao_pagos * self.valor_por_atendimento)
+        # Calculates total from pending completed calls
+        chamados_pendentes = self.chamados.filter_by(status_chamado='Concluído', pago=False).all()
+        return sum(float(c.valor) for c in chamados_pendentes)
     
     @property
     def status_pagamento(self):
@@ -93,20 +109,20 @@ class Chamado(db.Model):
     data_atendimento = db.Column(db.Date, nullable=False)
     tipo_servico = db.Column(db.String(50), nullable=False)
     status_chamado = db.Column(db.String(20), default='Pendente')
+    valor = db.Column(db.Numeric(10, 2), nullable=False, default=0.00)
     pago = db.Column(db.Boolean, default=False)
     pagamento_id = db.Column(db.Integer, db.ForeignKey('pagamentos.id'), nullable=True)
     endereco = db.Column(db.Text, nullable=True)
     observacoes = db.Column(db.Text, nullable=True)
+    horario_inicio = db.Column(db.Time, nullable=True)
+    horario_saida = db.Column(db.Time, nullable=True)
+    fsa_codes = db.Column(db.Text, nullable=True) # Stores codes separated by commas
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
     
     @property
     def id_chamado(self):
         year = self.data_atendimento.year if self.data_atendimento else datetime.now().year
         return f"CHAM-{year}-{str(self.id).zfill(4)}"
-    
-    @property
-    def valor(self):
-        return float(self.tecnico.valor_por_atendimento) if self.tecnico else 0
     
     @property
     def localizacao(self):
@@ -128,7 +144,7 @@ class Chamado(db.Model):
             'endereco': self.endereco,
             'observacoes': self.observacoes,
             'localizacao': self.localizacao,
-            'valor': self.valor,
+            'valor': float(self.valor) if self.valor else 0.0,
             'data_criacao': self.data_criacao.isoformat() if self.data_criacao else None
         }
 
@@ -161,7 +177,9 @@ class Pagamento(db.Model):
     
     @property
     def valor_total(self):
-        return float(self.numero_chamados * self.valor_por_atendimento)
+        # Calculate sum of values from included calls
+        chamados = self.chamados_incluidos.all()
+        return sum(float(c.valor) for c in chamados)
     
     def to_dict(self):
         return {

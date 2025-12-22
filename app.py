@@ -1,8 +1,12 @@
 import os
 import secrets
-from flask import Flask, render_template, request, jsonify, redirect, url_for
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash
 from datetime import datetime, date
-from models import db, Tecnico, Chamado, Pagamento, ESTADOS_BRASIL, FORMAS_PAGAMENTO
+from flask_login import LoginManager, login_user, login_required, logout_user, current_user
+from models import db, Tecnico, Chamado, Pagamento, User, ESTADOS_BRASIL, FORMAS_PAGAMENTO
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = Flask(__name__)
 
@@ -27,13 +31,49 @@ db.init_app(app)
 with app.app_context():
     db.create_all()
 
+# Login Configuration
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+login_manager.login_message = 'Por favor, faça login para acessar esta página.'
+login_manager.login_message_category = 'warning'
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+        
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        user = User.query.filter_by(username=username).first()
+        
+        if user and user.check_password(password):
+            login_user(user)
+            return redirect(url_for('dashboard'))
+        else:
+            flash('Usuário ou senha inválidos.', 'danger')
+            
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login'))
+
 STATUS_TECNICO = ['Ativo', 'Inativo']
-TIPOS_SERVICO = ['Americanas', 'Escolas', 'Telmex', 'Esteira']
+TIPOS_SERVICO = ['Americanas', 'Escolas', 'Telmex', 'Telmex Urgente', 'Esteira']
 STATUS_CHAMADO = ['Pendente', 'Em Andamento', 'Concluído', 'Cancelado']
 STATUS_PAGAMENTO = ['Pendente', 'Pago', 'Cancelado']
 
 
 @app.route('/')
+@login_required
 def dashboard():
     tecnicos = Tecnico.query.all()
     chamados = Chamado.query.all()
@@ -68,6 +108,7 @@ def dashboard():
 
 
 @app.route('/tecnicos')
+@login_required
 def tecnicos():
     estado_filter = request.args.get('estado', '')
     cidade_filter = request.args.get('cidade', '')
@@ -111,6 +152,7 @@ def tecnicos():
 
 
 @app.route('/tecnicos/novo', methods=['GET', 'POST'])
+@login_required
 def novo_tecnico():
     if request.method == 'POST':
         tecnico_principal_id = request.form.get('tecnico_principal_id')
@@ -147,6 +189,7 @@ def novo_tecnico():
 
 
 @app.route('/tecnicos/<int:id>')
+@login_required
 def tecnico_detalhes(id):
     tecnico = Tecnico.query.get_or_404(id)
     chamados = tecnico.chamados.order_by(Chamado.data_atendimento.desc()).all()
@@ -162,6 +205,7 @@ def tecnico_detalhes(id):
 
 
 @app.route('/tecnicos/<int:id>/editar', methods=['GET', 'POST'])
+@login_required
 def editar_tecnico(id):
     tecnico = Tecnico.query.get_or_404(id)
     
@@ -200,6 +244,7 @@ def editar_tecnico(id):
 
 
 @app.route('/chamados')
+@login_required
 def chamados():
     tecnico_filter = request.args.get('tecnico', '')
     status_filter = request.args.get('status', '')
@@ -235,14 +280,23 @@ def chamados():
 
 
 @app.route('/chamados/novo', methods=['GET', 'POST'])
+@login_required
 def novo_chamado():
+    tecnicos = Tecnico.query.filter_by(status='Ativo').order_by(Tecnico.nome).all()
     if request.method == 'POST':
+        horario_inicio = request.form.get('horario_inicio')
+        horario_saida = request.form.get('horario_saida')
+        
         chamado = Chamado(
             tecnico_id=int(request.form['tecnico_id']),
             codigo_chamado=request.form.get('codigo_chamado', ''),
             data_atendimento=datetime.strptime(request.form['data_atendimento'], '%Y-%m-%d').date(),
+            horario_inicio=datetime.strptime(horario_inicio, '%H:%M').time() if horario_inicio else None,
+            horario_saida=datetime.strptime(horario_saida, '%H:%M').time() if horario_saida else None,
+            fsa_codes=request.form.get('fsa_codes', ''),
             tipo_servico=request.form['tipo_servico'],
             status_chamado=request.form.get('status_chamado', 'Pendente'),
+            valor=float(request.form.get('valor', 0.0)),
             endereco=request.form.get('endereco', ''),
             observacoes=request.form.get('observacoes', '')
         )
@@ -250,7 +304,6 @@ def novo_chamado():
         db.session.commit()
         return redirect(url_for('chamados'))
     
-    tecnicos = Tecnico.query.filter_by(status='Ativo').order_by(Tecnico.nome).all()
     return render_template('chamado_form.html',
         chamado=None,
         tecnicos=tecnicos,
@@ -260,21 +313,29 @@ def novo_chamado():
 
 
 @app.route('/chamados/<int:id>/editar', methods=['GET', 'POST'])
+@login_required
 def editar_chamado(id):
     chamado = Chamado.query.get_or_404(id)
     
+    tecnicos = Tecnico.query.filter_by(status='Ativo').order_by(Tecnico.nome).all()
     if request.method == 'POST':
+        horario_inicio = request.form.get('horario_inicio')
+        horario_saida = request.form.get('horario_saida')
+
         chamado.tecnico_id = int(request.form['tecnico_id'])
         chamado.codigo_chamado = request.form.get('codigo_chamado', '')
         chamado.data_atendimento = datetime.strptime(request.form['data_atendimento'], '%Y-%m-%d').date()
+        chamado.horario_inicio = datetime.strptime(horario_inicio, '%H:%M').time() if horario_inicio else None
+        chamado.horario_saida = datetime.strptime(horario_saida, '%H:%M').time() if horario_saida else None
+        chamado.fsa_codes = request.form.get('fsa_codes', '')
         chamado.tipo_servico = request.form['tipo_servico']
         chamado.status_chamado = request.form.get('status_chamado', 'Pendente')
+        chamado.valor = float(request.form.get('valor', 0.0))
         chamado.endereco = request.form.get('endereco', '')
         chamado.observacoes = request.form.get('observacoes', '')
         db.session.commit()
         return redirect(url_for('chamados'))
     
-    tecnicos = Tecnico.query.filter_by(status='Ativo').order_by(Tecnico.nome).all()
     return render_template('chamado_form.html',
         chamado=chamado,
         tecnicos=tecnicos,
@@ -284,6 +345,7 @@ def editar_chamado(id):
 
 
 @app.route('/chamados/<int:id>/status', methods=['POST'])
+@login_required
 def atualizar_status_chamado(id):
     chamado = Chamado.query.get_or_404(id)
     novo_status = request.form.get('status')
@@ -294,6 +356,7 @@ def atualizar_status_chamado(id):
 
 
 @app.route('/pagamentos')
+@login_required
 def pagamentos():
     tecnico_filter = request.args.get('tecnico', '')
     status_filter = request.args.get('status', '')
@@ -321,6 +384,7 @@ def pagamentos():
 
 
 @app.route('/pagamentos/gerar', methods=['GET', 'POST'])
+@login_required
 def gerar_pagamento():
     if request.method == 'POST':
         tecnico_id = int(request.form['tecnico_id'])
@@ -348,7 +412,8 @@ def gerar_pagamento():
             periodo_inicio=periodo_inicio,
             periodo_fim=periodo_fim,
             valor_por_atendimento=tecnico.valor_por_atendimento,
-            status_pagamento='Pendente'
+            status_pagamento='Pago',
+            data_pagamento=date.today()
         )
         db.session.add(pagamento)
         db.session.flush()
@@ -365,6 +430,7 @@ def gerar_pagamento():
 
 
 @app.route('/pagamentos/<int:id>')
+@login_required
 def pagamento_detalhes(id):
     pagamento = Pagamento.query.get_or_404(id)
     chamados = pagamento.chamados_incluidos.all()
@@ -375,6 +441,7 @@ def pagamento_detalhes(id):
 
 
 @app.route('/pagamentos/<int:id>/pagar', methods=['POST'])
+@login_required
 def marcar_como_pago(id):
     pagamento = Pagamento.query.get_or_404(id)
     pagamento.status_pagamento = 'Pago'
@@ -385,24 +452,28 @@ def marcar_como_pago(id):
 
 
 @app.route('/api/tecnicos')
+@login_required
 def api_tecnicos():
     tecnicos = Tecnico.query.all()
     return jsonify([t.to_dict() for t in tecnicos])
 
 
 @app.route('/api/chamados')
+@login_required
 def api_chamados():
     chamados = Chamado.query.all()
     return jsonify([c.to_dict() for c in chamados])
 
 
 @app.route('/api/pagamentos')
+@login_required
 def api_pagamentos():
     pagamentos = Pagamento.query.all()
     return jsonify([p.to_dict() for p in pagamentos])
 
 
 @app.route('/api/dashboard')
+@login_required
 def api_dashboard():
     tecnicos = Tecnico.query.all()
     
@@ -428,6 +499,38 @@ def api_dashboard():
         'valor_total_pendente': valor_total_pendente,
         'pagamentos_pendentes': pagamentos_pendentes,
         'chamados_por_status': chamados_por_status
+    })
+
+
+@app.route('/api/tecnicos/<int:id>/pendencias')
+@login_required
+def api_tecnico_pendencias(id):
+    tecnico = Tecnico.query.get_or_404(id)
+    
+    chamados_pendentes = tecnico.chamados.filter_by(
+        status_chamado='Concluído',
+        pago=False
+    ).order_by(Chamado.data_atendimento).all()
+    
+    return jsonify({
+        'tecnico': {
+            'id': tecnico.id,
+            'nome': tecnico.nome,
+            'chave_pagamento': tecnico.chave_pagamento,
+            'forma_pagamento': tecnico.forma_pagamento,
+            'valor_por_atendimento': float(tecnico.valor_por_atendimento)
+        },
+        'chamados': [
+            {
+                'id': c.id,
+                'codigo': c.codigo_chamado or 'N/A',
+                'data': c.data_atendimento.strftime('%d/%m/%Y'),
+                'tipo': c.tipo_servico,
+                'endereco': c.endereco or '-',
+                'valor': float(c.valor)
+            } for c in chamados_pendentes
+        ],
+        'total_pendente': sum(float(c.valor) for c in chamados_pendentes)
     })
 
 
