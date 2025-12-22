@@ -3,8 +3,10 @@ from datetime import datetime
 
 class TecnicoService:
     @staticmethod
-    def get_all(filters=None):
+    def get_all(filters=None, page=1, per_page=20):
         query = Tecnico.query
+        
+        # Filtros SQL
         if filters:
             if filters.get('estado'):
                 query = query.filter_by(estado=filters['estado'])
@@ -15,16 +17,11 @@ class TecnicoService:
             if filters.get('search'):
                 query = query.filter(Tecnico.nome.ilike(f"%{filters['search']}%"))
         
-        tecnicos = query.order_by(Tecnico.nome).all()
+        # Ordenação
+        query = query.order_by(Tecnico.nome)
         
-        # Post-query filtering for properties not in DB directly can be expensive but needed for 'pagamento pending'
-        if filters and filters.get('pagamento'):
-            if filters['pagamento'] == 'Pendente':
-                tecnicos = [t for t in tecnicos if t.total_a_pagar > 0]
-            elif filters['pagamento'] == 'Pago':
-                tecnicos = [t for t in tecnicos if t.total_a_pagar == 0]
-                
-        return tecnicos
+        # Paginação via Banco de Dados
+        return query.paginate(page=page, per_page=per_page, error_out=False)
 
     @staticmethod
     def get_by_id(id):

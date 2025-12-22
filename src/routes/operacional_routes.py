@@ -35,6 +35,7 @@ def dashboard():
 @operacional_bp.route('/tecnicos')
 @login_required
 def tecnicos():
+    page = request.args.get('page', 1, type=int) # Captura a página
     filters = {
         'estado': request.args.get('estado', ''),
         'cidade': request.args.get('cidade', ''),
@@ -43,13 +44,18 @@ def tecnicos():
         'search': request.args.get('search', '')
     }
     
-    tecnicos_list = TecnicoService.get_all(filters)
+    # Chama o serviço passando a página
+    pagination = TecnicoService.get_all(filters, page=page, per_page=20)
+    tecnicos_list = pagination.items # Extrai a lista da página atual
     
     # Get states for dropdown
-    estados_usados = sorted(list(set([t.estado for t in tecnicos_list if t.estado])))
+    # Nota: Idealmente isso viria de cache ou query distinct, mas ok para agora
+    all_states = [t.estado for t in tecnicos_list if t.estado] 
+    estados_usados = sorted(list(set(all_states)))
     
     return render_template('tecnicos.html',
         tecnicos=tecnicos_list,
+        pagination=pagination,  # Passamos o objeto de paginação
         estados=ESTADOS_BRASIL,
         estados_usados=estados_usados,
         formas_pagamento=FORMAS_PAGAMENTO,
@@ -159,6 +165,7 @@ def editar_tecnico(id):
 @operacional_bp.route('/chamados')
 @login_required
 def chamados():
+    page = request.args.get('page', 1, type=int)
     filters = {
         'tecnico_id': request.args.get('tecnico', ''),
         'status': request.args.get('status', ''),
@@ -167,11 +174,11 @@ def chamados():
         'search': request.args.get('search', '')
     }
     
-    chamados_list = ChamadoService.get_all(filters)
-    tecnicos_list = TecnicoService.get_all({'status': 'Ativo'})
+    pagination = ChamadoService.get_all(filters, page=page, per_page=50) # 50 por página
+    chamados_list = pagination.items
     
-    chamados_list = ChamadoService.get_all(filters)
-    tecnicos_list = TecnicoService.get_all({'status': 'Ativo'})
+    # Para o filtro de técnicos no select (apenas ativos para não pesar)
+    tecnicos_list = TecnicoService.get_all({'status': 'Ativo'}, page=1, per_page=1000).items
     
     # Task 2: Saved Views
     from ..models import SavedView
@@ -179,6 +186,7 @@ def chamados():
     
     return render_template('chamados.html',
         chamados=chamados_list,
+        pagination=pagination, # Passamos o objeto de paginação
         tecnicos=tecnicos_list,
         tipos_servico=TIPOS_SERVICO,
         status_options=STATUS_CHAMADO,

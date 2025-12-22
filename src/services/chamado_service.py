@@ -4,8 +4,9 @@ from .audit_service import AuditService
 
 class ChamadoService:
     @staticmethod
-    def get_all(filters=None):
+    def get_all(filters=None, page=1, per_page=20):
         query = Chamado.query.join(Tecnico)
+        
         if filters:
             if filters.get('tecnico_id'):
                 query = query.filter(Chamado.tecnico_id == int(filters['tecnico_id']))
@@ -20,19 +21,18 @@ class ChamadoService:
                     query = query.filter(Chamado.pago == False)
             if filters.get('search'):
                 s = filters['search']
-                # Search by code, technical name or id (partial)
                 from sqlalchemy import or_
-                # We need to construct the ID logically if possible or just string match
-                # Since id_chamado is a property, we can't query it directly in SQL easily without hybrid_property expression
-                # So we search codigo_chamado and Tecnico name
                 query = query.filter(
                     or_(
                         Chamado.codigo_chamado.ilike(f"%{s}%"),
                         Tecnico.nome.ilike(f"%{s}%")
                     )
                 )
-                    
-        return query.order_by(Chamado.data_atendimento.desc()).all()
+        
+        # Retorna o objeto Pagination, não a lista (.all)
+        return query.order_by(Chamado.data_atendimento.desc()).paginate(
+            page=page, per_page=per_page, error_out=False
+        )
 
     @staticmethod
     def get_by_id(id):
