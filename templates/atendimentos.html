@@ -1,0 +1,335 @@
+{% extends "base.html" %}
+
+{% block title %}Atendimentos Pendentes | WT{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="h4 fw-bold">
+                <i class="bi bi-inbox me-2"></i>Caixa de Entrada
+                {% if batches %}
+                <span class="badge bg-warning text-dark ms-2">{{ batches|length }}</span>
+                {% endif %}
+            </h2>
+            <p class="text-muted small mb-0">Valide os atendimentos antes de liberar para o Financeiro.</p>
+        </div>
+        <a href="{{ url_for('operacional.criar_chamado') }}" class="btn btn-primary">
+            <i class="bi bi-plus-lg me-1"></i> Novo Atendimento
+        </a>
+    </div>
+
+    {% if batches %}
+    <!-- Cards Grid -->
+    <div class="row g-4">
+        {% for batch in batches %}
+        <div class="col-md-6 col-lg-4">
+            <div class="card shadow-sm h-100 border-start border-4 border-warning">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div>
+                            <h5 class="card-title mb-1 fw-bold">{{ batch.tecnico_nome }}</h5>
+                            <small class="text-muted">
+                                <i class="bi bi-calendar3 me-1"></i>{{ batch.data }}
+                            </small>
+                        </div>
+                        <span class="badge bg-primary rounded-pill">{{ batch.qnt_chamados }} FSA</span>
+                    </div>
+
+                    <div class="d-flex flex-column gap-1 mb-3">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="bi bi-building text-muted"></i>
+                            <span class="small">{{ batch.cliente }}</span>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="bi bi-geo-alt text-muted"></i>
+                            <span class="small">{{ batch.cidade }}</span>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center border-top pt-3">
+                        <span class="fw-bold text-success">R$ {{ "%.2f"|format(batch.valor_total) }}</span>
+                        <button type="button" class="btn btn-outline-primary btn-sm"
+                            onclick='openValidationModal({{ batch | tojson | safe }})'>
+                            <i class="bi bi-eye me-1"></i> Analisar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <!-- Empty State -->
+    <div class="card text-center py-5 shadow-sm">
+        <div class="card-body">
+            <div class="display-1 mb-3">🎉</div>
+            <h4 class="text-success">Tudo limpo!</h4>
+            <p class="text-muted mb-4">Nenhum atendimento pendente de validação.</p>
+            <a href="{{ url_for('operacional.chamados') }}" class="btn btn-outline-primary">
+                <i class="bi bi-list-check me-1"></i> Ver Todos os Chamados
+            </a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal de Validação -->
+<div class="modal fade" id="modalValidacao" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title" id="modalTitle">
+                    <i class="bi bi-clipboard-check me-2"></i>Validação de Atendimento
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Link Mágico Jira -->
+                <div class="card bg-success bg-opacity-10 border-success mb-4">
+                    <div class="card-body text-center py-4">
+                        <p class="mb-2 text-success fw-bold">
+                            <i class="bi bi-link-45deg me-1"></i>Link para Validação do Cliente
+                        </p>
+                        <button type="button" class="btn btn-success btn-lg px-5" id="copyJiraBtn"
+                            onclick="copyJiraLink()">
+                            <i class="bi bi-clipboard me-2"></i> Copiar Link Jira
+                        </button>
+                        <p class="small text-muted mt-2 mb-0" id="jiraCodesPreview">-</p>
+                    </div>
+                </div>
+
+                <!-- Resumo do Atendimento -->
+                <div class="mb-3">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="bi bi-person-badge text-primary"></i>
+                                <div>
+                                    <small class="text-muted d-block">Técnico</small>
+                                    <strong id="modalTecnico">-</strong>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="bi bi-calendar3 text-primary"></i>
+                                <div>
+                                    <small class="text-muted d-block">Data</small>
+                                    <strong id="modalData">-</strong>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="bi bi-geo-alt text-primary"></i>
+                                <div>
+                                    <small class="text-muted d-block">Local</small>
+                                    <strong id="modalCidade">-</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tabela de FSAs -->
+                <h6 class="fw-bold mb-2"><i class="bi bi-list-check me-1"></i>Chamados do Lote</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="bg-light">
+                            <tr>
+                                <th>Código FSA</th>
+                                <th>Tipo</th>
+                                <th>Peça</th>
+                                <th class="text-end">Valor</th>
+                            </tr>
+                        </thead>
+                        <tbody id="modalTableBody">
+                            <!-- Populated by JS -->
+                        </tbody>
+                        <tfoot class="bg-light">
+                            <tr>
+                                <td colspan="3" class="text-end fw-bold">Total:</td>
+                                <td class="text-end fw-bold text-success" id="modalTotal">R$ 0,00</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Footer com Formulário -->
+            <div class="modal-footer flex-column align-items-stretch">
+                <form method="POST" action="{{ url_for('operacional.validar_atendimento') }}" id="validationForm">
+                    <input type="hidden" name="batch_id" id="formBatchId">
+                    <input type="hidden" name="motivo" id="formMotivo">
+                    <input type="hidden" name="acao" id="formAcao">
+
+                    <!-- Seção de Rejeição (Escondida por padrão) -->
+                    <div id="rejectSection" class="mb-3" style="display: none;">
+                        <div class="alert alert-danger mb-2">
+                            <i class="bi bi-exclamation-triangle me-1"></i>
+                            <strong>Atenção:</strong> Os chamados serão <strong>excluídos permanentemente</strong>.
+                        </div>
+                        <textarea class="form-control" id="motivoInput" rows="3"
+                            placeholder="Descreva o motivo da rejeição (mínimo 10 caracteres)..."></textarea>
+                    </div>
+
+                    <div class="d-flex gap-2 justify-content-end">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                            Fechar
+                        </button>
+                        <button type="button" class="btn btn-outline-danger" id="rejectBtn"
+                            onclick="toggleRejectMode()">
+                            <i class="bi bi-x-lg me-1"></i> Rejeitar Lote
+                        </button>
+                        <button type="button" class="btn btn-success" id="approveBtn" onclick="submitApproval()">
+                            <i class="bi bi-check-lg me-1"></i> Aprovar Lote
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast para Feedback -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+    <div id="copyToast" class="toast align-items-center text-bg-success border-0" role="alert">
+        <div class="d-flex">
+            <div class="toast-body">
+                <i class="bi bi-check-lg me-1"></i> Link copiado!
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentBatch = null;
+    let rejectMode = false;
+    const validationModal = new bootstrap.Modal(document.getElementById('modalValidacao'));
+    const copyToast = new bootstrap.Toast(document.getElementById('copyToast'));
+
+    function openValidationModal(batchData) {
+        currentBatch = batchData;
+        rejectMode = false;
+
+        // Preencher dados do modal
+        document.getElementById('modalTitle').innerHTML =
+            `<i class="bi bi-clipboard-check me-2"></i>${batchData.tecnico_nome} - ${batchData.data}`;
+        document.getElementById('modalTecnico').textContent = batchData.tecnico_nome;
+        document.getElementById('modalData').textContent = batchData.data;
+        document.getElementById('modalCidade').textContent = batchData.cidade;
+        document.getElementById('formBatchId').value = batchData.batch_id;
+
+        // Preview dos códigos
+        document.getElementById('jiraCodesPreview').textContent = batchData.jira_codes || 'Sem códigos';
+
+        // Preencher tabela
+        const tbody = document.getElementById('modalTableBody');
+        tbody.innerHTML = '';
+
+        let total = 0;
+        batchData.chamados_lista.forEach(item => {
+            total += item.valor;
+            const row = document.createElement('tr');
+            row.innerHTML = `
+            <td>
+                <a href="https://delfia.atlassian.net/browse/${item.codigo}" target="_blank" 
+                    class="text-decoration-none fw-bold">
+                    ${item.codigo} <i class="bi bi-box-arrow-up-right" style="font-size: 0.7rem;"></i>
+                </a>
+            </td>
+            <td>${item.tipo}</td>
+            <td>${item.peca}</td>
+            <td class="text-end">R$ ${item.valor.toFixed(2)}</td>
+        `;
+            tbody.appendChild(row);
+        });
+
+        document.getElementById('modalTotal').textContent = `R$ ${total.toFixed(2)}`;
+
+        // Reset UI
+        document.getElementById('rejectSection').style.display = 'none';
+        document.getElementById('motivoInput').value = '';
+        document.getElementById('rejectBtn').textContent = ' Rejeitar Lote';
+        document.getElementById('rejectBtn').innerHTML = '<i class="bi bi-x-lg me-1"></i> Rejeitar Lote';
+        document.getElementById('approveBtn').style.display = '';
+
+        validationModal.show();
+    }
+
+    function copyJiraLink() {
+        if (!currentBatch || !currentBatch.jira_codes) {
+            alert('Nenhum código FSA disponível para gerar o link.');
+            return;
+        }
+
+        const codes = currentBatch.jira_codes.split(',').map(c => c.trim()).filter(c => c);
+        const jql = `key in (${codes.join(', ')})`;
+        const url = `https://delfia.atlassian.net/issues/?jql=${encodeURIComponent(jql)}`;
+
+        navigator.clipboard.writeText(url).then(() => {
+            copyToast.show();
+            // Visual feedback
+            const btn = document.getElementById('copyJiraBtn');
+            btn.innerHTML = '<i class="bi bi-check-lg me-2"></i> Copiado!';
+            setTimeout(() => {
+                btn.innerHTML = '<i class="bi bi-clipboard me-2"></i> Copiar Link Jira';
+            }, 2000);
+        }).catch(err => {
+            // Fallback
+            const textarea = document.createElement('textarea');
+            textarea.value = url;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            copyToast.show();
+        });
+    }
+
+    function toggleRejectMode() {
+        rejectMode = !rejectMode;
+        const section = document.getElementById('rejectSection');
+        const btn = document.getElementById('rejectBtn');
+        const approveBtn = document.getElementById('approveBtn');
+
+        if (rejectMode) {
+            section.style.display = 'block';
+            btn.classList.remove('btn-outline-danger');
+            btn.classList.add('btn-danger');
+            btn.innerHTML = '<i class="bi bi-trash me-1"></i> Confirmar Exclusão';
+            btn.onclick = submitRejection;
+            approveBtn.style.display = 'none';
+            document.getElementById('motivoInput').focus();
+        } else {
+            section.style.display = 'none';
+            btn.classList.remove('btn-danger');
+            btn.classList.add('btn-outline-danger');
+            btn.innerHTML = '<i class="bi bi-x-lg me-1"></i> Rejeitar Lote';
+            btn.onclick = toggleRejectMode;
+            approveBtn.style.display = '';
+        }
+    }
+
+    function submitApproval() {
+        document.getElementById('formAcao').value = 'aprovar';
+        document.getElementById('validationForm').submit();
+    }
+
+    function submitRejection() {
+        const motivo = document.getElementById('motivoInput').value.trim();
+        if (motivo.length < 10) {
+            alert('O motivo deve ter no mínimo 10 caracteres.');
+            document.getElementById('motivoInput').focus();
+            return;
+        }
+
+        document.getElementById('formMotivo').value = motivo;
+        document.getElementById('formAcao').value = 'rejeitar';
+        document.getElementById('validationForm').submit();
+    }
+</script>
+{% endblock %}

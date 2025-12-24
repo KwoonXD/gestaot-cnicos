@@ -106,14 +106,12 @@
             <table class="table table-hover">
                 <thead>
                     <tr>
-                        <th>ID</th>
                         <th>Código</th>
                         <th>Técnico</th>
                         <th>Data</th>
-                        <th>Localização</th>
-                        <th>Tipo</th>
-                        <th>Status</th>
-                        <th>Valor</th>
+                        <th>Cidade</th>
+                        <th>Resolução</th>
+                        <th>Financeiro</th>
                         <th>Pago?</th>
                         <th>Ações</th>
                     </tr>
@@ -121,8 +119,22 @@
                 <tbody>
                     {% for chamado in chamados %}
                     <tr>
-                        <td><code>{{ chamado.id_chamado }}</code></td>
-                        <td>{{ chamado.codigo_chamado or '-' }}</td>
+                        <td>
+                            {% if chamado.codigo_chamado %}
+                            <a href="https://delfia.atlassian.net/browse/{{ chamado.codigo_chamado }}" target="_blank"
+                                class="fw-bold text-decoration-none text-primary">
+                                {{ chamado.codigo_chamado }} <i class="bi bi-box-arrow-up-right"
+                                    style="font-size: 0.7rem;"></i>
+                            </a>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                            {% if chamado.is_adicional %}
+                            <span class="badge bg-info text-dark ms-1" style="font-size: 0.65rem;">Carona</span>
+                            {% else %}
+                            <span class="badge bg-primary ms-1" style="font-size: 0.65rem;">Principal</span>
+                            {% endif %}
+                        </td>
                         <td>
                             <a href="{{ url_for('operacional.tecnico_detalhes', id=chamado.tecnico.id) }}"
                                 class="text-decoration-none">
@@ -130,14 +142,28 @@
                             </a>
                         </td>
                         <td>{{ chamado.data_atendimento.strftime('%d/%m/%Y') }}</td>
-                        <td>{{ chamado.localizacao }}</td>
-                        <td>{{ chamado.tipo_servico }}</td>
+                        <td>{{ chamado.cidade or chamado.loja or chamado.localizacao or '-' }}</td>
                         <td>
-                            <span class="badge badge-status badge-{{ chamado.status_chamado|lower|replace(' ', '-') }}">
-                                {{ chamado.status_chamado }}
-                            </span>
+                            <span class="badge bg-light text-dark border">{{ chamado.tipo_resolucao or 'N/A' }}</span>
                         </td>
-                        <td class="font-numeric">R$ {{ "%.2f"|format(chamado.valor) }}</td>
+                        <td>
+                            <div class="d-flex flex-column gap-1">
+                                {% set receita = chamado.valor_receita_total if chamado.valor_receita_total else
+                                (chamado.valor_receita_servico|default(0) + chamado.valor_receita_peca|default(0)) %}
+                                {% if receita > 0 %}
+                                <span
+                                    class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">
+                                    Rec: R$ {{ "%.2f"|format(receita) }}
+                                </span>
+                                {% endif %}
+                                {% if chamado.custo_peca and chamado.custo_peca > 0 %}
+                                <span
+                                    class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25">
+                                    Peça: R$ {{ "%.2f"|format(chamado.custo_peca) }}
+                                </span>
+                                {% endif %}
+                            </div>
+                        </td>
                         <td>
                             {% if chamado.pago %}
                             <span class="badge bg-success"><i class="bi bi-check"></i></span>
@@ -161,8 +187,43 @@
                                     aria-label="Marcar Chamado {{ chamado.codigo_chamado or chamado.id }} como Concluído">
                                     <i class="bi bi-check-lg" aria-hidden="true"></i>
                                 </button>
-                            </form>
-                            {% endif %}
+                                {% endif %}
+                                {% if current_user.role == 'Admin' and not chamado.pago and not chamado.pagamento_id %}
+                                <button type="button" class="btn btn-sm btn-outline-danger btn-action" title="Excluir"
+                                    data-bs-toggle="modal" data-bs-target="#deleteModal{{ chamado.id }}">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                                <!-- Delete Modal -->
+                                <div class="modal fade" id="deleteModal{{ chamado.id }}" tabindex="-1"
+                                    aria-hidden="true">
+                                    <div class="modal-dialog">
+                                        <div class="modal-content">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title text-danger">Excluir Chamado</h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal"
+                                                    aria-label="Close"></button>
+                                            </div>
+                                            <div class="modal-body text-start">
+                                                <p>Tem certeza que deseja apagar o chamado
+                                                    <strong>{{ chamado.codigo_chamado or chamado.id }}</strong>?
+                                                </p>
+                                                <p class="text-muted small">Esta ação não pode ser desfeita e ficará
+                                                    registrada na auditoria.</p>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary"
+                                                    data-bs-dismiss="modal">Cancelar</button>
+                                                <form
+                                                    action="{{ url_for('operacional.deletar_chamado', id=chamado.id) }}"
+                                                    method="POST">
+                                                    <button type="submit" class="btn btn-danger">Excluir
+                                                        Permanentemente</button>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endif %}
                         </td>
                     </tr>
                     {% endfor %}

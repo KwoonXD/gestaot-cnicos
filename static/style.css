@@ -312,3 +312,187 @@ main {
         padding: 0.75rem;
     }
 }
+
+/* --- LAYOUT SIDEBAR (2025 STYLE) --- */
+
+#wrapper {
+    overflow-x: hidden;
+    min-height: 100vh;
+}
+
+/* Sidebar Estática */
+#sidebar-wrapper {
+    min-width: 260px;
+    max-width: 260px;
+    background-color: var(--bs-card-bg);
+    /* Respeita Dark Mode */
+    display: flex;
+    flex-direction: column;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    z-index: 1000;
+    transition: margin 0.25s ease-out;
+}
+
+/* Header da Sidebar */
+.sidebar-heading {
+    padding: 1.5rem;
+    font-size: 1.2rem;
+    background-color: transparent;
+}
+
+/* Links do Menu (Estilo Abas/Pills) */
+.list-group-item {
+    border: none !important;
+    padding: 0.8rem 1.2rem;
+    margin-bottom: 4px;
+    border-radius: 8px !important;
+    /* Arredondado moderno */
+    color: var(--slate-500);
+    font-weight: 500;
+    background-color: transparent;
+    transition: all 0.2s;
+}
+
+.list-group-item:hover {
+    background-color: var(--slate-100);
+    color: var(--slate-800);
+}
+
+/* Link Ativo (Destaque) */
+.list-group-item.active {
+    background-color: var(--brand-primary);
+    /* Usa cor da marca */
+    color: #fff;
+    box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3);
+    /* Sombra suave */
+}
+
+.list-group-item.active i {
+    color: #fff;
+}
+
+/* Ajustes Dark Mode Sidebar */
+[data-bs-theme='dark'] .list-group-item:hover {
+    background-color: var(--slate-700);
+    color: var(--slate-50);
+}
+
+[data-bs-theme='dark'] .sidebar-heading a {
+    color: var(--slate-50);
+}
+
+/* Avatar Circle */
+.avatar-circle {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 0.9rem;
+}
+
+/* Mobile Toggle Behavior */
+@media (max-width: 768px) {
+    #sidebar-wrapper {
+        margin-left: -260px;
+        /* Esconde por padrão no mobile */
+        position: fixed;
+        height: 100%;
+    }
+
+    #wrapper.toggled #sidebar-wrapper {
+        margin-left: 0;
+        /* Mostra ao clicar no toggle */
+        box-shadow: 0 0 50px rgba(0, 0, 0, 0.5);
+    }
+
+    #page-content-wrapper {
+        width: 100%;
+    }
+
+    /* --- PREMIUM ACTION BUTTONS --- */
+    .btn-icon {
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        /* Square with soft corners */
+        transition: all 0.2s ease;
+        border: 1px solid transparent;
+    }
+
+    .btn-icon i {
+        font-size: 1rem;
+    }
+
+    /* Helper for spacing buttons nicely */
+    .actions-cell {
+        display: flex;
+        gap: 0.5rem;
+        /* Space between buttons */
+        justify-content: flex-end;
+    }
+
+    /* Ghost Variants - Only background on hover */
+    .btn-ghost-primary {
+        color: var(--brand-primary);
+        background: transparent;
+    }
+
+    .btn-ghost-primary:hover {
+        background: rgba(59, 130, 246, 0.1);
+        color: var(--brand-primary);
+        border-color: rgba(59, 130, 246, 0.2);
+    }
+
+    .btn-ghost-secondary {
+        color: var(--slate-500);
+        background: transparent;
+    }
+
+    .btn-ghost-secondary:hover {
+        background: var(--slate-100);
+        color: var(--slate-700);
+    }
+
+    [data-bs-theme="dark"] .btn-ghost-secondary:hover {
+        background: var(--slate-700);
+        color: var(--slate-300);
+    }
+
+    .btn-ghost-success {
+        color: #16a34a;
+        background: transparent;
+    }
+
+    .btn-ghost-success:hover {
+        background: rgba(34, 197, 94, 0.1);
+        color: #15803d;
+    }
+
+    .btn-ghost-danger {
+        color: #dc2626;
+        background: transparent;
+    }
+
+    .btn-ghost-danger:hover {
+        background: rgba(220, 38, 38, 0.1);
+        color: #b91c1c;
+    }
+
+    .btn-ghost-warning {
+        color: #d97706;
+        background: transparent;
+    }
+
+    .btn-ghost-warning:hover {
+        background: rgba(245, 158, 11, 0.1);
+        color: #b45309;
+    }

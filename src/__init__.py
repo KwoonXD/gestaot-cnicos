@@ -39,7 +39,7 @@ def create_app():
 
     # Init Extensions
     db.init_app(app)
-    migrate = Migrate(app, db) # Task 1: Flask-Migrate
+    migrate = Migrate(app, db, render_as_batch=True) # Task 1: Flask-Migrate
     executor.init_app(app) # Apenas init_app aqui dentro
 
     
@@ -60,7 +60,7 @@ def create_app():
     file_handler.setLevel(logging.INFO)
     app.logger.addHandler(file_handler)
     app.logger.setLevel(logging.INFO)
-    app.logger.info('Gestão de Técnicos startup')
+    app.logger.info('WT startup')
 
     @login_manager.user_loader
     def load_user(user_id):

@@ -101,10 +101,19 @@
                             </div>
                         </div>
                         <div class="col-md-6" id="customRateInput" style="display: none;">
-                            <label class="form-label">Valor por Atendimento (R$) *</label>
-                            <input type="number" name="valor_por_atendimento" id="valorField" class="form-control"
-                                step="0.01" min="0"
-                                value="{{ tecnico.valor_por_atendimento if tecnico else '150.00' }}">
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <label class="form-label">Valor 1º Atendimento *</label>
+                                    <input type="number" name="valor_por_atendimento" id="valorField"
+                                        class="form-control" step="0.01" min="0"
+                                        value="{{ tecnico.valor_por_atendimento if tecnico else '120.00' }}">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label">Valor Adicional (Loja) *</label>
+                                    <input type="number" name="valor_adicional_loja" class="form-control" step="0.01"
+                                        min="0" value="{{ tecnico.valor_adicional_loja if tecnico else '20.00' }}">
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -202,7 +211,7 @@
 
             // Initial State Check
             const currentVal = parseFloat(input.value);
-            if (Math.abs(currentVal - 150.00) > 0.01) {
+            if (Math.abs(currentVal - 120.00) > 0.01) {
                 checkbox.checked = true;
                 container.style.display = 'block';
             }

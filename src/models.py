@@ -42,7 +42,9 @@ class Tecnico(db.Model):
     cidade = db.Column(db.String(100), nullable=False)
     estado = db.Column(db.String(2), nullable=False)
     status = db.Column(db.String(20), default='Ativo')
-    valor_por_atendimento = db.Column(db.Numeric(10, 2), default=150.00)
+    valor_por_atendimento = db.Column(db.Numeric(10, 2), default=120.00)
+    valor_adicional_loja = db.Column(db.Numeric(10, 2), default=20.00)
+    valor_hora_adicional = db.Column(db.Numeric(10, 2), default=30.00)  # Valor por hora extra
     forma_pagamento = db.Column(db.String(50), nullable=True)
     chave_pagamento = db.Column(db.String(200), nullable=True)
     tecnico_principal_id = db.Column(db.Integer, db.ForeignKey('tecnicos.id'), nullable=True)
@@ -218,10 +220,37 @@ class Chamado(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     tecnico_id = db.Column(db.Integer, db.ForeignKey('tecnicos.id'), nullable=False)
     codigo_chamado = db.Column(db.String(100), nullable=True)
+    cidade = db.Column(db.String(100), nullable=False, default='Indefinido')
+    loja = db.Column(db.String(100), nullable=True)
     data_atendimento = db.Column(db.Date, nullable=False)
-    tipo_servico = db.Column(db.String(50), nullable=False)
-    status_chamado = db.Column(db.String(20), default='Pendente')
-    valor = db.Column(db.Numeric(10, 2), nullable=False, default=0.00)
+    
+    # Serviço (Novo modelo unificado)
+    catalogo_servico_id = db.Column(db.Integer, db.ForeignKey('catalogo_servicos.id'), nullable=True)
+    catalogo_servico = db.relationship('CatalogoServico', foreign_keys=[catalogo_servico_id])
+    
+    # Campos legados (mantidos para compatibilidade)
+    tipo_servico = db.Column(db.String(50), nullable=True)
+    tipo_resolucao = db.Column(db.String(50), default='')
+    
+    status_chamado = db.Column(db.String(20), default='Finalizado')
+    is_adicional = db.Column(db.Boolean, default=False)
+    
+    # Horas Trabalhadas
+    horas_trabalhadas = db.Column(db.Float, default=2.0)
+    valor_horas_extras = db.Column(db.Numeric(10, 2), default=0.00)  # Calculado e persistido
+    
+    # Financeiro - RECEITA
+    valor_receita_total = db.Column(db.Numeric(10, 2), default=0.00)
+    valor_receita_servico = db.Column(db.Numeric(10, 2), default=0.00)
+    peca_usada = db.Column(db.String(100), nullable=True)
+    valor_receita_peca = db.Column(db.Numeric(10, 2), default=0.00)
+    
+    # Financeiro - CUSTO
+    custo_peca = db.Column(db.Numeric(10, 2), default=0.00)
+    fornecedor_peca = db.Column(db.String(20), default='Empresa')
+    custo_atribuido = db.Column(db.Numeric(10, 2), default=0.00)
+    
+    valor = db.Column(db.Numeric(10, 2), nullable=False, default=0.00) # Mantendo por compatibilidade
     pago = db.Column(db.Boolean, default=False)
     pagamento_id = db.Column(db.Integer, db.ForeignKey('pagamentos.id'), nullable=True)
     endereco = db.Column(db.Text, nullable=True)
@@ -230,6 +259,19 @@ class Chamado(db.Model):
     horario_inicio = db.Column(db.Time, nullable=True)
     horario_saida = db.Column(db.Time, nullable=True)
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Agrupamento por Lote/Atendimento
+    batch_id = db.Column(db.String(36), index=True, nullable=True)  # UUID para vincular FSAs do mesmo atendimento
+    
+    # Workflow de Validação
+    status_validacao = db.Column(db.String(20), default='Pendente')  # 'Pendente', 'Aprovado', 'Rejeitado'
+    data_validacao = db.Column(db.DateTime, nullable=True)
+    validado_por_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    validado_por = db.relationship('User', foreign_keys=[validado_por_id])
+    
+    # Rastreabilidade
+    created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_by = db.relationship('User', foreign_keys=[created_by_id])
     
     @property
     def id_chamado(self):
@@ -289,7 +331,8 @@ class Pagamento(db.Model):
     
     @property
     def valor_total(self):
-        return float(sum(c.valor for c in self.chamados_incluidos))
+        # Soma custo_atribuido se existir (novo modelo), senão usa valor (legado)
+        return float(sum((c.custo_atribuido if c.custo_atribuido is not None else c.valor) for c in self.chamados_incluidos))
     
     def to_dict(self):
         return {
@@ -376,3 +419,107 @@ class SavedView(db.Model):
     query_string = db.Column(db.Text, nullable=False)
     
     user = db.relationship('User', backref='saved_views')
+
+
+# =============================================================================
+# GESTÃO DE CONTRATOS (Motor de Regras Dinâmicas)
+# =============================================================================
+
+class Cliente(db.Model):
+    """Cliente/Contrato - Ex: Americanas, Raia Drogasil"""
+    __tablename__ = 'clientes'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(100), unique=True, nullable=False)
+    ativo = db.Column(db.Boolean, default=True)
+    data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relacionamentos
+    tipos_servico = db.relationship('CatalogoServico', backref='cliente', lazy='dynamic', cascade='all, delete-orphan')
+    itens_lpu = db.relationship('ItemLPU', backref='cliente', lazy='dynamic', cascade='all, delete-orphan')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'nome': self.nome,
+            'ativo': self.ativo,
+            'servicos': [s.to_dict() for s in self.tipos_servico],
+            'lpu': [l.to_dict() for l in self.itens_lpu]
+        }
+
+
+class CatalogoServico(db.Model):
+    """
+    Catálogo Unificado de Serviços por Cliente.
+    Une 'Tipo de Serviço' e 'Resolução' em uma única entidade com regras de negócio.
+    """
+    __tablename__ = 'catalogo_servicos'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(100), nullable=False)  # Ex: "Zebra - 1ª Visita", "Retorno SPARE"
+    valor_receita = db.Column(db.Float, default=0.0)  # Receita para a empresa (R$)
+    cliente_id = db.Column(db.Integer, db.ForeignKey('clientes.id'), nullable=False)
+    
+    # Regras de Negócio
+    exige_peca = db.Column(db.Boolean, default=False)     # Se True, mostra seleção de LPU
+    paga_tecnico = db.Column(db.Boolean, default=True)    # Se False (ex: Falha), técnico recebe 0
+    horas_franquia = db.Column(db.Integer, default=2)     # Até quantas horas o valor base cobre
+    
+    # Status
+    ativo = db.Column(db.Boolean, default=True)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'nome': self.nome,
+            'valor': self.valor_receita,
+            'exige_peca': self.exige_peca,
+            'paga_tecnico': self.paga_tecnico,
+            'horas_franquia': self.horas_franquia
+        }
+
+
+# Alias para compatibilidade com código existente
+TipoServico = CatalogoServico
+
+
+class ItemLPU(db.Model):
+    """Itens LPU (Peças) por Cliente - Ex: Scanner (R$ 180), Monitor (R$ 200)"""
+    __tablename__ = 'itens_lpu'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(100), nullable=False)
+    valor_receita = db.Column(db.Float, default=0.0)
+    cliente_id = db.Column(db.Integer, db.ForeignKey('clientes.id'), nullable=False)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'nome': self.nome,
+            'valor': self.valor_receita
+        }
+
+
+class Notification(db.Model):
+    """Sistema de Notificações Internas"""
+    __tablename__ = 'notifications'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    title = db.Column(db.String(150), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    notification_type = db.Column(db.String(20), default='info')  # info, warning, danger, success
+    is_read = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    user = db.relationship('User', backref='notifications')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'title': self.title,
+            'message': self.message,
+            'type': self.notification_type,
+            'is_read': self.is_read,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }

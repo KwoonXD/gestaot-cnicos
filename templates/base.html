@@ -4,196 +4,202 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Gestão de Técnicos{% endblock %}</title>
+    <title>{% block title %}WT{% endblock %}</title>
 
     <script>
         (function () {
             const savedTheme = localStorage.getItem('theme');
             const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-            const theme = savedTheme || systemTheme;
-            document.documentElement.setAttribute('data-bs-theme', theme);
+            document.documentElement.setAttribute('data-bs-theme', savedTheme || systemTheme);
         })();
     </script>
 
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+
     <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 
-<body class="bg-body-tertiary">
+<body>
 
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top" style="background-color: #0f172a !important;">
-        <div class="container-fluid px-4">
-            <a class="navbar-brand fw-bold d-flex align-items-center gap-2"
-                href="{{ url_for('operacional.dashboard') }}">
-                <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" height="32"
-                    class="d-inline-block align-text-top">
-                <span class="d-none d-md-block">GestãoTech</span>
-            </a>
+    <div class="d-flex" id="wrapper">
+        <aside class="sidebar border-end" id="sidebar-wrapper">
+            <div class="sidebar-heading border-bottom">
+                <a href="{{ url_for('operacional.dashboard') }}"
+                    class="text-decoration-none d-flex align-items-center gap-2 brand-link">
+                    <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" height="28"
+                        class="d-inline-block">
+                    <span class="fw-bold tracking-tight">WT</span>
+                </a>
+            </div>
 
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarMain">
-                <span class="navbar-toggler-icon"></span>
-            </button>
+            <div class="list-group list-group-flush mt-3 px-2">
+                <small class="text-uppercase text-muted fw-bold px-3 mb-2 mt-2"
+                    style="font-size: 0.7rem;">Operacional</small>
 
-            <div class="collapse navbar-collapse" id="navbarMain">
-                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('operacional.dashboard') }}"><i
-                                class="bi bi-speedometer2 me-1"></i> Dashboard</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('operacional.tecnicos') }}"><i
-                                class="bi bi-people me-1"></i> Técnicos</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('operacional.chamados') }}"><i
-                                class="bi bi-clipboard-check me-1"></i> Chamados</a>
-                    </li>
-                    {% if current_user.is_admin %}
-                    <li class="nav-item">
-                        <a class="nav-link text-warning" href="{{ url_for('financeiro.pagamentos') }}">
-                            <i class="bi bi-wallet2 me-1"></i> Financeiro
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('admin.users_list') }}">
-                            <i class="bi bi-people-fill me-1"></i> Usuários
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('admin.auditoria') }}">
-                            <i class="bi bi-shield-lock me-1"></i> Auditoria
-                        </a>
-                    </li>
+                <a href="{{ url_for('operacional.dashboard') }}"
+                    class="list-group-item list-group-item-action {{ 'active' if request.endpoint == 'operacional.dashboard' }}">
+                    <i class="bi bi-speedometer2 me-2"></i> Dashboard
+                </a>
+
+                <a href="{{ url_for('operacional.tecnicos') }}"
+                    class="list-group-item list-group-item-action {{ 'active' if request.endpoint == 'operacional.tecnicos' }}">
+                    <i class="bi bi-people me-2"></i> Técnicos
+                </a>
+
+
+                <a href="{{ url_for('operacional.chamados') }}"
+                    class="list-group-item list-group-item-action {{ 'active' if request.endpoint == 'operacional.chamados' }}">
+                    <i class="bi bi-clipboard-check me-2"></i> Chamados
+                </a>
+
+                <a href="{{ url_for('operacional.atendimentos') }}"
+                    class="list-group-item list-group-item-action {{ 'active' if request.endpoint == 'operacional.atendimentos' }}">
+                    <i class="bi bi-collection me-2"></i> Atendimentos
+                </a>
+
+                <a href="{{ url_for('operacional.validacao_fila') }}"
+                    class="list-group-item list-group-item-action d-flex justify-content-between align-items-center {{ 'active' if 'validacao' in request.endpoint }}">
+                    <span><i class="bi bi-check2-square me-2"></i> Fila de Validação</span>
+                </a>
+
+                {% if current_user.is_admin %}
+                <div class="my-3 border-top"></div>
+                <small class="text-uppercase text-muted fw-bold px-3 mb-2" style="font-size: 0.7rem;">Gestão</small>
+
+                <a href="{{ url_for('financeiro.pagamentos') }}"
+                    class="list-group-item list-group-item-action {{ 'active' if 'financeiro' in request.endpoint }}">
+                    <i class="bi bi-wallet2 me-2"></i> Financeiro
+                </a>
+
+                <a href="{{ url_for('admin.users_list') }}"
+                    class="list-group-item list-group-item-action {{ 'active' if 'users' in request.endpoint }}">
+                    <i class="bi bi-person-gear me-2"></i> Usuários
+                </a>
+
+                <a href="{{ url_for('admin.auditoria') }}"
+                    class="list-group-item list-group-item-action {{ 'active' if 'audit' in request.endpoint }}">
+                    <i class="bi bi-shield-check me-2"></i> Auditoria
+                </a>
+
+                <a href="{{ url_for('admin.contratos') }}"
+                    class="list-group-item list-group-item-action {{ 'active' if 'contratos' in request.endpoint }}">
+                    <i class="bi bi-file-earmark-text me-2"></i> Contratos
+                </a>
+                {% endif %}
+            </div>
+
+            <div class="sidebar-footer border-top mt-auto p-3">
+                <div class="d-flex align-items-center justify-content-between">
+                    {% if current_user.is_authenticated %}
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="avatar-circle bg-primary text-white">
+                            {{ current_user.username[0]|upper }}
+                        </div>
+                        <div class="d-flex flex-column" style="line-height: 1.2;">
+                            <span class="fw-medium small">{{ current_user.username }}</span>
+                            <span class="text-muted" style="font-size: 0.7rem;">{{ current_user.role }}</span>
+                        </div>
+                    </div>
+
+                    <!-- Notification Bell -->
+                    <a href="{{ url_for('operacional.minhas_notificacoes') }}"
+                        class="btn btn-ghost btn-icon position-relative" title="Notificações">
+                        <i class="bi bi-bell fs-5"></i>
+                        {% set unread_count = current_user.notifications | selectattr('is_read', 'false') | list |
+                        length if current_user.notifications else 0 %}
+                        {% if unread_count > 0 %}
+                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
+                            style="font-size: 0.6rem;">
+                            {{ unread_count if unread_count < 10 else '9+' }} </span>
+                                {% endif %}
+                    </a>
                     {% endif %}
-                </ul>
-
-                <div class="d-flex align-items-center gap-3">
-                    <button class="btn btn-link nav-link px-2" id="themeToggle" title="Alternar Tema">
-                        <i class="bi bi-moon-stars-fill" id="themeIcon"></i>
-                    </button>
-
-                    <div class="dropdown">
-                        <a class="nav-link dropdown-toggle text-light" href="#" role="button" data-bs-toggle="dropdown">
-                            <i class="bi bi-person-circle me-1"></i> {{ current_user.username }}
-                        </a>
+                    <!-- Dropup Menú User -->
+                    <div class="dropdown dropup">
+                        <button class="btn btn-sm btn-ghost text-secondary" data-bs-toggle="dropdown">
+                            <i class="bi bi-three-dots-vertical"></i>
+                        </button>
                         <ul class="dropdown-menu dropdown-menu-end shadow">
-                            <li>
-                                <hr class="dropdown-divider">
-                            </li>
                             <li><a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}"><i
                                         class="bi bi-box-arrow-right me-2"></i>Sair</a></li>
                         </ul>
                     </div>
                 </div>
-            </div>
-        </div>
-    </nav>
-
-    <div class="container-fluid px-4 py-4">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-        <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1055" id="toast-container">
-            {% for category, message in messages %}
-            <div class="toast show align-items-center text-bg-{{ category if category != 'error' else 'danger' }} border-0 mb-2 shadow-lg"
-                role="alert" aria-live="assertive" aria-atomic="true">
-                <div class="d-flex">
-                    <div class="toast-body fw-medium">
-                        {% if category == 'success' %}
-                        <i class="bi bi-check-circle-fill me-2"></i>
-                        {% elif category == 'danger' or category == 'error' %}
-                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                        {% elif category == 'warning' %}
-                        <i class="bi bi-exclamation-circle-fill me-2"></i>
-                        {% endif %}
-                        {{ message }}
-                    </div>
-                    <button type="button" class="btn-close btn-close-white me-2 m-auto"
-                        data-bs-dismiss="toast"></button>
+                <div class="mt-3 d-grid">
+                    <button class="btn btn-sm btn-outline-secondary" id="themeToggle">
+                        <i class="bi bi-moon-stars me-2"></i> Alternar Tema
+                    </button>
                 </div>
             </div>
-            {% endfor %}
-        </div>
-        {% endif %}
-        {% endwith %}
+        </aside>
 
-        {% block content %}{% endblock %}
-    </div>
+        <div id="page-content-wrapper" class="w-100">
+            <nav class="navbar navbar-light bg-light border-bottom d-md-none">
+                <div class="container-fluid">
+                    <button class="btn btn-light" id="sidebarToggle"><i class="bi bi-list fs-4"></i></button>
+                    <span class="fw-bold">WT</span>
+                </div>
+            </nav>
 
-    <!-- Modais Globais (Command Palette, etc.) se precisar manter -->
-    <div class="modal fade" id="commandPaletteModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header border-0 pb-0">
-                    <div class="input-group">
-                        <span class="input-group-text bg-transparent border-0"><i class="bi bi-search"></i></span>
-                        <input type="text" class="form-control border-0 shadow-none fs-5" id="commandInput"
-                            placeholder="Digite um comando...">
+            <main class="container-fluid p-4">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1060">
+                    {% for category, message in messages %}
+                    <div class="toast show align-items-center text-bg-{{ category if category != 'error' else 'danger' }} border-0 mb-2 shadow"
+                        role="alert">
+                        <div class="d-flex">
+                            <div class="toast-body">{{ message }}</div>
+                            <button type="button" class="btn-close btn-close-white me-2 m-auto"
+                                data-bs-dismiss="toast"></button>
+                        </div>
                     </div>
+                    {% endfor %}
                 </div>
-                <div class="modal-body pt-0">
-                    <div class="list-group list-group-flush mt-2" id="commandList">
-                        <a href="{{ url_for('operacional.dashboard') }}"
-                            class="list-group-item list-group-item-action border-0 rounded my-1"><i
-                                class="bi bi-speedometer2 me-2"></i> Dashboard</a>
-                        <a href="{{ url_for('operacional.tecnicos') }}"
-                            class="list-group-item list-group-item-action border-0 rounded my-1"><i
-                                class="bi bi-people me-2"></i> Técnicos</a>
-                        <a href="{{ url_for('operacional.chamados') }}"
-                            class="list-group-item list-group-item-action border-0 rounded my-1"><i
-                                class="bi bi-clipboard-check me-2"></i> Chamados</a>
-                    </div>
-                </div>
-            </div>
+                {% endif %}
+                {% endwith %}
+
+                {% block content %}{% endblock %}
+            </main>
         </div>
     </div>
-
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
     <script>
-        // Lógica do Dark Mode (Inline Backup or if main.js fails to init fast enough or specific override)
-        const toggleBtn = document.getElementById('themeToggle');
-        const icon = document.getElementById('themeIcon');
+        // Toggle Sidebar Mobile
+        const sidebarWrapper = document.getElementById("wrapper");
+        const toggleButton = document.getElementById("sidebarToggle");
 
-        function updateIcon(theme) {
-            if (theme === 'dark') {
-                icon.classList.replace('bi-moon-stars-fill', 'bi-sun-fill');
-            } else {
-                icon.classList.replace('bi-sun-fill', 'bi-moon-stars-fill');
-            }
+        if (toggleButton) {
+            toggleButton.onclick = function () {
+                sidebarWrapper.classList.toggle("toggled");
+            };
         }
 
-        // Set initial icon based on current theme
-        const currentTheme = document.documentElement.getAttribute('data-bs-theme');
-        updateIcon(currentTheme);
+        // Theme Toggle Logic
+        const toggleBtn = document.getElementById('themeToggle');
+        const updateIcon = () => { /* Lógica opcional de ícone */ };
 
         toggleBtn.addEventListener('click', () => {
             const current = document.documentElement.getAttribute('data-bs-theme');
             const next = current === 'dark' ? 'light' : 'dark';
-
             document.documentElement.setAttribute('data-bs-theme', next);
             localStorage.setItem('theme', next);
-            updateIcon(next);
+
+            // Critical: Dispatch event for charts to update
+            window.dispatchEvent(new CustomEvent('theme-changed', { detail: { theme: next } }));
         });
 
         // Auto-hide Toasts
-        document.querySelectorAll('.toast').forEach(toastNode => {
-            setTimeout(() => {
-                const toast = new bootstrap.Toast(toastNode);
-                toast.hide();
-            }, 5000);
-        });
+        document.querySelectorAll('.toast').forEach(t => setTimeout(() => new bootstrap.Toast(t).hide(), 5000));
 
-        // Copiar Link (Clipboard API) - Fallback simple
+        // Copy Function Global
         window.copyToClipboard = function (text) {
             navigator.clipboard.writeText(text).then(() => {
-                // Feedback visual simples se não tiver toast
-                // alert('Copiado para a área de transferência!'); 
-                // Don't alert if existing toast logic in main.js works
-            }).catch(err => {
-                console.error('Erro ao copiar', err);
+                // Toast feedback simple if main toast system not triggered
+                console.log('Link copiado');
             });
         }
     </script>

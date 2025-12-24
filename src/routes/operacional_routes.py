@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, Response
+from flask import Blueprint, render_template, request, redirect, url_for, flash, Response, jsonify
 from flask_login import login_required, current_user
 import csv
 import io
@@ -10,6 +10,7 @@ from ..services.financeiro_service import FinanceiroService
 from ..services.tag_service import TagService
 from ..services.saved_view_service import SavedViewService
 from ..services.import_service import ImportService
+from ..decorators import admin_required
 
 operacional_bp = Blueprint('operacional', __name__)
 
@@ -47,6 +48,7 @@ def dashboard():
     chamado_stats = ChamadoService.get_dashboard_stats()
     financeiro_stats = FinanceiroService.get_pendentes_stats()
     projecao_stats = FinanceiroService.calcular_projecao_mensal()
+    lucro_stats = FinanceiroService.get_lucro_real_mensal()
     
     return render_template('dashboard.html',
         total_tecnicos_ativos=tecnico_stats['ativos'],
@@ -55,7 +57,8 @@ def dashboard():
         pagamentos_pendentes=financeiro_stats,
         chamados_por_status=chamado_stats['chamados_por_status'],
         ultimos_chamados=chamado_stats['ultimos'],
-        projecao_financeira=projecao_stats
+        projecao_financeira=projecao_stats,
+        lucro_stats=lucro_stats
     )
 
 @operacional_bp.route('/tecnicos')
@@ -255,6 +258,33 @@ def deletar_view(id):
     except Exception as e:
         return {'status': 'error', 'message': str(e)}, 400
 
+@operacional_bp.route('/chamados/criar/multiplo', methods=['POST'])
+@login_required
+def criar_chamado_multiplo_api():
+    """API endpoint for Master-Detail form (batch creation)"""
+    try:
+        data = request.get_json()
+        logistica = data.get('logistica')
+        fsas = data.get('fsas')
+        
+        if not logistica or not fsas:
+            return jsonify({'error': 'Dados incompletos'}), 400
+            
+        ChamadoService.create_multiplo(logistica, fsas)
+        
+        return jsonify({'message': 'Atendimento registrado com sucesso!'}), 201
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': f'Erro interno: {str(e)}'}), 500
+
+@operacional_bp.route('/chamados/criar', methods=['GET'])
+@login_required
+def criar_chamado():
+    """Renders the new Master-Detail form for creating chamados"""
+    tecnicos = Tecnico.query.filter_by(status='Ativo').all()
+    return render_template('chamado_form.html', tecnicos=tecnicos)
+
 @operacional_bp.route('/chamados/novo', methods=['GET', 'POST'])
 @login_required
 def novo_chamado():
@@ -305,19 +335,23 @@ def novo_chamado():
                  chamado_mock.tecnico = None
             
             tecnicos = TecnicoService.get_all({'status': 'Ativo'})
+            lpu_items = sorted(ChamadoService.LPU_LIST.keys())
             return render_template('chamado_form.html',
                 chamado=chamado_mock,
                 tecnicos=tecnicos,
                 tipos_servico=TIPOS_SERVICO,
-                status_options=STATUS_CHAMADO
+                status_options=STATUS_CHAMADO,
+                lpu_items=lpu_items
             )
     
     tecnicos = TecnicoService.get_all({'status': 'Ativo'})
+    lpu_items = sorted(ChamadoService.LPU_LIST.keys())
     return render_template('chamado_form.html',
         chamado=None,
         tecnicos=tecnicos,
         tipos_servico=TIPOS_SERVICO,
-        status_options=STATUS_CHAMADO
+        status_options=STATUS_CHAMADO,
+        lpu_items=lpu_items
     )
 
 @operacional_bp.route('/chamados/<int:id>/editar', methods=['GET', 'POST'])
@@ -334,11 +368,13 @@ def editar_chamado(id):
             flash(f'Erro ao atualizar chamado: {str(e)}', 'danger')
     
     tecnicos = TecnicoService.get_all({'status': 'Ativo'})
+    lpu_items = sorted(ChamadoService.LPU_LIST.keys())
     return render_template('chamado_form.html',
         chamado=chamado,
         tecnicos=tecnicos,
         tipos_servico=TIPOS_SERVICO,
-        status_options=STATUS_CHAMADO
+        status_options=STATUS_CHAMADO,
+        lpu_items=lpu_items
     )
 
 @operacional_bp.route('/chamados/<int:id>/status', methods=['POST'])
@@ -383,3 +419,176 @@ def deletar_tag(id):
     except Exception as e:
         flash(f'Erro ao remover tag: {str(e)}', 'danger')
         return redirect(url_for('operacional.tecnicos'))
+
+@operacional_bp.route('/chamados/<int:id>/delete', methods=['POST'])
+@login_required
+@admin_required
+def deletar_chamado(id):
+    try:
+        from ..services.chamado_service import ChamadoService # Ensure import inside if needed to avoid circular, but top level is fine usually.
+        ChamadoService.delete(id, current_user.id)
+        flash('Chamado excluído com sucesso!', 'success')
+    except ValueError as e:
+        flash(str(e), 'danger')
+    except Exception as e:
+        flash(f'Erro ao excluir chamado: {str(e)}', 'danger')
+        
+    return redirect(url_for('operacional.chamados'))
+
+@operacional_bp.route('/tecnicos/<int:id>/delete', methods=['POST'])
+@login_required
+@admin_required
+def deletar_tecnico(id):
+    try:
+        from ..services.tecnico_service import TecnicoService
+        TecnicoService.delete(id, current_user.id)
+        flash('Técnico excluído com sucesso!', 'success')
+        return redirect(url_for('operacional.tecnicos'))
+    except ValueError as e:
+        flash(str(e), 'danger')
+        return redirect(url_for('operacional.tecnico_detalhes', id=id))
+    except Exception as e:
+        flash(f'Erro ao excluir técnico: {str(e)}', 'danger')
+        return redirect(url_for('operacional.tecnicos'))
+
+
+# =============================================================================
+# FILA DE VALIDAÇÃO
+# =============================================================================
+
+@operacional_bp.route('/validacao')
+@login_required
+def validacao_fila():
+    """Lista chamados pendentes de validação"""
+    chamados = ChamadoService.get_pendentes_validacao()
+    
+    # Contagem para badge
+    pendentes_count = len(chamados)
+    
+    return render_template('validacao_fila.html', 
+        chamados=chamados,
+        pendentes_count=pendentes_count
+    )
+
+
+@operacional_bp.route('/validar', methods=['POST'])
+@login_required
+def validar_chamados():
+    """Processa aprovação ou rejeição de chamados"""
+    try:
+        ids = request.form.getlist('chamado_ids')
+        acao = request.form.get('acao')
+        motivo = request.form.get('motivo', '').strip()
+        
+        if not ids:
+            flash('Nenhum chamado selecionado.', 'warning')
+            return redirect(url_for('operacional.validacao_fila'))
+        
+        ids_int = [int(i) for i in ids]
+        
+        if acao == 'aprovar':
+            count = ChamadoService.aprovar_chamados(ids_int, current_user.id)
+            flash(f'{count} chamado(s) aprovado(s) com sucesso!', 'success')
+        elif acao == 'rejeitar':
+            if not motivo:
+                flash('O motivo da rejeição é obrigatório.', 'danger')
+                return redirect(url_for('operacional.validacao_fila'))
+            count = ChamadoService.rejeitar_chamados(ids_int, current_user.id, motivo)
+            flash(f'{count} chamado(s) rejeitado(s) e excluídos permanentemente.', 'warning')
+        else:
+            flash('Ação inválida.', 'danger')
+            
+    except Exception as e:
+        flash(f'Erro ao processar validação: {str(e)}', 'danger')
+    
+    return redirect(url_for('operacional.validacao_fila'))
+
+
+# =============================================================================
+# ATENDIMENTOS (INBOX DE VALIDAÇÃO POR LOTE)
+# =============================================================================
+
+@operacional_bp.route('/atendimentos')
+@login_required
+def atendimentos():
+    """Inbox de lotes pendentes de validação"""
+    batches = ChamadoService.get_pending_batches()
+    return render_template('atendimentos.html', batches=batches)
+
+
+@operacional_bp.route('/atendimentos/validar', methods=['POST'])
+@login_required
+def validar_atendimento():
+    """Aprova ou rejeita um lote inteiro de chamados"""
+    try:
+        batch_id = request.form.get('batch_id')
+        acao = request.form.get('acao')
+        motivo = request.form.get('motivo', '').strip()
+        
+        if not batch_id:
+            flash('Lote não identificado.', 'danger')
+            return redirect(url_for('operacional.atendimentos'))
+        
+        if acao == 'aprovar':
+            count = ChamadoService.aprovar_batch(batch_id, current_user.id)
+            flash(f'✅ Lote aprovado! {count} chamado(s) liberados para o Financeiro.', 'success')
+        elif acao == 'rejeitar':
+            if not motivo or len(motivo) < 10:
+                flash('O motivo da rejeição deve ter no mínimo 10 caracteres.', 'danger')
+                return redirect(url_for('operacional.atendimentos'))
+            count = ChamadoService.rejeitar_batch(batch_id, current_user.id, motivo)
+            flash(f'❌ Lote rejeitado. {count} chamado(s) excluídos e criadores notificados.', 'warning')
+        else:
+            flash('Ação inválida.', 'danger')
+            
+    except Exception as e:
+        flash(f'Erro ao processar validação: {str(e)}', 'danger')
+    
+    return redirect(url_for('operacional.atendimentos'))
+
+
+# =============================================================================
+# NOTIFICAÇÕES
+# =============================================================================
+
+@operacional_bp.route('/notificacoes')
+@login_required
+def minhas_notificacoes():
+    """Lista notificações do usuário"""
+    from ..models import Notification
+    
+    notificacoes = Notification.query.filter_by(
+        user_id=current_user.id
+    ).order_by(Notification.created_at.desc()).all()
+    
+    return render_template('notificacoes.html', notificacoes=notificacoes)
+
+
+@operacional_bp.route('/notificacoes/marcar-lidas', methods=['POST'])
+@login_required
+def marcar_notificacoes_lidas():
+    """Marca todas as notificações como lidas"""
+    from ..models import Notification, db
+    
+    Notification.query.filter_by(
+        user_id=current_user.id,
+        is_read=False
+    ).update({'is_read': True})
+    db.session.commit()
+    
+    flash('Notificações marcadas como lidas.', 'success')
+    return redirect(url_for('operacional.minhas_notificacoes'))
+
+
+@operacional_bp.route('/notificacoes/<int:id>/ler', methods=['POST'])
+@login_required
+def ler_notificacao(id):
+    """Marca uma notificação específica como lida"""
+    from ..models import Notification, db
+    
+    notif = Notification.query.get_or_404(id)
+    if notif.user_id == current_user.id:
+        notif.is_read = True
+        db.session.commit()
+    
+    return jsonify({'success': True})

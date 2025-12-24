@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block title %}Fila de Validação | WT{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="h4 fw-bold">
+                <i class="bi bi-clipboard-check me-2"></i>Fila de Validação
+                {% if pendentes_count > 0 %}
+                <span class="badge bg-warning text-dark ms-2">{{ pendentes_count }}</span>
+                {% endif %}
+            </h2>
+            <p class="text-muted small mb-0">Revise e aprove os chamados antes de liberar para o Financeiro.</p>
+        </div>
+    </div>
+
+    {% if chamados %}
+    <form method="POST" action="{{ url_for('operacional.validar_chamados') }}" id="validacaoForm">
+        <!-- Action Bar -->
+        <div class="card shadow-sm mb-3">
+            <div class="card-body py-2 d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" id="selectAll" onchange="toggleAll(this)">
+                        <label class="form-check-label fw-bold" for="selectAll">Selecionar Todos</label>
+                    </div>
+                    <span class="text-muted small" id="selectedCount">0 selecionados</span>
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="submit" name="acao" value="aprovar" class="btn btn-success" disabled id="btnAprovar">
+                        <i class="bi bi-check-lg me-1"></i> Aprovar Selecionados
+                    </button>
+                    <button type="button" class="btn btn-outline-danger" disabled id="btnRejeitar"
+                        onclick="openRejectModal()">
+                        <i class="bi bi-x-lg me-1"></i> Rejeitar Selecionados
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Hidden input for motivo (populated by modal) -->
+        <input type="hidden" name="motivo" id="motivoHidden">
+
+        <!-- Table -->
+        <div class="card shadow-sm">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="bg-light">
+                            <tr>
+                                <th style="width: 40px;"></th>
+                                <th>Data</th>
+                                <th>Técnico</th>
+                                <th>Cidade</th>
+                                <th>Código FSA</th>
+                                <th>Resolução</th>
+                                <th class="text-end">Receita</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for chamado in chamados %}
+                            <tr>
+                                <td class="text-center">
+                                    <input type="checkbox" class="form-check-input chamado-check" name="chamado_ids"
+                                        value="{{ chamado.id }}" onchange="updateSelection()">
+                                </td>
+                                <td>{{ chamado.data_atendimento.strftime('%d/%m/%Y') }}</td>
+                                <td>
+                                    <a href="{{ url_for('operacional.tecnico_detalhes', id=chamado.tecnico.id) }}"
+                                        class="text-decoration-none">
+                                        {{ chamado.tecnico.nome }}
+                                    </a>
+                                </td>
+                                <td>{{ chamado.cidade or '-' }}</td>
+                                <td>
+                                    {% if chamado.codigo_chamado %}
+                                    <a href="https://delfia.atlassian.net/browse/{{ chamado.codigo_chamado }}"
+                                        target="_blank" class="fw-bold text-decoration-none text-primary">
+                                        {{ chamado.codigo_chamado }}
+                                        <i class="bi bi-box-arrow-up-right small"></i>
+                                    </a>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                    {% if chamado.is_adicional %}
+                                    <span class="badge bg-info text-dark ms-1" style="font-size: 0.6rem;">Carona</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge bg-light text-dark border">{{ chamado.tipo_resolucao or '-'
+                                        }}</span>
+                                </td>
+                                <td class="text-end font-numeric">
+                                    {% if chamado.valor_receita_total and chamado.valor_receita_total > 0 %}
+                                    <span class="text-success fw-bold">R$ {{ "%.2f"|format(chamado.valor_receita_total)
+                                        }}</span>
+                                    {% else %}
+                                    <span class="text-muted">R$ 0,00</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </form>
+    {% else %}
+    <!-- Empty State -->
+    <div class="card text-center py-5 shadow-sm">
+        <div class="card-body">
+            <i class="bi bi-check-circle display-1 text-success"></i>
+            <h5 class="mt-3">Nenhum chamado pendente</h5>
+            <p class="text-muted">Todos os chamados foram validados. Bom trabalho!</p>
+            <a href="{{ url_for('operacional.chamados') }}" class="btn btn-outline-primary">
+                Ver Todos os Chamados
+            </a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal: Rejeição com Motivo Obrigatório -->
+<div class="modal fade" id="modalRejeicao" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">
+                    <i class="bi bi-exclamation-triangle me-2"></i>Rejeitar Chamados
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning mb-3">
+                    <i class="bi bi-info-circle me-1"></i>
+                    <strong>Atenção:</strong> Os chamados rejeitados serão <strong>excluídos permanentemente</strong>
+                    e o usuário que os criou receberá uma notificação.
+                </div>
+
+                <p class="mb-2">Você está prestes a rejeitar <strong id="rejectCount">0</strong> chamado(s).</p>
+
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Motivo da Rejeição *</label>
+                    <textarea class="form-control" id="motivoInput" rows="4"
+                        placeholder="Descreva o motivo da rejeição. Esta mensagem será enviada ao usuário que criou os chamados."
+                        required></textarea>
+                    <div class="form-text">Mínimo de 10 caracteres.</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-danger" id="confirmRejectBtn" onclick="confirmReject()">
+                    <i class="bi bi-trash me-1"></i> Confirmar Rejeição
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const rejectModal = new bootstrap.Modal(document.getElementById('modalRejeicao'));
+
+    function toggleAll(checkbox) {
+        const checkboxes = document.querySelectorAll('.chamado-check');
+        checkboxes.forEach(cb => cb.checked = checkbox.checked);
+        updateSelection();
+    }
+
+    function updateSelection() {
+        const checkboxes = document.querySelectorAll('.chamado-check:checked');
+        const count = checkboxes.length;
+
+        document.getElementById('selectedCount').textContent = `${count} selecionados`;
+        document.getElementById('btnAprovar').disabled = count === 0;
+        document.getElementById('btnRejeitar').disabled = count === 0;
+
+        // Update select all checkbox
+        const allCheckboxes = document.querySelectorAll('.chamado-check');
+        document.getElementById('selectAll').checked = count === allCheckboxes.length && count > 0;
+    }
+
+    function openRejectModal() {
+        const count = document.querySelectorAll('.chamado-check:checked').length;
+        if (count === 0) return;
+
+        document.getElementById('rejectCount').textContent = count;
+        document.getElementById('motivoInput').value = '';
+        rejectModal.show();
+    }
+
+    function confirmReject() {
+        const motivo = document.getElementById('motivoInput').value.trim();
+
+        if (motivo.length < 10) {
+            alert('O motivo deve ter no mínimo 10 caracteres.');
+            document.getElementById('motivoInput').focus();
+            return;
+        }
+
+        // Set hidden field and submit
+        document.getElementById('motivoHidden').value = motivo;
+
+        // Add hidden acao field
+        const form = document.getElementById('validacaoForm');
+        const acaoInput = document.createElement('input');
+        acaoInput.type = 'hidden';
+        acaoInput.name = 'acao';
+        acaoInput.value = 'rejeitar';
+        form.appendChild(acaoInput);
+
+        form.submit();
+    }
+</script>
+{% endblock %}

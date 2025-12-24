@@ -84,6 +84,29 @@ class TecnicoService:
         return tecnico
 
     @staticmethod
+    def delete(id, user_id):
+        tecnico = TecnicoService.get_by_id(id)
+        
+        # Security Check: Dependencies
+        if tecnico.pagamentos.count() > 0:
+            raise ValueError("Este técnico possui histórico de pagamentos. Use a opção 'Inativar' em vez de excluir.")
+            
+        if tecnico.chamados.count() > 0:
+             raise ValueError("Este técnico possui chamados vinculados. Reatribua os chamados ou use 'Inativar'.")
+
+        # Audit
+        from .audit_service import AuditService
+        AuditService.log_change(
+            model_name='Tecnico',
+            object_id=tecnico.id,
+            action='DELETE',
+            changes=f"Deleted Tecnico {tecnico.nome} (ID: {tecnico.id_tecnico})"
+        )
+        
+        db.session.delete(tecnico)
+        db.session.commit()
+
+    @staticmethod
     def get_stats():
         return {
             'ativos': Tecnico.query.filter_by(status='Ativo').count(),

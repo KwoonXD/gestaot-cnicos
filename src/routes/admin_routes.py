@@ -1,7 +1,7 @@
-from flask import Blueprint, render_template, request, current_app
-from flask_login import login_required
+from flask import Blueprint, render_template, request, current_app, flash, redirect, url_for, jsonify
+from flask_login import login_required, current_user
 from src.decorators import admin_required
-from src.models import AuditLog, User
+from src.models import AuditLog, User, Cliente, TipoServico, ItemLPU, db
 from sqlalchemy import desc
 
 admin_bp = Blueprint('admin', __name__)
@@ -152,3 +152,167 @@ def user_delete(id):
     
     flash('Usuário excluído com sucesso.', 'success')
     return redirect(url_for('admin.users_list'))
+
+
+# =============================================================================
+# GESTÃO DE CONTRATOS
+# =============================================================================
+
+@admin_bp.route('/contratos')
+@login_required
+@admin_required
+def contratos():
+    """Dashboard de gestão de clientes/contratos"""
+    clientes = Cliente.query.order_by(Cliente.nome).all()
+    return render_template('admin_contratos.html', clientes=clientes)
+
+
+@admin_bp.route('/contratos/novo', methods=['POST'])
+@login_required
+@admin_required
+def novo_cliente():
+    """Criar novo cliente/contrato"""
+    nome = request.form.get('nome', '').strip()
+    
+    if not nome:
+        flash('Nome do cliente é obrigatório.', 'danger')
+        return redirect(url_for('admin.contratos'))
+    
+    if Cliente.query.filter_by(nome=nome).first():
+        flash(f'Cliente "{nome}" já existe.', 'warning')
+        return redirect(url_for('admin.contratos'))
+    
+    cliente = Cliente(nome=nome)
+    db.session.add(cliente)
+    db.session.commit()
+    
+    # Audit
+    AuditLog.query  # Just to ensure model is loaded
+    audit = AuditLog(
+        user_id=current_user.id,
+        model_name='Cliente',
+        object_id=str(cliente.id),
+        action='CREATE',
+        changes=f'Criado cliente: {nome}'
+    )
+    db.session.add(audit)
+    db.session.commit()
+    
+    flash(f'Cliente "{nome}" criado com sucesso!', 'success')
+    return redirect(url_for('admin.contratos'))
+
+
+@admin_bp.route('/cliente/<int:id>/servicos', methods=['POST'])
+@login_required
+@admin_required
+def adicionar_servico(id):
+    """Adicionar tipo de serviço a um cliente"""
+    cliente = Cliente.query.get_or_404(id)
+    
+    nome = request.form.get('nome', '').strip()
+    valor = request.form.get('valor', 0)
+    cobra_visita = request.form.get('cobra_visita', 'on') == 'on'
+    
+    if not nome:
+        flash('Nome do serviço é obrigatório.', 'danger')
+        return redirect(url_for('admin.contratos'))
+    
+    try:
+        valor = float(valor)
+    except:
+        valor = 0.0
+    
+    servico = TipoServico(
+        nome=nome,
+        valor_receita=valor,
+        cobra_visita=cobra_visita,
+        cliente_id=cliente.id
+    )
+    db.session.add(servico)
+    db.session.commit()
+    
+    flash(f'Serviço "{nome}" adicionado ao cliente {cliente.nome}!', 'success')
+    return redirect(url_for('admin.contratos'))
+
+
+@admin_bp.route('/cliente/<int:id>/lpu', methods=['POST'])
+@login_required
+@admin_required
+def adicionar_lpu(id):
+    """Adicionar item LPU a um cliente"""
+    cliente = Cliente.query.get_or_404(id)
+    
+    nome = request.form.get('nome', '').strip()
+    valor = request.form.get('valor', 0)
+    
+    if not nome:
+        flash('Nome do item LPU é obrigatório.', 'danger')
+        return redirect(url_for('admin.contratos'))
+    
+    try:
+        valor = float(valor)
+    except:
+        valor = 0.0
+    
+    item = ItemLPU(
+        nome=nome,
+        valor_receita=valor,
+        cliente_id=cliente.id
+    )
+    db.session.add(item)
+    db.session.commit()
+    
+    flash(f'Item LPU "{nome}" adicionado ao cliente {cliente.nome}!', 'success')
+    return redirect(url_for('admin.contratos'))
+
+
+@admin_bp.route('/config/delete/<string:tipo>/<int:id>', methods=['POST'])
+@login_required
+@admin_required
+def deletar_config(tipo, id):
+    """Remover serviço, LPU ou cliente"""
+    if tipo == 'servico':
+        item = TipoServico.query.get_or_404(id)
+        nome = item.nome
+        db.session.delete(item)
+        flash(f'Serviço "{nome}" removido.', 'success')
+    elif tipo == 'lpu':
+        item = ItemLPU.query.get_or_404(id)
+        nome = item.nome
+        db.session.delete(item)
+        flash(f'Item LPU "{nome}" removido.', 'success')
+    elif tipo == 'cliente':
+        item = Cliente.query.get_or_404(id)
+        nome = item.nome
+        db.session.delete(item)
+        flash(f'Cliente "{nome}" e todos seus serviços/LPUs removidos.', 'success')
+    else:
+        flash('Tipo inválido.', 'danger')
+        return redirect(url_for('admin.contratos'))
+    
+    db.session.commit()
+    return redirect(url_for('admin.contratos'))
+
+
+@admin_bp.route('/config/update/<string:tipo>/<int:id>', methods=['POST'])
+@login_required
+@admin_required
+def atualizar_config(tipo, id):
+    """Atualizar valor de serviço ou LPU via AJAX"""
+    try:
+        data = request.get_json()
+        valor = float(data.get('valor', 0))
+        
+        if tipo == 'servico':
+            item = TipoServico.query.get_or_404(id)
+            item.valor_receita = valor
+        elif tipo == 'lpu':
+            item = ItemLPU.query.get_or_404(id)
+            item.valor_receita = valor
+        else:
+            return jsonify({'error': 'Tipo inválido'}), 400
+        
+        db.session.commit()
+        return jsonify({'success': True, 'valor': valor})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

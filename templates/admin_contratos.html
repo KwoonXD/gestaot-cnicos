@@ -1,0 +1,440 @@
+{% extends "base.html" %}
+
+{% block title %}Gestão de Contratos | WT{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="h4 fw-bold"><i class="bi bi-file-earmark-text me-2"></i>Gestão de Contratos</h2>
+            <p class="text-muted small mb-0">Gerencie clientes, tipos de serviço e tabela LPU dinamicamente.</p>
+        </div>
+    </div>
+
+    <!-- Toolbar: Search + Add -->
+    <div class="row mb-4 g-3">
+        <div class="col-md-8">
+            <div class="input-group input-group-lg">
+                <span class="input-group-text bg-white border-end-0">
+                    <i class="bi bi-search text-muted"></i>
+                </span>
+                <input type="text" id="searchInput" class="form-control border-start-0 ps-0"
+                    placeholder="Filtrar clientes..." autocomplete="off">
+            </div>
+        </div>
+        <div class="col-md-4 text-end">
+            <button class="btn btn-primary btn-lg" data-bs-toggle="modal" data-bs-target="#modalNovoCliente">
+                <i class="bi bi-plus-lg me-1"></i> Novo Contrato
+            </button>
+        </div>
+    </div>
+
+    <!-- Accordion Clientes -->
+    {% if clientes %}
+    <div class="accordion shadow-sm" id="accordionContratos">
+        {% for cliente in clientes %}
+        <div class="accordion-item client-item" data-name="{{ cliente.nome|lower }}">
+            <h2 class="accordion-header">
+                <button class="accordion-button collapsed fw-bold" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#collapse{{ cliente.id }}" aria-expanded="false"
+                    aria-controls="collapse{{ cliente.id }}">
+                    <div class="d-flex align-items-center gap-3 w-100">
+                        <div class="avatar-circle bg-primary text-white"
+                            style="width: 36px; height: 36px; font-size: 0.9rem;">
+                            {{ cliente.nome[0] }}
+                        </div>
+                        <div class="flex-grow-1">
+                            <span class="h6 mb-0">{{ cliente.nome }}</span>
+                            <small class="text-muted d-block">
+                                {{ cliente.tipos_servico.count() }} serviços • {{ cliente.itens_lpu.count() }} itens LPU
+                            </small>
+                        </div>
+                        {% if cliente.ativo %}
+                        <span class="badge bg-success me-3">Ativo</span>
+                        {% else %}
+                        <span class="badge bg-secondary me-3">Inativo</span>
+                        {% endif %}
+                    </div>
+                </button>
+            </h2>
+            <div id="collapse{{ cliente.id }}" class="accordion-collapse collapse" data-bs-parent="#accordionContratos">
+                <div class="accordion-body bg-body-tertiary">
+                    <div class="row g-4">
+                        <!-- Col 1: Serviços (Visitas) -->
+                        <div class="col-lg-6">
+                            <div class="card h-100">
+                                <div
+                                    class="card-header bg-success bg-opacity-10 d-flex justify-content-between align-items-center">
+                                    <h6 class="mb-0 text-success fw-bold">
+                                        <i class="bi bi-gear me-1"></i> Tipos de Serviço
+                                    </h6>
+                                    <button class="btn btn-sm btn-success" data-bs-toggle="modal"
+                                        data-bs-target="#modalNovoServico{{ cliente.id }}">
+                                        <i class="bi bi-plus"></i>
+                                    </button>
+                                </div>
+                                <div class="card-body p-0">
+                                    {% if cliente.tipos_servico.count() > 0 %}
+                                    <table class="table table-sm table-hover mb-0">
+                                        <thead class="bg-light">
+                                            <tr>
+                                                <th>Nome</th>
+                                                <th class="text-end">Valor (R$)</th>
+                                                <th style="width: 80px;"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for servico in cliente.tipos_servico %}
+                                            <tr>
+                                                <td class="align-middle">
+                                                    {{ servico.nome }}
+                                                    {% if not servico.cobra_visita %}
+                                                    <span class="badge bg-secondary bg-opacity-25 text-dark"
+                                                        title="Não cobra taxa de visita">S/ Visita</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td class="align-middle text-end">
+                                                    <input type="number" step="0.01"
+                                                        class="form-control form-control-sm text-end editable-valor"
+                                                        style="width: 100px; display: inline-block;"
+                                                        value="{{ servico.valor_receita }}" data-tipo="servico"
+                                                        data-id="{{ servico.id }}">
+                                                </td>
+                                                <td class="align-middle text-center">
+                                                    <form
+                                                        action="{{ url_for('admin.deletar_config', tipo='servico', id=servico.id) }}"
+                                                        method="POST" class="d-inline"
+                                                        onsubmit="return confirm('Remover serviço {{ servico.nome }}?');">
+                                                        <button type="submit"
+                                                            class="btn btn-sm btn-outline-danger btn-icon">
+                                                            <i class="bi bi-trash"></i>
+                                                        </button>
+                                                    </form>
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                    {% else %}
+                                    <div class="p-3 text-center text-muted">
+                                        <i class="bi bi-inbox display-6"></i>
+                                        <p class="small mb-0 mt-2">Nenhum serviço cadastrado</p>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Col 2: LPU (Peças) -->
+                        <div class="col-lg-6">
+                            <div class="card h-100">
+                                <div
+                                    class="card-header bg-info bg-opacity-10 d-flex justify-content-between align-items-center">
+                                    <h6 class="mb-0 text-info fw-bold">
+                                        <i class="bi bi-box-seam me-1"></i> Itens LPU (Peças)
+                                    </h6>
+                                    <button class="btn btn-sm btn-info" data-bs-toggle="modal"
+                                        data-bs-target="#modalNovoLPU{{ cliente.id }}">
+                                        <i class="bi bi-plus"></i>
+                                    </button>
+                                </div>
+                                <div class="card-body p-0">
+                                    {% if cliente.itens_lpu.count() > 0 %}
+                                    <table class="table table-sm table-hover mb-0">
+                                        <thead class="bg-light">
+                                            <tr>
+                                                <th>Peça</th>
+                                                <th class="text-end">Valor (R$)</th>
+                                                <th style="width: 80px;"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for item in cliente.itens_lpu %}
+                                            <tr>
+                                                <td class="align-middle">{{ item.nome }}</td>
+                                                <td class="align-middle text-end">
+                                                    <input type="number" step="0.01"
+                                                        class="form-control form-control-sm text-end editable-valor"
+                                                        style="width: 100px; display: inline-block;"
+                                                        value="{{ item.valor_receita }}" data-tipo="lpu"
+                                                        data-id="{{ item.id }}">
+                                                </td>
+                                                <td class="align-middle text-center">
+                                                    <form
+                                                        action="{{ url_for('admin.deletar_config', tipo='lpu', id=item.id) }}"
+                                                        method="POST" class="d-inline"
+                                                        onsubmit="return confirm('Remover item {{ item.nome }}?');">
+                                                        <button type="submit"
+                                                            class="btn btn-sm btn-outline-danger btn-icon">
+                                                            <i class="bi bi-trash"></i>
+                                                        </button>
+                                                    </form>
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                    {% else %}
+                                    <div class="p-3 text-center text-muted">
+                                        <i class="bi bi-inbox display-6"></i>
+                                        <p class="small mb-0 mt-2">Nenhum item LPU cadastrado</p>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Footer Actions -->
+                    <div class="mt-3 pt-3 border-top d-flex justify-content-end gap-2">
+                        <form action="{{ url_for('admin.deletar_config', tipo='cliente', id=cliente.id) }}"
+                            method="POST" class="d-inline"
+                            onsubmit="return confirm('ATENÇÃO: Isso excluirá o cliente {{ cliente.nome }} e TODOS os seus serviços e LPUs. Continuar?');">
+                            <button type="submit" class="btn btn-outline-danger btn-sm">
+                                <i class="bi bi-trash me-1"></i> Excluir Cliente
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal: Novo Serviço (Per Cliente) -->
+        <div class="modal fade" id="modalNovoServico{{ cliente.id }}" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <form action="{{ url_for('admin.adicionar_servico', id=cliente.id) }}" method="POST">
+                        <div class="modal-header">
+                            <h5 class="modal-title">
+                                <i class="bi bi-gear me-2 text-success"></i>Novo Serviço - {{ cliente.nome }}
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <label class="form-label">Nome do Serviço *</label>
+                                <input type="text" name="nome" class="form-control"
+                                    placeholder="Ex: Zebra, TI Geral, Manutenção Balança" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Valor Receita (R$) *</label>
+                                <input type="number" step="0.01" name="valor" class="form-control" placeholder="190.00"
+                                    required>
+                            </div>
+                            <div class="form-check">
+                                <input type="checkbox" name="cobra_visita" class="form-check-input"
+                                    id="cobraVisita{{ cliente.id }}" checked>
+                                <label class="form-check-label" for="cobraVisita{{ cliente.id }}">
+                                    Cobra taxa de visita
+                                    <small class="text-muted d-block">Desmarque para tipos como "Retorno SPARE"</small>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="btn btn-success">
+                                <i class="bi bi-plus-lg me-1"></i> Adicionar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal: Novo LPU (Per Cliente) -->
+        <div class="modal fade" id="modalNovoLPU{{ cliente.id }}" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <form action="{{ url_for('admin.adicionar_lpu', id=cliente.id) }}" method="POST">
+                        <div class="modal-header">
+                            <h5 class="modal-title">
+                                <i class="bi bi-box-seam me-2 text-info"></i>Novo Item LPU - {{ cliente.nome }}
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <label class="form-label">Nome da Peça *</label>
+                                <input type="text" name="nome" class="form-control"
+                                    placeholder="Ex: Scanner, Monitor, CPU" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Valor Receita (R$) *</label>
+                                <input type="number" step="0.01" name="valor" class="form-control" placeholder="180.00"
+                                    required>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="btn btn-info">
+                                <i class="bi bi-plus-lg me-1"></i> Adicionar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <!-- Empty State -->
+    <div class="card text-center py-5 shadow-sm">
+        <div class="card-body">
+            <i class="bi bi-file-earmark-x display-1 text-muted"></i>
+            <h5 class="mt-3">Nenhum contrato cadastrado</h5>
+            <p class="text-muted">Comece criando seu primeiro cliente/contrato.</p>
+            <button class="btn btn-primary btn-lg" data-bs-toggle="modal" data-bs-target="#modalNovoCliente">
+                <i class="bi bi-plus-lg me-1"></i> Novo Contrato
+            </button>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal: Novo Cliente -->
+<div class="modal fade" id="modalNovoCliente" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="{{ url_for('admin.novo_cliente') }}" method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-building me-2 text-primary"></i>Novo Contrato / Cliente
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Nome do Cliente *</label>
+                        <input type="text" name="nome" class="form-control form-control-lg"
+                            placeholder="Ex: Americanas, Raia Drogasil" required autofocus>
+                        <small class="text-muted">
+                            Este nome será usado para identificar o contrato no sistema.
+                        </small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg me-1"></i> Criar Cliente
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ========================================
+    // Live Search Filter
+    // ========================================
+    document.getElementById('searchInput').addEventListener('keyup', function () {
+        const filter = this.value.toLowerCase().trim();
+        const items = document.querySelectorAll('.client-item');
+
+        items.forEach(item => {
+            const name = item.getAttribute('data-name');
+            if (name.includes(filter)) {
+                item.style.display = '';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+
+        // Show "no results" message if needed
+        const visibleItems = document.querySelectorAll('.client-item[style=""], .client-item:not([style])');
+        // Optional: Add empty state handling
+    });
+
+    // ========================================
+    // Auto-save Value Changes
+    // ========================================
+    document.querySelectorAll('.editable-valor').forEach(input => {
+        input.addEventListener('change', async function () {
+            const tipo = this.dataset.tipo;
+            const id = this.dataset.id;
+            const valor = parseFloat(this.value) || 0;
+
+            // Visual feedback
+            this.classList.add('border-warning');
+            this.disabled = true;
+
+            try {
+                const response = await fetch(`/admin/config/update/${tipo}/${id}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ valor })
+                });
+
+                if (response.ok) {
+                    this.classList.remove('border-warning');
+                    this.classList.add('border-success');
+                    setTimeout(() => {
+                        this.classList.remove('border-success');
+                    }, 2000);
+                } else {
+                    throw new Error('Erro ao salvar');
+                }
+            } catch (err) {
+                this.classList.remove('border-warning');
+                this.classList.add('border-danger');
+                alert('Erro ao salvar valor. Tente novamente.');
+            } finally {
+                this.disabled = false;
+            }
+        });
+    });
+
+    // ========================================
+    // Focus search on page load
+    // ========================================
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('searchInput')?.focus();
+    });
+</script>
+
+<style>
+    /* Accordion Customizations */
+    .accordion-button:not(.collapsed) {
+        background-color: var(--bs-light);
+        color: inherit;
+    }
+
+    .accordion-button::after {
+        margin-left: auto;
+    }
+
+    .accordion-button .badge {
+        margin-right: 0.5rem;
+    }
+
+    /* Editable input visual feedback */
+    .editable-valor {
+        transition: border-color 0.2s ease;
+    }
+
+    .editable-valor.border-success {
+        border-color: var(--bs-success) !important;
+        box-shadow: 0 0 0 2px rgba(25, 135, 84, 0.15);
+    }
+
+    .editable-valor.border-warning {
+        border-color: var(--bs-warning) !important;
+    }
+
+    .editable-valor.border-danger {
+        border-color: var(--bs-danger) !important;
+    }
+
+    /* Search input styling */
+    #searchInput:focus {
+        box-shadow: none;
+        border-color: var(--bs-primary);
+    }
+
+    /* Card inside accordion */
+    .accordion-body .card {
+        border: 1px solid rgba(0, 0, 0, 0.1);
+    }
+</style>
+{% endblock %}

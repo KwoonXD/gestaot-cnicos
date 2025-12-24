@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Comprovante de Pagamento</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 2cm;
+
+            @frame footer_frame {
+                -pdf-frame-content: footerContent;
+                bottom: 1cm;
+                margin-left: 2cm;
+                margin-right: 2cm;
+                height: 1cm;
+            }
+        }
+
+        body {
+            font-family: Helvetica, sans-serif;
+            /* Helvetica is built-in safe font */
+            font-size: 10pt;
+            color: #000;
+        }
+
+        /* Helper functionality for tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        td {
+            vertical-align: top;
+            padding: 5px;
+        }
+
+        .header-table td {
+            text-align: center;
+            vertical-align: middle;
+        }
+
+        .logo {
+            width: 150px;
+            /* Adjusted size */
+            height: auto;
+        }
+
+        .company-name {
+            font-size: 14pt;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-top: 10px;
+        }
+
+        .company-details {
+            font-size: 9pt;
+            color: #333;
+        }
+
+        .separator {
+            border-bottom: 2px solid #000;
+            margin: 10px 0 20px 0;
+            width: 100%;
+        }
+
+        .section-header {
+            background-color: #f0f0f0;
+            font-weight: bold;
+            padding: 5px;
+            border: 1px solid #ccc;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+
+        .info-table td.label {
+            width: 30%;
+            font-weight: bold;
+            background-color: #fff;
+            border-bottom: 1px solid #eee;
+        }
+
+        .info-table td.value {
+            width: 70%;
+            border-bottom: 1px solid #eee;
+        }
+
+        .total-box {
+            text-align: center;
+            border: 2px solid #000;
+            background-color: #e8e8e8;
+            padding: 15px;
+            margin-top: 30px;
+            width: 50%;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .total-label {
+            font-size: 10pt;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .total-amount {
+            font-size: 18pt;
+            font-weight: bold;
+            color: #000;
+        }
+
+        /* Footer content identifier */
+        #footerContent {
+            text-align: center;
+            font-size: 8pt;
+            color: #666;
+            border-top: 1px solid #ccc;
+            padding-top: 5px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Header Section -->
+    <table class="header-table">
+        <tr>
+            <td>
+                <!-- Logo with absolute path logic handled by service or external URL -->
+                <img src="{{ url_for('static', filename='logo.png', _external=True) }}" class="logo">
+            </td>
+        </tr>
+        <tr>
+            <td>
+                <div class="company-name">WT WORLDWIDE TECHNOLOGY LTDA</div>
+                <div class="company-details">
+                    CNPJ: 44.988.296/0001-76<br>
+                    PALERMO, 16 / BOX 01 - Bairro SAO JUDAS<br>
+                    CEP 04303250 - São Paulo/SP
+                </div>
+            </td>
+        </tr>
+    </table>
+
+    <div class="separator"></div>
+
+    <h2 style="text-align: center; margin: 20px 0;">COMPROVANTE DE PAGAMENTO</h2>
+
+    <!-- Two Column Layout Table -->
+    <table width="100%">
+        <tr>
+            <td width="50%" style="vertical-align: top; padding-right: 10px;">
+                <!-- Beneficiary Section -->
+                <div class="section-header">DADOS DO BENEFICIÁRIO</div>
+                <table class="info-table">
+                    <tr>
+                        <td class="label">Nome:</td>
+                        <td class="value">{{ tecnico.nome }}</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Documento:</td>
+                        <td class="value">{{ tecnico.documento or 'Não informado' }}</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Localização:</td>
+                        <td class="value">{{ tecnico.cidade }} / {{ tecnico.estado }}</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Chave PIX:</td>
+                        <td class="value">{{ tecnico.chave_pagamento or tecnico.contato }}</td>
+                    </tr>
+                </table>
+            </td>
+            <td width="50%" style="vertical-align: top; padding-left: 10px;">
+                <!-- Payment Details Section -->
+                <div class="section-header">DETALHES DO PAGAMENTO</div>
+                <table class="info-table">
+                    <tr>
+                        <td class="label">ID Pagamento:</td>
+                        <td class="value">#{{ pagamento.id }}</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Período:</td>
+                        <td class="value">{{ pagamento.periodo_fim.strftime('%d/%m/%Y') }}</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Data Pagto:</td>
+                        <td class="value">
+                            {{ pagamento.data_pagamento.strftime('%d/%m/%Y') if pagamento.data_pagamento else 'Pendente'
+                            }}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="label">Status:</td>
+                        <td class="value">{{ pagamento.status_pagamento }}</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Qtd. Atend.:</td>
+                        <td class="value">{{ pagamento.numero_chamados }}</td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+
+    <!-- Total Section -->
+    <table width="100%" style="margin-top: 30px;">
+        <tr>
+            <td align="center">
+                <div class="total-box">
+                    <div class="total-label">VALOR TOTAL PAGO</div>
+                    <div class="total-amount">R$ {{ "%.2f"|format(pagamento.valor_total) }}</div>
+                </div>
+            </td>
+        </tr>
+    </table>
+
+    <!-- Footer for xhtml2pdf (defined in CSS @frame) -->
+    <div id="footerContent">
+        Emitido eletronicamente em {{ agora }} via Sistema GestãoTech.<br>
+        Este documento não possui valor fiscal, apenas controle administrativo.
+    </div>
+
+</body>
+
+</html>

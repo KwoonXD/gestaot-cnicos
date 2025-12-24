@@ -111,9 +111,8 @@
                         <th class="ps-4">ID</th>
                         <th>Nome</th>
                         <th>Cidade/Estado</th>
-                        <th>Forma Pagamento</th>
+                        <th>Contato</th>
                         <th>Status</th>
-                        <th>Pagamento</th>
                         <th>Pagamento</th>
                         <th class="text-end pe-4">Ações</th>
                     </tr>
@@ -166,27 +165,70 @@
                             </span>
                         </td>
                         <td class="text-end pe-4">
-                            <div class="btn-group">
-                                <button class="btn btn-sm btn-outline-info"
+                            <div class="actions-cell">
+                                <button class="btn btn-icon btn-ghost-secondary"
                                     onclick="copyToClipboard('{{ url_for('public.extrato_tecnico', token=tecnico.token_acesso, _external=True) }}')"
                                     title="Copiar Link do Extrato">
                                     <i class="bi bi-link-45deg"></i>
                                 </button>
                                 <a href="{{ url_for('operacional.tecnico_detalhes', id=tecnico.id) }}"
-                                    class="btn btn-sm btn-outline-primary" title="Ver Detalhes">
+                                    class="btn btn-icon btn-ghost-primary" title="Ver Detalhes">
                                     <i class="bi bi-eye"></i>
                                 </a>
                                 <a href="{{ url_for('operacional.editar_tecnico', id=tecnico.id) }}"
-                                    class="btn btn-sm btn-outline-secondary" title="Editar">
+                                    class="btn btn-icon btn-ghost-secondary" title="Editar">
                                     <i class="bi bi-pencil"></i>
                                 </a>
-                                {% if tecnico.total_a_pagar > 0 %}
-                                <a href="{{ url_for('financeiro.gerar_pagamento') }}?tecnico={{ tecnico.id }}"
-                                    class="btn btn-sm btn-outline-warning" title="Gerar Pagamento">
-                                    <i class="bi bi-cash-stack"></i>
-                                </a>
+                                {% if current_user.role == 'Admin' %}
+                                <button type="button" class="btn btn-icon btn-ghost-danger" title="Excluir"
+                                    data-bs-toggle="modal" data-bs-target="#deleteTecnicoModal{{ tecnico.id }}">
+                                    <i class="bi bi-trash"></i>
+                                </button>
                                 {% endif %}
                             </div>
+                            <!-- Modal -->
+                            <div class="modal fade" id="deleteTecnicoModal{{ tecnico.id }}" tabindex="-1"
+                                aria-hidden="true" onclick="event.stopPropagation()">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title text-danger">Excluir Técnico</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"
+                                                aria-label="Close"></button>
+                                        </div>
+                                        <div class="modal-body text-start user-select-auto">
+                                            <p>Tem certeza que deseja excluir <strong>{{ tecnico.nome }}</strong>?
+                                            </p>
+                                            <div class="alert alert-warning">
+                                                <i class="bi bi-exclamation-triangle"></i> Atenção:
+                                                <ul class="mb-0 small">
+                                                    <li>Esta ação removerá o técnico permanentemente.</li>
+                                                    <li>Se ele já trabalhou, considere apenas
+                                                        <strong>Inativar</strong>.
+                                                    </li>
+                                                    <li>Não será possível excluir se houver pagamentos ou chamados
+                                                        vinculados.</li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-secondary"
+                                                data-bs-dismiss="modal">Cancelar</button>
+                                            <form action="{{ url_for('operacional.deletar_tecnico', id=tecnico.id) }}"
+                                                method="POST">
+                                                <button type="submit" class="btn btn-danger">Excluir</button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {% if tecnico.total_a_pagar > 0 %}
+                            <a href="{{ url_for('financeiro.gerar_pagamento') }}?tecnico={{ tecnico.id }}"
+                                class="btn btn-sm btn-outline-warning" title="Gerar Pagamento">
+                                <i class="bi bi-cash-stack"></i>
+                            </a>
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}

@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Extrato de Pagamentos | Gestão de Técnicos</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
     <style>
         body {
             background-color: #f8f9fa;
@@ -51,9 +52,14 @@
                         <div class="fs-5 fw-bold mt-1">R$ {{ "%.2f"|format(pag.valor_total)|replace('.', ',') }}</div>
                     </div>
                 </div>
-                {% if pag.status_pagamento == 'Pago' and pag.data_pagamento %}
-                <div class="mt-2 pt-2 border-top small text-success">
-                    <i class="bi bi-check-circle"></i> Pago em {{ pag.data_pagamento.strftime('%d/%m/%Y') }}
+                {% if pag.status_pagamento == 'Pago' %}
+                <div class="mt-3 pt-2 border-top d-flex justify-content-between align-items-center">
+                    <small class="text-success"><i class="bi bi-check-circle"></i> Pago em {{
+                        pag.data_pagamento.strftime('%d/%m/%Y') if pag.data_pagamento else '' }}</small>
+                    <a href="{{ url_for('public.download_comprovante', token=tecnico.token_acesso, pagamento_id=pag.id) }}"
+                        class="btn btn-sm btn-outline-dark">
+                        <i class="bi bi-file-earmark-pdf"></i> Comprovante
+                    </a>
                 </div>
                 {% endif %}
             </div>
