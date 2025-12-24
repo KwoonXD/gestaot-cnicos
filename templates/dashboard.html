@@ -214,9 +214,9 @@
     new Chart(ctx, {
         type: 'doughnut',
         data: {
-            labels: Object.keys(chamadosData),
+            labels: chamadosData ? Object.keys(chamadosData) : [],
             datasets: [{
-                data: Object.values(chamadosData),
+                data: chamadosData ? Object.values(chamadosData) : [],
                 backgroundColor: [
                     '#F59E0B', // Warning/Pendente
                     '#3B82F6', // Info/Em Andamento (Primary)
@@ -252,11 +252,11 @@
             new Chart(ctxEvolucao, {
                 type: 'bar',
                 data: {
-                    labels: data.labels,
+                    labels: (data && data.labels) ? data.labels : [],
                     datasets: [
                         {
                             label: 'Volume (Qtd)',
-                            data: data.volume,
+                            data: (data && data.volume) ? data.volume : [],
                             type: 'bar',
                             yAxisID: 'yVolume',
                             backgroundColor: 'rgba(59, 130, 246, 0.5)',
@@ -266,7 +266,7 @@
                         },
                         {
                             label: 'Custos (R$)',
-                            data: data.custos,
+                            data: (data && data.custos) ? data.custos : [],
                             type: 'line',
                             yAxisID: 'yCustos',
                             borderColor: '#10B981',

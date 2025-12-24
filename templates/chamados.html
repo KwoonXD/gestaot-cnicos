@@ -201,12 +201,12 @@
         </nav>
         {% endif %}
         {% else %}
-        <div class="empty-state">
-            <i class="bi bi-clipboard"></i>
-            <h5>Nenhum chamado encontrado</h5>
-            <p>Adicione um novo chamado para começar.</p>
-            <a href="{{ url_for('operacional.novo_chamado') }}" class="btn btn-primary">
-                <i class="bi bi-plus"></i> Novo Chamado
+        <div class="empty-state text-center py-5">
+            <i class="bi bi-clipboard-x display-1 text-muted opacity-50"></i>
+            <h4 class="mt-4 text-muted fw-bold">Nenhum chamado encontrado</h4>
+            <p class="text-muted mb-4">Adicione um novo atendimento para começar a rastrear sua produção.</p>
+            <a href="{{ url_for('operacional.novo_chamado') }}" class="btn btn-primary btn-lg">
+                <i class="bi bi-plus-lg"></i> Novo Chamado
             </a>
         </div>
         {% endif %}

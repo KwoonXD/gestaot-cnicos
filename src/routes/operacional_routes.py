@@ -3,14 +3,38 @@ from flask_login import login_required, current_user
 import csv
 import io
 # CORREÇÃO AQUI: Importamos Chamado, Pagamento e Tecnico explicitamente
-from ..models import ESTADOS_BRASIL, FORMAS_PAGAMENTO, Chamado, Pagamento, Tecnico
+from ..models import ESTADOS_BRASIL, FORMAS_PAGAMENTO, Chamado, Pagamento, Tecnico, Tag
 from ..services.tecnico_service import TecnicoService
 from ..services.chamado_service import ChamadoService
 from ..services.financeiro_service import FinanceiroService
 from ..services.tag_service import TagService
 from ..services.saved_view_service import SavedViewService
+from ..services.import_service import ImportService
 
 operacional_bp = Blueprint('operacional', __name__)
+
+@operacional_bp.route('/tecnicos/importar', methods=['GET', 'POST'])
+@login_required
+def importar_tecnicos():
+    if request.method == 'POST':
+        if 'arquivo_excel' not in request.files:
+            flash('Nenhum arquivo enviado.', 'danger')
+            return redirect(request.url)
+            
+        file = request.files['arquivo_excel']
+        if file.filename == '':
+            flash('Nenhum arquivo selecionado.', 'danger')
+            return redirect(request.url)
+
+        if file:
+            result = ImportService.importar_tecnicos(file)
+            if result['success']:
+                flash(result['message'], 'success')
+                return redirect(url_for('operacional.tecnicos'))
+            else:
+                flash(result['message'], 'danger')
+                
+    return render_template('importar_tecnicos.html')
 
 STATUS_TECNICO = ['Ativo', 'Inativo']
 TIPOS_SERVICO = ['Americanas', 'Escolas', 'Telmex', 'Telmex Urgente', 'Esteira']

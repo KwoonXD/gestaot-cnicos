@@ -5,9 +5,14 @@
 {% block content %}
 <div class="page-header d-flex justify-content-between align-items-center">
     <h1><i class="bi bi-people"></i> Técnicos</h1>
-    <a href="{{ url_for('operacional.novo_tecnico') }}" class="btn btn-primary">
-        <i class="bi bi-person-plus"></i> Novo Técnico
-    </a>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('operacional.importar_tecnicos') }}" class="btn btn-outline-success">
+            <i class="bi bi-file-earmark-excel"></i> Importar Excel
+        </a>
+        <a href="{{ url_for('operacional.novo_tecnico') }}" class="btn btn-primary">
+            <i class="bi bi-person-plus"></i> Novo Técnico
+        </a>
+    </div>
 </div>
 
 <!-- Filters -->
@@ -109,6 +114,7 @@
                         <th>Forma Pagamento</th>
                         <th>Status</th>
                         <th>Pagamento</th>
+                        <th>Pagamento</th>
                         <th class="text-end pe-4">Ações</th>
                     </tr>
                 </thead>
@@ -161,6 +167,11 @@
                         </td>
                         <td class="text-end pe-4">
                             <div class="btn-group">
+                                <button class="btn btn-sm btn-outline-info"
+                                    onclick="copyToClipboard('{{ url_for('public.extrato_tecnico', token=tecnico.token_acesso, _external=True) }}')"
+                                    title="Copiar Link do Extrato">
+                                    <i class="bi bi-link-45deg"></i>
+                                </button>
                                 <a href="{{ url_for('operacional.tecnico_detalhes', id=tecnico.id) }}"
                                     class="btn btn-sm btn-outline-primary" title="Ver Detalhes">
                                     <i class="bi bi-eye"></i>
@@ -214,11 +225,11 @@
         </nav>
         {% endif %}
         {% else %}
-        <div class="empty-state">
-            <i class="bi bi-people"></i>
-            <h5>Nenhum técnico encontrado</h5>
-            <p>Tente ajustar os filtros ou adicione um novo técnico.</p>
-            <a href="{{ url_for('operacional.novo_tecnico') }}" class="btn btn-primary mt-3">
+        <div class="empty-state text-center py-5">
+            <i class="bi bi-people display-1 text-muted opacity-50"></i>
+            <h4 class="mt-4 text-muted fw-bold">Nenhum técnico encontrado</h4>
+            <p class="text-muted mb-4">Tente ajustar os filtros ou cadastre um novo técnico para começar.</p>
+            <a href="{{ url_for('operacional.novo_tecnico') }}" class="btn btn-primary btn-lg">
                 <i class="bi bi-person-plus"></i> Novo Técnico
             </a>
         </div>
@@ -271,6 +282,7 @@
             }
         } catch (e) { console.error(e); }
     }
+
 </script>
 
 {% endblock %}

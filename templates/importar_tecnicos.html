@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+
+{% block title %}Importar Técnicos - Gestão de Técnicos{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1><i class="bi bi-file-earmark-spreadsheet"></i> Importar Técnicos</h1>
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('operacional.dashboard') }}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('operacional.tecnicos') }}">Técnicos</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Importar</li>
+        </ol>
+    </nav>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-upload"></i> Upload de Arquivo</h5>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info mb-4">
+                    <h6 class="alert-heading"><i class="bi bi-info-circle"></i> Instruções</h6>
+                    <p class="mb-0">Selecione um arquivo <strong>.xlsx</strong> ou <strong>.csv</strong> para importar.
+                    </p>
+                </div>
+
+                <div class="mb-4">
+                    <h6>Colunas Recomendadas:</h6>
+                    <ul class="class=list-group list-group-flush small text-muted">
+                        <li class="list-group-item px-0 py-1"><i class="bi bi-check-circle-fill text-success"></i>
+                            <strong>Nome</strong> (Obrigatório)</li>
+                        <li class="list-group-item px-0 py-1"><i class="bi bi-check-circle-fill text-success"></i>
+                            <strong>Documento</strong> (CPF/CNPJ - Obrigatório)</li>
+                        <li class="list-group-item px-0 py-1"><i class="bi bi-check-circle text-muted"></i> Telefone /
+                            Celular</li>
+                        <li class="list-group-item px-0 py-1"><i class="bi bi-check-circle text-muted"></i> Cidade</li>
+                        <li class="list-group-item px-0 py-1"><i class="bi bi-check-circle text-muted"></i> Estado (UF)
+                        </li>
+                        <li class="list-group-item px-0 py-1"><i class="bi bi-check-circle text-muted"></i> PIX (Chave
+                            de Pagamento)</li>
+                    </ul>
+                </div>
+
+                <form method="POST" enctype="multipart/form-data"
+                    class="dropzone-area text-center p-4 border rounded bg-light"
+                    style="border-style: dashed !important;">
+                    <div class="mb-3">
+                        <i class="bi bi-cloud-arrow-up display-4 text-primary opacity-50"></i>
+                        <p class="mt-2 text-muted">Arraste seu arquivo aqui ou clique para selecionar</p>
+                        <input class="form-control" type="file" name="arquivo_excel" id="arquivo_excel"
+                            accept=".xlsx, .csv" required>
+                    </div>
+
+                    <div class="d-grid gap-2 mt-4">
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="bi bi-file-earmark-check"></i> Processar Importação
+                        </button>
+                        <a href="{{ url_for('operacional.tecnicos') }}" class="btn btn-outline-secondary">Cancelar</a>
+                    </div>
+                </form>
+            </div>
+            <div class="card-footer bg-light small text-muted">
+                <i class="bi bi-exclamation-triangle"></i> Técnicos com CPF já cadastrados terão seus dados atualizados.
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

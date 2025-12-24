@@ -1,0 +1,101 @@
+{% extends 'base.html' %}
+
+{% block title %}Gestão de Usuários - GestãoTech{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center">
+    <h1><i class="bi bi-people-fill"></i> Usuários do Sistema</h1>
+    <a href="{{ url_for('admin.user_new') }}" class="btn btn-primary">
+        <i class="bi bi-person-plus"></i> Novo Usuário
+    </a>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="bg-light">
+                    <tr>
+                        <th class="ps-4">ID</th>
+                        <th>Username</th>
+                        <th>Role</th>
+                        <th class="text-end pe-4">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr>
+                        <td class="ps-4">#{{ user.id }}</td>
+                        <td>
+                            <strong>{{ user.username }}</strong>
+                            {% if current_user.id == user.id %}
+                            <span class="badge bg-info ms-2">Você</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if user.role == 'Admin' %}
+                            <span class="badge bg-danger">Admin</span>
+                            {% elif user.role == 'Financeiro' %}
+                            <span class="badge bg-warning text-dark">Financeiro</span>
+                            {% else %}
+                            <span class="badge bg-primary">Operador</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end pe-4">
+                            <div class="btn-group">
+                                <a href="{{ url_for('admin.user_edit', id=user.id) }}"
+                                    class="btn btn-sm btn-outline-secondary" title="Editar">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                {% if current_user.id != user.id %}
+                                <button type="button" class="btn btn-sm btn-outline-danger"
+                                    onclick="confirmDelete('{{ user.username }}', '{{ url_for('admin.user_delete', id=user.id) }}')"
+                                    title="Excluir">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                                {% else %}
+                                <button class="btn btn-sm btn-outline-secondary" disabled
+                                    title="Você não pode se excluir">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Confirmação Delete -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirmar Exclusão</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                Tem certeza que deseja excluir o usuário <strong id="deleteUserName"></strong>?
+                <br>Esta ação não pode ser desfeita.
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <form id="deleteForm" method="POST" action="">
+                    <button type="submit" class="btn btn-danger">Excluir</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function confirmDelete(name, url) {
+        document.getElementById('deleteUserName').textContent = name;
+        document.getElementById('deleteForm').action = url;
+        new bootstrap.Modal(document.getElementById('deleteModal')).show();
+    }
+</script>
+{% endblock %}

@@ -1,138 +1,127 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-br" data-bs-theme="light">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Gestão de Técnicos{% endblock %}</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+
+    <script>
+        (function () {
+            const savedTheme = localStorage.getItem('theme');
+            const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            const theme = savedTheme || systemTheme;
+            document.documentElement.setAttribute('data-bs-theme', theme);
+        })();
+    </script>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
     <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="{{ url_for('operacional.dashboard') }}">
-                <i class="bi bi-tools"></i> Gestão de Técnicos
+<body class="bg-body-tertiary">
+
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top" style="background-color: #0f172a !important;">
+        <div class="container-fluid px-4">
+            <a class="navbar-brand fw-bold d-flex align-items-center gap-2"
+                href="{{ url_for('operacional.dashboard') }}">
+                <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" height="32"
+                    class="d-inline-block align-text-top">
+                <span class="d-none d-md-block">GestãoTech</span>
             </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarMain">
                 <span class="navbar-toggler-icon"></span>
             </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                {% if current_user.is_authenticated %}
-                <ul class="navbar-nav me-auto">
+
+            <div class="collapse navbar-collapse" id="navbarMain">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                     <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'operacional.dashboard' %}active{% endif %}"
-                            href="{{ url_for('operacional.dashboard') }}">
-                            <i class="bi bi-speedometer2"></i> Dashboard
-                        </a>
+                        <a class="nav-link" href="{{ url_for('operacional.dashboard') }}"><i
+                                class="bi bi-speedometer2 me-1"></i> Dashboard</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if 'tecnico' in request.endpoint %}active{% endif %}"
-                            href="{{ url_for('operacional.tecnicos') }}">
-                            <i class="bi bi-people"></i> Técnicos
-                        </a>
+                        <a class="nav-link" href="{{ url_for('operacional.tecnicos') }}"><i
+                                class="bi bi-people me-1"></i> Técnicos</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if 'chamado' in request.endpoint %}active{% endif %}"
-                            href="{{ url_for('operacional.chamados') }}">
-                            <i class="bi bi-clipboard-check"></i> Chamados
-                        </a>
+                        <a class="nav-link" href="{{ url_for('operacional.chamados') }}"><i
+                                class="bi bi-clipboard-check me-1"></i> Chamados</a>
                     </li>
                     {% if current_user.is_admin %}
                     <li class="nav-item">
                         <a class="nav-link text-warning" href="{{ url_for('financeiro.pagamentos') }}">
-                            <i class="bi bi-currency-dollar"></i> Financeiro
+                            <i class="bi bi-wallet2 me-1"></i> Financeiro
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if 'admin' in request.endpoint %}active{% endif %}"
-                            href="{{ url_for('admin.auditoria') }}">
-                            <i class="bi bi-eye"></i> Auditoria
+                        <a class="nav-link" href="{{ url_for('admin.users_list') }}">
+                            <i class="bi bi-people-fill me-1"></i> Usuários
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('admin.auditoria') }}">
+                            <i class="bi bi-shield-lock me-1"></i> Auditoria
                         </a>
                     </li>
                     {% endif %}
                 </ul>
-                <div class="d-flex align-items-center">
-                    <!-- Notification Bell -->
-                    <div class="dropdown me-3">
-                        <a class="text-light position-relative" href="#" role="button" data-bs-toggle="dropdown"
-                            aria-expanded="false">
-                            <i class="bi bi-bell-fill" style="font-size: 1.2rem;"></i>
-                            {% if alerta_count and alerta_count > 0 %}
-                            <span
-                                class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
-                                style="font-size: 0.6rem;">
-                                {{ alerta_count }}
-                            </span>
-                            {% endif %}
-                        </a>
-                        <ul class="dropdown-menu dropdown-menu-end shadow-lg"
-                            style="width: 300px; max-height: 400px; overflow-y: auto;">
-                            <li>
-                                <h6 class="dropdown-header">Notificações</h6>
-                            </li>
-                            {% if alertas %}
-                            {% for alerta in alertas %}
-                            <li>
-                                <a class="dropdown-item d-flex align-items-start gap-2 p-2" href="{{ alerta.link }}">
-                                    <i class="bi bi-exclamation-circle text-{{ alerta.tipo }} mt-1"></i>
-                                    <div style="white-space: normal; font-size: 0.9rem;">
-                                        {{ alerta.msg }}
-                                    </div>
-                                </a>
-                            </li>
-                            {% endfor %}
-                            {% else %}
-                            <li><span class="dropdown-item text-muted">Sem novas notificações</span></li>
-                            {% endif %}
-                        </ul>
-                    </div>
 
-                    <!-- Theme Toggle -->
-                    <button class="btn btn-link text-light me-3 p-0" id="theme-toggle" title="Alternar Tema">
-                        <i class="bi bi-moon-stars-fill" id="theme-icon" style="font-size: 1.2rem;"></i>
+                <div class="d-flex align-items-center gap-3">
+                    <button class="btn btn-link nav-link px-2" id="themeToggle" title="Alternar Tema">
+                        <i class="bi bi-moon-stars-fill" id="themeIcon"></i>
                     </button>
 
-                    <span class="navbar-text me-3 text-light">
-                        <i class="bi bi-person-circle"></i> {{ current_user.username }}
-                    </span>
-                    <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-light btn-sm">
-                        <i class="bi bi-box-arrow-right"></i> Sair
-                    </a>
+                    <div class="dropdown">
+                        <a class="nav-link dropdown-toggle text-light" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-person-circle me-1"></i> {{ current_user.username }}
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end shadow">
+                            <li>
+                                <hr class="dropdown-divider">
+                            </li>
+                            <li><a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}"><i
+                                        class="bi bi-box-arrow-right me-2"></i>Sair</a></li>
+                        </ul>
+                    </div>
                 </div>
-                {% endif %}
             </div>
         </div>
     </nav>
 
-    <main class="container-fluid py-4">
+    <div class="container-fluid px-4 py-4">
         {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
-        {% for category, message in messages %}
-        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-            {{ message }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1055" id="toast-container">
+            {% for category, message in messages %}
+            <div class="toast show align-items-center text-bg-{{ category if category != 'error' else 'danger' }} border-0 mb-2 shadow-lg"
+                role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="d-flex">
+                    <div class="toast-body fw-medium">
+                        {% if category == 'success' %}
+                        <i class="bi bi-check-circle-fill me-2"></i>
+                        {% elif category == 'danger' or category == 'error' %}
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        {% elif category == 'warning' %}
+                        <i class="bi bi-exclamation-circle-fill me-2"></i>
+                        {% endif %}
+                        {{ message }}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto"
+                        data-bs-dismiss="toast"></button>
+                </div>
+            </div>
+            {% endfor %}
         </div>
-        {% endfor %}
         {% endif %}
         {% endwith %}
 
         {% block content %}{% endblock %}
-    </main>
+    </div>
 
-    <footer class="footer mt-auto py-3 border-top">
-        <div class="container text-center">
-            <span class="text-muted">Gestão de Técnicos de Campo &copy; 2024</span>
-        </div>
-    </footer>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Modais Globais (Command Palette, etc.) se precisar manter -->
     <div class="modal fade" id="commandPaletteModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
@@ -154,37 +143,60 @@
                         <a href="{{ url_for('operacional.chamados') }}"
                             class="list-group-item list-group-item-action border-0 rounded my-1"><i
                                 class="bi bi-clipboard-check me-2"></i> Chamados</a>
-                        {% if current_user.is_admin %}
-                        <a href="{{ url_for('financeiro.pagamentos') }}"
-                            class="list-group-item list-group-item-action border-0 rounded my-1"><i
-                                class="bi bi-currency-dollar me-2"></i> Financeiro</a>
-                        {% endif %}
-                        <!-- Add actions like New Ticket -->
-                        <!-- <a href="#" class="list-group-item list-group-item-action border-0 rounded my-1"><i class="bi bi-plus-circle me-2"></i> Novo Chamado</a> -->
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
     <script>
-        // Micro-interaction: Loading state on form submit
-        document.addEventListener('submit', function (e) {
-            const form = e.target;
-            const submitBtn = form.querySelector('button[type="submit"]');
+        // Lógica do Dark Mode (Inline Backup or if main.js fails to init fast enough or specific override)
+        const toggleBtn = document.getElementById('themeToggle');
+        const icon = document.getElementById('themeIcon');
 
-            if (submitBtn && !form.classList.contains('no-loading')) {
-                const originalText = submitBtn.innerHTML;
-                const originalWidth = submitBtn.offsetWidth;
-
-                submitBtn.style.width = `${originalWidth}px`;
-                submitBtn.disabled = true;
-                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
+        function updateIcon(theme) {
+            if (theme === 'dark') {
+                icon.classList.replace('bi-moon-stars-fill', 'bi-sun-fill');
+            } else {
+                icon.classList.replace('bi-sun-fill', 'bi-moon-stars-fill');
             }
-        });
-    </script>
+        }
 
+        // Set initial icon based on current theme
+        const currentTheme = document.documentElement.getAttribute('data-bs-theme');
+        updateIcon(currentTheme);
+
+        toggleBtn.addEventListener('click', () => {
+            const current = document.documentElement.getAttribute('data-bs-theme');
+            const next = current === 'dark' ? 'light' : 'dark';
+
+            document.documentElement.setAttribute('data-bs-theme', next);
+            localStorage.setItem('theme', next);
+            updateIcon(next);
+        });
+
+        // Auto-hide Toasts
+        document.querySelectorAll('.toast').forEach(toastNode => {
+            setTimeout(() => {
+                const toast = new bootstrap.Toast(toastNode);
+                toast.hide();
+            }, 5000);
+        });
+
+        // Copiar Link (Clipboard API) - Fallback simple
+        window.copyToClipboard = function (text) {
+            navigator.clipboard.writeText(text).then(() => {
+                // Feedback visual simples se não tiver toast
+                // alert('Copiado para a área de transferência!'); 
+                // Don't alert if existing toast logic in main.js works
+            }).catch(err => {
+                console.error('Erro ao copiar', err);
+            });
+        }
+    </script>
     {% block scripts %}{% endblock %}
 </body>
 

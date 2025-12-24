@@ -37,6 +37,7 @@ class Tecnico(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(200), nullable=False)
+    documento = db.Column(db.String(20), unique=True, nullable=True) # CPF/CNPJ
     contato = db.Column(db.String(20), nullable=False)
     cidade = db.Column(db.String(100), nullable=False)
     estado = db.Column(db.String(2), nullable=False)

@@ -134,8 +134,22 @@
                             tecnico.status_pagamento }}</span>
                     </div>
                 </div>
+                <div class="detail-item mt-3 p-2 bg-body-tertiary rounded border">
+                    <label class="small text-muted text-uppercase fw-bold mb-1">Link de Auto-Atendimento</label>
+                    <div class="input-group input-group-sm">
+                        <input type="text" class="form-control font-monospace text-muted"
+                            value="{{ url_for('public.extrato_tecnico', token=tecnico.token_acesso, _external=True) }}"
+                            readonly id="linkTecnico{{tecnico.id}}">
+                        <button class="btn btn-outline-secondary" type="button"
+                            onclick="copyToClipboard(document.getElementById('linkTecnico{{tecnico.id}}').value)">
+                            <i class="bi bi-clipboard"></i> Copiar
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
+
+
 
         <div class="card mb-4">
             <div class="card-header">
@@ -537,5 +551,36 @@
             });
         }
     });
+    });
+
+    async function copyLink(token) {
+        if (!token || token === 'None') {
+            alert('Erro: Técnico sem token de acesso.');
+            return;
+        }
+        const url = `${window.location.origin}/extrato/${token}`;
+        try {
+            await navigator.clipboard.writeText(url);
+            // Visual feedback on button if possible, or toast
+            const toast = document.createElement('div');
+            toast.className = 'position-fixed bottom-0 end-0 p-3';
+            toast.style.zIndex = '1100';
+            toast.innerHTML = `
+                <div class="toast show align-items-center text-white bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true">
+                    <div class="d-flex">
+                        <div class="toast-body">
+                            <i class="bi bi-clipboard-check"></i> Link copiado com sucesso!
+                        </div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        } catch (err) {
+            console.error(err);
+            alert('Erro ao copiar link.');
+        }
+    }
 </script>
 {% endblock %}

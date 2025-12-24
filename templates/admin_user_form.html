@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ title }} - GestãoTech{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1><i class="bi bi-person-gear"></i> {{ title }}</h1>
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('admin.users_list') }}">Usuários</a></li>
+            <li class="breadcrumb-item active">{{ title }}</li>
+        </ol>
+    </nav>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+        <div class="card shadow-sm">
+            <div class="card-body p-4">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label class="form-label">Nome de Usuário</label>
+                        <input type="text" name="username" class="form-control"
+                            value="{{ user.username if user else '' }}" required {% if user %}readonly{% endif %}>
+                        {% if user %}
+                        <div class="form-text">O nome de usuário não pode ser alterado.</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Função (Role)</label>
+                        <select name="role" class="form-select" required>
+                            <option value="Operador" {% if user and user.role=='Operador' %}selected{% endif %}>Operador
+                            </option>
+                            <option value="Financeiro" {% if user and user.role=='Financeiro' %}selected{% endif %}>
+                                Financeiro</option>
+                            <option value="Admin" {% if user and user.role=='Admin' %}selected{% endif %}>Admin</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label">Senha</label>
+                        <input type="password" name="password" class="form-control" {% if not user %}required{% endif %}
+                            autocomplete="new-password">
+                        {% if user %}
+                        <div class="form-text text-muted"><i class="bi bi-info-circle"></i> Deixe em branco para manter
+                            a senha atual.</div>
+                        {% else %}
+                        <div class="form-text">Defina uma senha forte inicial.</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-person-check"></i> Salvar Usuário
+                        </button>
+                        <a href="{{ url_for('admin.users_list') }}" class="btn btn-outline-secondary">Cancelar</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
