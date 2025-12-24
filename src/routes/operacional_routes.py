@@ -7,6 +7,8 @@ from ..models import ESTADOS_BRASIL, FORMAS_PAGAMENTO, Chamado, Pagamento, Tecni
 from ..services.tecnico_service import TecnicoService
 from ..services.chamado_service import ChamadoService
 from ..services.financeiro_service import FinanceiroService
+from ..services.tag_service import TagService
+from ..services.saved_view_service import SavedViewService
 
 operacional_bp = Blueprint('operacional', __name__)
 
@@ -41,7 +43,8 @@ def tecnicos():
         'cidade': request.args.get('cidade', ''),
         'status': request.args.get('status', ''),
         'pagamento': request.args.get('pagamento', ''),
-        'search': request.args.get('search', '')
+        'search': request.args.get('search', ''),
+        'tag': request.args.get('tag', '') # New filter
     }
     
     # Chama o serviço passando a página
@@ -53,6 +56,13 @@ def tecnicos():
     all_states = [t.estado for t in tecnicos_list if t.estado] 
     estados_usados = sorted(list(set(all_states)))
     
+    # Saved Views
+    saved_views = SavedViewService.get_for_user(current_user.id, 'tecnicos')
+    
+    # Available Tags (for filter dropdown if needed, though usually typing is easier or a separate endpoint)
+    # For now, we can get unique tags to show in filter dropdown if desired.
+    available_tags = TagService.get_all_unique()
+
     return render_template('tecnicos.html',
         tecnicos=tecnicos_list,
         pagination=pagination,  # Passamos o objeto de paginação
@@ -64,7 +74,10 @@ def tecnicos():
         cidade_filter=filters['cidade'],
         status_filter=filters['status'],
         pagamento_filter=filters['pagamento'],
-        search=filters['search']
+        search_filter=filters['search'],
+        tag_filter=filters['tag'],
+        saved_views=saved_views,
+        available_tags=available_tags
     )
 
 # Task 3: Relatórios (Exportação CSV)
@@ -77,10 +90,11 @@ def exportar_tecnicos():
     writer = csv.writer(output, delimiter=';')
     
     # Header
-    writer.writerow(['ID', 'Nome', 'Cidade', 'Estado', 'Status', 'Valor/Atendimento', 'Banco', 'Chave', 'Total a Pagar'])
+    writer.writerow(['ID', 'Nome', 'Cidade', 'Estado', 'Status', 'Valor/Atendimento', 'Banco', 'Chave', 'Total a Pagar', 'Tags'])
     
     # Rows
     for t in tecnicos:
+        tags_str = ", ".join([tag.nome for tag in t.tags])
         writer.writerow([
             t.id_tecnico,
             t.nome,
@@ -90,7 +104,8 @@ def exportar_tecnicos():
             f"R$ {t.valor_por_atendimento:.2f}".replace('.', ','),
             t.forma_pagamento or '-',
             t.chave_pagamento or '-',
-            f"R$ {t.total_a_pagar:.2f}".replace('.', ',')
+            f"R$ {t.total_a_pagar:.2f}".replace('.', ','),
+            tags_str
         ])
     
     return Response(
@@ -181,8 +196,7 @@ def chamados():
     tecnicos_list = TecnicoService.get_all({'status': 'Ativo'}, page=1, per_page=1000).items
     
     # Task 2: Saved Views
-    from ..models import SavedView
-    saved_views = SavedView.query.filter_by(user_id=current_user.id, page_route='chamados').all()
+    saved_views = SavedViewService.get_for_user(current_user.id, 'chamados')
     
     return render_template('chamados.html',
         chamados=chamados_list,
@@ -203,17 +217,17 @@ def chamados():
 def salvar_view():
     try:
         data = request.get_json()
-        from ..models import SavedView, db
-        
-        view = SavedView(
-            user_id=current_user.id,
-            page_route=data.get('page_route'),
-            name=data.get('name'),
-            query_string=data.get('query_string')
-        )
-        db.session.add(view)
-        db.session.commit()
-        return {'status': 'success', 'id': view.id}
+        SavedViewService.save_view(current_user.id, data.get('page_route'), data.get('name'), data.get('query_string'))
+        return {'status': 'success'}
+    except Exception as e:
+        return {'status': 'error', 'message': str(e)}, 400
+
+@operacional_bp.route('/api/views/<int:id>/delete', methods=['POST'])
+@login_required
+def deletar_view(id):
+    try:
+        SavedViewService.delete_view(id, current_user.id)
+        return {'status': 'success'}
     except Exception as e:
         return {'status': 'error', 'message': str(e)}, 400
 
@@ -324,14 +338,11 @@ def tecnico_resumo(id):
 @login_required
 def criar_tag(id):
     try:
-        from ..models import Tag, db
         nome = request.form.get('nome')
         cor = request.form.get('cor', '#3B82F6')
         
         if nome:
-            tag = Tag(nome=nome, cor=cor, tecnico_id=id)
-            db.session.add(tag)
-            db.session.commit()
+            TagService.create_tag(id, nome, cor)
             flash('Tag adicionada com sucesso!', 'success')
     except Exception as e:
         flash(f'Erro ao adicionar tag: {str(e)}', 'danger')
@@ -342,16 +353,9 @@ def criar_tag(id):
 @login_required
 def deletar_tag(id):
     try:
-        from ..models import Tag, db
-        tag = Tag.query.get_or_404(id)
-        tecnico_id = tag.tecnico_id
-        db.session.delete(tag)
-        db.session.commit()
+        tecnico_id = TagService.delete_tag(id)
         flash('Tag removida com sucesso!', 'success')
         return redirect(url_for('operacional.tecnico_detalhes', id=tecnico_id))
     except Exception as e:
         flash(f'Erro ao remover tag: {str(e)}', 'danger')
-        # In case of error, we might not have tecnico_id if tag fetch failed, 
-        # but here we assume tag exists or 404.
         return redirect(url_for('operacional.tecnicos'))
-

@@ -1,4 +1,4 @@
-from ..models import db, Tecnico, Chamado
+from ..models import db, Tecnico, Chamado, Tag
 from datetime import datetime
 
 class TecnicoService:
@@ -16,6 +16,10 @@ class TecnicoService:
                 query = query.filter_by(status=filters['status'])
             if filters.get('search'):
                 query = query.filter(Tecnico.nome.ilike(f"%{filters['search']}%"))
+            
+            if filters.get('tag'):
+                # Filtro por Tag (nome exato)
+                query = query.join(Tag).filter(Tag.nome == filters['tag'])
             
             # Filtro Avançado: Pagamento (Recuperado via SQL)
             if filters.get('pagamento') == 'Pendente':

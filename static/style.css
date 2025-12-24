@@ -384,3 +384,21 @@ h6 {
     height: 300px;
     width: 100%;
 }
+
+/* UX Utilities */
+.tabular-nums {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+    letter-spacing: -0.02em;
+}
+
+.copy-text {
+    cursor: pointer;
+    transition: color 0.15s ease;
+}
+
+.copy-text:hover {
+    color: var(--primary-color);
+    text-decoration: underline;
+    text-decoration-style: dotted;
+}

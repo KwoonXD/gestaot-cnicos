@@ -63,12 +63,44 @@ def gerar_pagamento():
     if request.method == 'POST':
         pagamento, error = FinanceiroService.gerar_pagamento(request.form)
         if error:
-            tecnicos = [t for t in TecnicoService.get_all() if t.total_a_pagar > 0]
-            return render_template('pagamento_gerar.html', tecnicos=tecnicos, error=error)
+            # Em caso de erro, recarregamos a lista filtrada
+            todos_tecnicos = TecnicoService.get_all() # Assuming get_all returns list, if pagination, need .items or unpaginated
+            # Actually TecnicoService.get_all() returns pagination object if no args? No, looking at service:
+            # get_all(filters=None, page=1, per_page=20) returns pagination.
+            # But the existing code was: tecnicos = [t for t in TecnicoService.get_all() if t.total_a_pagar > 0]
+            # This implies get_all might return a query object or list depending on implementation?
+            # Checking service: it returns query.order_by().paginate(). 
+            # Wait, the previous code was: tecnicos = [t for t in TecnicoService.get_all({'status': 'Ativo'}) if t.total_a_pagar > 0]
+            # If get_all returns pagination, iteration works on .items usually?
+            # Let's fix this to be safe. We need a list of all active technicians.
+            # Better to use Tecnico.query directly or a specific service method "get_all_list"
+            # However, looking at previous code, it seems it was iterating the result of get_all(). 
+            # Let's assume for now we need to fetch all active without pagination.
+            # TecnicoService.get_all(filters={'status':'Ativo'}, page=1, per_page=1000).items
+            
+            # Using query directly for safety as per my knowledge of the service
+            from ..models import Tecnico
+            todos_tecnicos = Tecnico.query.filter_by(status='Ativo').all()
+            
+            tecnicos_display = [t for t in todos_tecnicos if t.tecnico_principal_id is None and t.total_agregado > 0]
+            return render_template('pagamento_gerar.html', tecnicos=tecnicos_display, error=error)
         return redirect(url_for('financeiro.pagamentos'))
     
-    tecnicos = [t for t in TecnicoService.get_all({'status': 'Ativo'}) if t.total_a_pagar > 0]
-    return render_template('pagamento_gerar.html', tecnicos=tecnicos, error=None)
+    # GET: Listar apenas CHEFES que têm valores a receber (próprio ou de subs)
+    from ..models import Tecnico
+    todos_tecnicos = Tecnico.query.filter_by(status='Ativo').all()
+    
+    tecnicos_display = []
+    for t in todos_tecnicos:
+        # Regra 1: Se tem chefe, não aparece na lista (o pagamento vai pro chefe)
+        if t.tecnico_principal_id is not None:
+            continue
+            
+        # Regra 2: Mostra se tiver algo a receber no total (Agregado)
+        if t.total_agregado > 0:
+            tecnicos_display.append(t)
+            
+    return render_template('pagamento_gerar.html', tecnicos=tecnicos_display, error=None)
 
 @financeiro_bp.route('/pagamentos/<int:id>')
 @login_required

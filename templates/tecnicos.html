@@ -13,13 +13,56 @@
 <!-- Filters -->
 <div class="card mb-4">
     <div class="card-body">
-        <form class="row g-3 footer-filters">
-            <div class="col-md-3">
+        <form class="row g-3 footer-filters" id="filterForm">
+            <!-- Saved Views & Tag Filter Row -->
+            <div class="col-12 d-flex justify-content-between align-items-center mb-2">
+                <div class="d-flex gap-2 align-items-center">
+                    {% if saved_views %}
+                    <div class="dropdown">
+                        <button class="btn btn-outline-secondary dropdown-toggle btn-sm" type="button"
+                            data-bs-toggle="dropdown">
+                            <i class="bi bi-bookmark-star"></i> Vistas Salvas
+                        </button>
+                        <ul class="dropdown-menu">
+                            {% for view in saved_views %}
+                            <li>
+                                <div class="d-flex justify-content-between align-items-center pe-2">
+                                    <a class="dropdown-item"
+                                        href="{{ url_for('operacional.tecnicos') }}?{{ view.query_string }}">
+                                        {{ view.name }}
+                                    </a>
+                                    <button type="button" class="btn btn-link text-danger p-0 btn-delete-view"
+                                        data-view-id="{{ view.id }}" onclick="deleteView(event, {{ view.id }})"
+                                        style="font-size: 0.8rem;">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="saveCurrentView()">
+                    <i class="bi bi-bookmark-plus"></i> Salvar Filtro Atual
+                </button>
+            </div>
+
+            <div class="col-md-2">
                 <label class="form-label">Estado</label>
                 <select name="estado" class="form-select">
                     <option value="">Todos</option>
                     {% for e in estados %}
                     <option value="{{ e }}" {% if estado_filter==e %}selected{% endif %}>{{ e }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Tag</label>
+                <select name="tag" class="form-select">
+                    <option value="">Todas</option>
+                    {% for t in available_tags %}
+                    <option value="{{ t.nome }}" {% if tag_filter==t.nome %}selected{% endif %}>{{ t.nome }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -40,7 +83,7 @@
                     <option value="Pago" {% if pagamento_filter=='Pago' %}selected{% endif %}>Pago</option>
                 </select>
             </div>
-            <div class="col-md-3 d-flex align-items-end gap-2">
+            <div class="col-md-2 d-flex align-items-end gap-2">
                 <button type="submit" class="btn btn-primary w-100">
                     <i class="bi bi-search"></i> Filtrar
                 </button>
@@ -57,7 +100,7 @@
     <div class="card-body p-0">
         {% if tecnicos %}
         <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
+            <table class="table table-hover align-middle mb-0 tabular-nums">
                 <thead>
                     <tr>
                         <th class="ps-4">ID</th>
@@ -72,13 +115,28 @@
                 <tbody>
                     {% for tecnico in tecnicos %}
                     <tr>
-                        <td class="ps-4"><span class="badge-tecnico">{{ tecnico.id_tecnico }}</span></td>
+                        <td class="ps-4">
+                            <span class="badge-tecnico copy-text" title="Clique para copiar"
+                                data-copy="{{ tecnico.id_tecnico }}">
+                                {{ tecnico.id_tecnico }}
+                            </span>
+                        </td>
                         <td>
                             <div class="d-flex flex-column">
                                 <a href="{{ url_for('operacional.tecnico_detalhes', id=tecnico.id) }}"
                                     class="text-decoration-none fw-bold text-body">
                                     {{ tecnico.nome }}
                                 </a>
+                                <div class="d-flex gap-1 mt-1">
+                                    {% if tecnico.tags_list %}
+                                    {% for tag in tecnico.tags_list %}
+                                    <span class="badge rounded-pill"
+                                        style="font-size: 0.6rem; background-color: {{ tag.cor }}; opacity: 0.8;">
+                                        {{ tag.nome }}
+                                    </span>
+                                    {% endfor %}
+                                    {% endif %}
+                                </div>
                                 {% if tecnico.tecnico_principal %}
                                 <small class="text-muted" style="font-size: 0.75rem;">
                                     <i class="bi bi-arrow-return-right"></i> {{ tecnico.tecnico_principal.nome }}
@@ -167,4 +225,52 @@
         {% endif %}
     </div>
 </div>
+
+<script>
+    async function saveCurrentView() {
+        const name = prompt("Nome para esta visualização de filtro:");
+        if (!name) return;
+
+        // Build Query String from current URL or Form
+        const queryString = window.location.search.substring(1);
+
+        try {
+            const response = await fetch('/api/views/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    page_route: 'tecnicos',
+                    name: name,
+                    query_string: queryString
+                })
+            });
+
+            if (response.ok) {
+                alert('Filtro salvo com sucesso!');
+                window.location.reload();
+            } else {
+                alert('Erro ao salvar filtro.');
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Erro de conexão.');
+        }
+    }
+
+    async function deleteView(event, id) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!confirm('Deseja excluir este filtro salvo?')) return;
+
+        try {
+            const response = await fetch(`/api/views/${id}/delete`, { method: 'POST' });
+            if (response.ok) {
+                window.location.reload();
+            } else {
+                alert('Erro ao excluir.');
+            }
+        } catch (e) { console.error(e); }
+    }
+</script>
+
 {% endblock %}

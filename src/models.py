@@ -108,6 +108,21 @@ class Tecnico(db.Model):
         return self.get_total_a_pagar()
     
     @property
+    def total_agregado(self):
+        """
+        Soma o valor pendente do próprio técnico + valor pendente de todos os seus sub-técnicos.
+        Usado para mostrar ao Chefe quanto ele vai receber no total.
+        """
+        # Valor próprio
+        total = self.total_a_pagar
+        
+        # Valor dos filhos (recursão de 1 nível ou loop)
+        for sub in self.sub_tecnicos:
+            total += sub.total_a_pagar
+            
+        return total
+
+    @property
     def pending_chamados_list(self):
         """Helper to get all pending chamados objects efficiently."""
         if self.tecnico_principal_id:

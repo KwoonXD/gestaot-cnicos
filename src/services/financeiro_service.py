@@ -142,6 +142,10 @@ class FinanceiroService:
         
         if not tecnico:
             return None, "Técnico não encontrado."
+
+        # TRAVA DE SEGURANÇA: Subordinados não recebem pagamento direto
+        if tecnico.tecnico_principal_id is not None:
+            return None, f"Este técnico é subordinado a {tecnico.tecnico_principal.nome}. Gere o pagamento para o chefe."
             
         # Get unpaid completed chamados (not yet assigned to a payment) for the Tecnico
         chamados_proprios = tecnico.chamados.filter(

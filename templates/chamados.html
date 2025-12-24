@@ -10,19 +10,41 @@
     </a>
 </div>
 
-<!-- Saved Views Toolbar -->
-<div class="mb-3 d-flex gap-2 overflow-auto pb-2">
-    {% for view in saved_views %}
-    <a href="{{ url_for('operacional.chamados') }}{{ view.query_string }}"
-        class="btn btn-outline-secondary btn-sm rounded-pill d-flex align-items-center gap-2">
-        <span>{{ view.name }}</span>
-        <!-- Optional: Delete button logic could go here -->
-    </a>
-    {% endfor %}
+<!-- Saved Views Dropdown & Actions -->
+<div class="mb-3 d-flex justify-content-between align-items-center">
+    <div class="d-flex gap-2 align-items-center">
+        {% if saved_views %}
+        <div class="dropdown">
+            <button class="btn btn-outline-secondary dropdown-toggle btn-sm" type="button" data-bs-toggle="dropdown">
+                <i class="bi bi-bookmark-star"></i> Vistas Salvas
+            </button>
+            <ul class="dropdown-menu">
+                {% for view in saved_views %}
+                <li>
+                    <div class="d-flex justify-content-between align-items-center pe-2">
+                        <a class="dropdown-item" href="{{ url_for('operacional.chamados') }}?{{ view.query_string }}">
+                            {{ view.name }}
+                        </a>
+                        <button type="button" class="btn btn-link text-danger p-0 btn-delete-view"
+                            onclick="deleteView(event, {{ view.id }})" style="font-size: 0.8rem;">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+
+    <button type="button" class="btn btn-sm btn-outline-primary" onclick="saveCurrentView()">
+        <i class="bi bi-bookmark-plus"></i> Salvar Filtro Atual
+    </button>
 </div>
 
 <div class="filter-section">
     <form method="GET" action="{{ url_for('operacional.chamados') }}" class="row g-3">
+
         <div class="col-md-3">
             <label class="form-label">Técnico</label>
             <select name="tecnico" class="form-select">
@@ -213,11 +235,11 @@
 {% block scripts %}
 <script>
     // Save View Logic
-    document.getElementById('btnSaveView').addEventListener('click', async () => {
+    async function saveCurrentView() {
         const name = prompt("Nome do Filtro:");
         if (!name) return;
 
-        const queryString = window.location.search;
+        const queryString = window.location.search.substring(1); // Remove '?'
         if (!queryString) {
             alert("Aplique um filtro primeiro.");
             return;
@@ -243,7 +265,23 @@
             console.error(e);
             alert("Erro ao conectar.");
         }
-    });
+    }
+
+    async function deleteView(event, id) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!confirm('Deseja excluir este filtro salvo?')) return;
+
+        try {
+            const response = await fetch(`/api/views/${id}/delete`, { method: 'POST' });
+            if (response.ok) {
+                window.location.reload();
+            } else {
+                alert('Erro ao excluir.');
+            }
+        } catch (e) { console.error(e); }
+    }
+
 
     // Offcanvas Logic
     const offcanvasEl = document.getElementById('offcanvasTecnico');

@@ -161,6 +161,7 @@
         </div>
     </div>
 
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
     <script>
         // Micro-interaction: Loading state on form submit
         document.addEventListener('submit', function (e) {
@@ -176,80 +177,8 @@
                 submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
             }
         });
-
-        // Lógica Robusta de Dark Mode
-        const toggleButton = document.getElementById('theme-toggle');
-        const icon = toggleButton.querySelector('i');
-        const html = document.documentElement;
-
-        function setTheme(theme) {
-            // Ativa o modo escuro no Bootstrap (Nativo)
-            html.setAttribute('data-bs-theme', theme);
-            // Ativa o modo escuro no CSS Customizado
-            html.setAttribute('data-theme', theme);
-
-            localStorage.setItem('theme', theme);
-
-            // Atualiza ícone
-            if (theme === 'dark') {
-                icon.classList.remove('bi-moon-stars');
-                icon.classList.add('bi-sun');
-            } else {
-                icon.classList.remove('bi-sun');
-                icon.classList.add('bi-moon-stars');
-            }
-        }
-
-        // Carregar preferência salva ou padrão do sistema
-        const savedTheme = localStorage.getItem('theme');
-        const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-
-        if (savedTheme) {
-            setTheme(savedTheme);
-        } else if (systemPrefersDark) {
-            setTheme('dark');
-        }
-
-        // Evento de clique
-        toggleButton.addEventListener('click', () => {
-            const currentTheme = html.getAttribute('data-bs-theme') || 'light';
-            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-            setTheme(newTheme);
-        });
-
-        // Click-to-Copy Logic
-        document.querySelectorAll('.copy-trigger').forEach(trigger => {
-            trigger.addEventListener('click', function () {
-                const value = this.getAttribute('data-value');
-                if (!value) return;
-
-                navigator.clipboard.writeText(value).then(() => {
-                    const originalIcon = this.innerHTML;
-                    this.innerHTML = '<i class="bi bi-check-lg text-success"></i>';
-                    setTimeout(() => {
-                        this.innerHTML = originalIcon;
-                    }, 2000);
-                });
-            });
-        });
-
-        // Command Palette (Ctrl+K)
-        document.addEventListener('keydown', function (e) {
-            if (e.ctrlKey && e.key === 'k') {
-                e.preventDefault();
-                const modal = new bootstrap.Modal(document.getElementById('commandPaletteModal'));
-                modal.show();
-            }
-        });
-
-        // Focus input when modal opens
-        const commandModal = document.getElementById('commandPaletteModal');
-        if (commandModal) {
-            commandModal.addEventListener('shown.bs.modal', () => {
-                document.getElementById('commandInput').focus();
-            });
-        }
     </script>
+
     {% block scripts %}{% endblock %}
 </body>
 

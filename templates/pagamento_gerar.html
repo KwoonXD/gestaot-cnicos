@@ -41,11 +41,25 @@
                                 <td class="ps-4">
                                     <div class="fw-bold">{{ t.nome }}</div>
                                     <small class="text-muted">{{ t.id_tecnico }}</small>
+                                    {% if t.sub_tecnicos|length > 0 %}
+                                    <span class="badge bg-info text-dark"
+                                        title="Inclui {{ t.sub_tecnicos|length }} sub-técnicos">
+                                        + Subs
+                                    </span>
+                                    {% endif %}
                                 </td>
                                 <td>{{ t.localizacao }}</td>
                                 <td class="text-center"><span class="badge bg-secondary">{{
                                         t.total_atendimentos_nao_pagos }}</span></td>
-                                <td class="text-end text-danger fw-bold">R$ {{ "%.2f"|format(t.total_a_pagar) }}</td>
+                                <td class="text-end text-danger fw-bold">
+                                    R$ {{ "%.2f"|format(t.total_agregado)|replace('.', ',') }}
+                                    {% if t.total_a_pagar != t.total_agregado %}
+                                    <br>
+                                    <small class="text-muted" style="font-size: 0.75rem;">
+                                        (Próprio: R$ {{ "%.2f"|format(t.total_a_pagar)|replace('.', ',') }})
+                                    </small>
+                                    {% endif %}
+                                </td>
                                 <td class="text-end pe-4">
                                     <button class="btn btn-primary btn-sm btn-pagar" data-id="{{ t.id }}"
                                         data-bs-toggle="modal" data-bs-target="#paymentModal">

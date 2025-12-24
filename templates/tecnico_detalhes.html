@@ -98,7 +98,11 @@
             <div class="card-body">
                 <div class="detail-item">
                     <div class="label">ID do Técnico</div>
-                    <div class="value"><span class="badge-tecnico">{{ tecnico.id_tecnico }}</span></div>
+                    <div class="value">
+                        <span class="badge-tecnico copy-text" title="Copiar ID" data-copy="{{ tecnico.id_tecnico }}">
+                            {{ tecnico.id_tecnico }}
+                        </span>
+                    </div>
                 </div>
                 <div class="detail-item">
                     <div class="label">Contato</div>
@@ -144,7 +148,11 @@
                 </div>
                 <div class="detail-item">
                     <div class="label">Chave de Pagamento</div>
-                    <div class="value"><code>{{ tecnico.chave_pagamento or '-' }}</code></div>
+                    <div class="value">
+                        <code class="copy-text" title="Copiar Chave" data-copy="{{ tecnico.chave_pagamento or '' }}">
+                            {{ tecnico.chave_pagamento or '-' }}
+                        </code>
+                    </div>
                 </div>
             </div>
         </div>
@@ -199,7 +207,7 @@
                     class="btn btn-sm btn-outline-secondary">Ver Todos</a>
             </div>
             <div class="table-responsive">
-                <table class="table table-hover mb-0">
+                <table class="table table-hover mb-0 tabular-nums">
                     <thead>
                         <tr>
                             <th>Data</th>
@@ -243,7 +251,7 @@
             <div class="card-body">
                 {% if chamados %}
                 <div class="table-responsive">
-                    <table class="table table-sm table-hover">
+                    <table class="table table-sm table-hover tabular-nums">
                         <thead>
                             <tr>
                                 <th>ID</th>
@@ -303,7 +311,7 @@
             <div class="card-body">
                 {% if chamados %}
                 <div class="table-responsive">
-                    <table class="table table-sm table-hover">
+                    <table class="table table-sm table-hover tabular-nums">
                         <thead>
                             <tr>
                                 <th>ID</th>
@@ -362,7 +370,7 @@
             <div class="card-body">
                 {% if tecnico.lancamentos %}
                 <div class="table-responsive">
-                    <table class="table table-sm table-hover">
+                    <table class="table table-sm table-hover tabular-nums">
                         <thead>
                             <tr>
                                 <th>Data</th>
@@ -415,7 +423,7 @@
             <div class="card-body">
                 {% if pagamentos %}
                 <div class="table-responsive">
-                    <table class="table table-sm table-hover">
+                    <table class="table table-sm table-hover tabular-nums">
                         <thead>
                             <tr>
                                 <th>ID</th>
