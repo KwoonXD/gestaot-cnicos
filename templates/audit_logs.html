@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+
+{% block title %}Auditoria - Gestão de Técnicos{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <h5 class="card-title mb-3"><i class="bi bi-shield-check text-primary"></i> Filtros de Auditoria</h5>
+                <form method="GET" class="row g-3 align-items-end">
+                    <div class="col-md-3">
+                        <label for="user_id" class="form-label">Usuário</label>
+                        <select class="form-select" id="user_id" name="user_id">
+                            <option value="">Todos</option>
+                            {% for user in users %}
+                            <option value="{{ user.id }}" {% if selected_user==user.id %}selected{% endif %}>
+                                {{ user.username }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="model_name" class="form-label">Modelo</label>
+                        <input type="text" class="form-control" id="model_name" name="model_name"
+                            placeholder="Ex: Chamado, Tecnico" value="{{ selected_model or '' }}">
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-filter"></i> Filtrar
+                        </button>
+                    </div>
+                    <div class="col-md-2">
+                        <a href="{{ url_for('admin.auditoria') }}" class="btn btn-outline-secondary w-100">
+                            <i class="bi bi-x-circle"></i> Limpar
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="bg-light">
+                    <tr>
+                        <th class="ps-4">ID</th>
+                        <th>Data/Hora</th>
+                        <th>Usuário</th>
+                        <th>Ação</th>
+                        <th>Modelo Alvo</th>
+                        <th>Objeto ID</th>
+                        <th class="text-end pe-4">Detalhes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in pagination.items %}
+                    <tr>
+                        <td class="ps-4 fw-bold">#{{ log.id }}</td>
+                        <td>{{ log.timestamp.strftime('%d/%m/%Y %H:%M:%S') }}</td>
+                        <td>
+                            {% if log.user %}
+                            <span class="badge bg-light text-dark border">
+                                <i class="bi bi-person"></i> {{ log.user.username }}
+                            </span>
+                            {% else %}
+                            <span class="text-muted">Sistema</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if log.action == 'CREATE' %}
+                            <span
+                                class="badge bg-success bg-opacity-10 text-success border border-success">CREATE</span>
+                            {% elif log.action == 'UPDATE' %}
+                            <span
+                                class="badge bg-warning bg-opacity-10 text-warning border border-warning">UPDATE</span>
+                            {% elif log.action == 'DELETE' %}
+                            <span class="badge bg-danger bg-opacity-10 text-danger border border-danger">DELETE</span>
+                            {% else %}
+                            <span class="badge bg-secondary">{{ log.action }}</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ log.model_name }}</td>
+                        <td class="font-monospace">{{ log.object_id }}</td>
+                        <td class="text-end pe-4">
+                            <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal"
+                                data-bs-target="#logModal{{ log.id }}">
+                                <i class="bi bi-eye"></i> Ver
+                            </button>
+
+                            <!-- Modal -->
+                            <div class="modal fade" id="logModal{{ log.id }}" tabindex="-1" aria-hidden="true">
+                                <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title">Detalhes da Auditoria #{{ log.id }}</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"
+                                                aria-label="Close"></button>
+                                        </div>
+                                        <div class="modal-body text-start">
+                                            <div class="mb-3">
+                                                <strong>Modelo:</strong> {{ log.model_name }} <br>
+                                                <strong>ID do Objeto:</strong> {{ log.object_id }} <br>
+                                                <strong>Ação:</strong> {{ log.action }}
+                                            </div>
+                                            <hr>
+                                            <label class="form-label fw-bold">Alterações (JSON):</label>
+                                            <pre
+                                                class="bg-light p-3 rounded border"><code>{{ log.changes }}</code></pre>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center py-4 text-muted">Nenhum registro de auditoria encontrado.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    {% if pagination.pages > 1 %}
+    <div class="card-footer bg-white border-0 py-3">
+        <nav aria-label="Navegação de auditoria">
+            <ul class="pagination justification-content-center mb-0">
+                <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+                    <a class="page-link border-0"
+                        href="{{ url_for('admin.auditoria', page=pagination.prev_num, user_id=selected_user, model_name=selected_model) if pagination.has_prev else '#' }}">
+                        <i class="bi bi-chevron-left"></i>
+                    </a>
+                </li>
+                {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=1) %}
+                {% if page_num %}
+                <li class="page-item {% if page_num == pagination.page %}active{% endif %}">
+                    <a class="page-link border-0 rounded-circle mx-1"
+                        href="{{ url_for('admin.auditoria', page=page_num, user_id=selected_user, model_name=selected_model) }}">
+                        {{ page_num }}
+                    </a>
+                </li>
+                {% else %}
+                <li class="page-item disabled"><span class="page-link border-0">...</span></li>
+                {% endif %}
+                {% endfor %}
+                <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+                    <a class="page-link border-0"
+                        href="{{ url_for('admin.auditoria', page=pagination.next_num, user_id=selected_user, model_name=selected_model) if pagination.has_next else '#' }}">
+                        <i class="bi bi-chevron-right"></i>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

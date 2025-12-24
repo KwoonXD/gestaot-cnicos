@@ -49,6 +49,12 @@
                             <i class="bi bi-currency-dollar"></i> Financeiro
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'admin' in request.endpoint %}active{% endif %}"
+                            href="{{ url_for('admin.auditoria') }}">
+                            <i class="bi bi-eye"></i> Auditoria
+                        </a>
+                    </li>
                     {% endif %}
                 </ul>
                 <div class="d-flex align-items-center">
