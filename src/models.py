@@ -1,4 +1,5 @@
 from flask_sqlalchemy import SQLAlchemy
+import uuid
 from datetime import datetime, date
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
@@ -44,6 +45,8 @@ class Tecnico(db.Model):
     forma_pagamento = db.Column(db.String(50), nullable=True)
     chave_pagamento = db.Column(db.String(200), nullable=True)
     tecnico_principal_id = db.Column(db.Integer, db.ForeignKey('tecnicos.id'), nullable=True)
+
+    token_acesso = db.Column(db.String(36), unique=True, nullable=True, default=lambda: str(uuid.uuid4()))
     data_inicio = db.Column(db.Date, nullable=False)
     data_cadastro = db.Column(db.DateTime, default=datetime.utcnow)
     

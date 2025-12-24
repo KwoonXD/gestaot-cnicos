@@ -91,6 +91,8 @@ def create_app():
     app.register_blueprint(api_bp, url_prefix='/api')
     
     from .routes.admin_routes import admin_bp
+    from .routes.public_routes import public_bp
     app.register_blueprint(admin_bp, url_prefix='/admin')
+    app.register_blueprint(public_bp)
     
     return app
