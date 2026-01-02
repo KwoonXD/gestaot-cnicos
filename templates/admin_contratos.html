@@ -87,7 +87,8 @@
                                         <tbody>
                                             {% for servico in cliente.tipos_servico %}
                                             <tr>
-                                                <td class="align-middle">
+                                                <td class="align-middle editable-text" data-tipo="servico"
+                                                    data-id="{{ servico.id }}">
                                                     {{ servico.nome }}
                                                     {% if not servico.cobra_visita %}
                                                     <span class="badge bg-secondary bg-opacity-25 text-dark"
@@ -152,7 +153,8 @@
                                         <tbody>
                                             {% for item in cliente.itens_lpu %}
                                             <tr>
-                                                <td class="align-middle">{{ item.nome }}</td>
+                                                <td class="align-middle editable-text" data-tipo="lpu"
+                                                    data-id="{{ item.id }}">{{ item.nome }}</td>
                                                 <td class="align-middle text-end">
                                                     <input type="number" step="0.01"
                                                         class="form-control form-control-sm text-end editable-valor"
@@ -382,6 +384,113 @@
             } finally {
                 this.disabled = false;
             }
+        });
+    });
+
+    // ========================================
+    // Inline Text Editing (Double Click)
+    // ========================================
+    document.querySelectorAll('.editable-text').forEach(td => {
+        td.addEventListener('dblclick', function () {
+            if (this.querySelector('input')) return; // Já está editando
+
+            const originalText = this.innerText.trim();
+            // Remove possible badge text if checking innerText roughly, but better to get just text node preferably.
+            // For simplicity, let's assume badge is separate or we handle it.
+            // Wait, service name has a badge inside. Let's be careful.
+
+            // Better approach: Get just the text content ignoring children (badges)
+            const clone = this.cloneNode(true);
+            clone.querySelectorAll('.badge').forEach(b => b.remove());
+            const currentName = clone.innerText.trim();
+
+            const tipo = this.dataset.tipo;
+            const id = this.dataset.id;
+
+            // Create input
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'form-control form-control-sm';
+            input.value = currentName;
+            input.style.width = '100%';
+
+            // Save original HTML to restore if cancelled
+            const originalHTML = this.innerHTML;
+
+            this.innerHTML = '';
+            this.appendChild(input);
+            input.focus();
+
+            const save = async () => {
+                const newName = input.value.trim();
+                if (!newName || newName === currentName) {
+                    this.innerHTML = originalHTML; // Cancel/Restore
+                    return;
+                }
+
+                // Optimistic update (text only, badges might be lost until refresh or we re-append)
+                // Actually, let's re-append badges from originalHTML if safe, or just text.
+                // The badge logic is in the template. If we update text, we might lose the badge if we just set innerText.
+                // Re-fetching full HTML is overkill.
+                // Let's just update the text node.
+
+                try {
+                    const response = await fetch(`/admin/config/update/${tipo}/${id}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ nome: newName })
+                    });
+
+                    if (response.ok) {
+                        // Success
+                        this.innerHTML = originalHTML;
+                        // Replace text content only
+                        // This is tricky mixed with badges. 
+                        // Simplest: Reload or intelligent replace.
+                        // Let's try intelligent replace of the text node.
+                        this.childNodes.forEach(node => {
+                            if (node.nodeType === 3 && node.nodeValue.trim()) {
+                                node.nodeValue = newName + ' ';
+                            }
+                        });
+
+                        // Fallback if empty (previously just badges?)
+                        if (!this.innerText.includes(newName)) {
+                            // If it was just text, innerHTML is fine.
+                            if (this.children.length === 0) this.innerText = newName;
+                            else {
+                                // Mixed content, tricky. Let's assume text is first.
+                                this.innerHTML = newName + (originalHTML.replace(currentName, ''));
+                                // This is risky. 
+                                // Robust way: Reload page or just tell user to refresh? 
+                                // Let's simply reload for correctness on complex structure, or careful DOM manip.
+                                // Actually, for this specific template, text is before badge.
+                                const badge = originalHTML.match(/<span class="badge.*?>.*?<\/span>/);
+                                this.innerHTML = newName + (badge ? ' ' + badge[0] : '');
+                            }
+                        }
+
+                        // Visual success
+                        this.classList.add('bg-success', 'bg-opacity-10');
+                        setTimeout(() => this.classList.remove('bg-success', 'bg-opacity-10'), 1000);
+
+                    } else {
+                        throw new Error('Erro');
+                    }
+                } catch (e) {
+                    alert('Erro ao salvar.');
+                    this.innerHTML = originalHTML;
+                }
+            };
+
+            input.addEventListener('blur', save);
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    input.blur();
+                } else if (e.key === 'Escape') {
+                    this.innerHTML = originalHTML;
+                }
+            });
         });
     });
 

@@ -115,5 +115,27 @@ document.addEventListener('DOMContentLoaded', () => {
             }, 1500);
         }
     });
+
+    // --- Table Density Toggle ---
+    const densityBtn = document.getElementById('btnDensityToggle');
+    const table = document.querySelector('.table');
+
+    if (densityBtn && table) {
+        // Load state
+        const isCompact = localStorage.getItem('tableDensity') === 'compact';
+        if (isCompact) {
+            table.classList.add('table-compact');
+            densityBtn.classList.add('active');
+        }
+
+        // Toggle
+        densityBtn.addEventListener('click', () => {
+            table.classList.toggle('table-compact');
+            const isActive = table.classList.contains('table-compact');
+
+            densityBtn.classList.toggle('active', isActive);
+            localStorage.setItem('tableDensity', isActive ? 'compact' : 'normal');
+        });
+    }
 });
 

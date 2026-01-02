@@ -141,6 +141,14 @@ main {
     border-bottom: 1px solid var(--bs-border-color);
 }
 
+/* Tabela Compacta (Controlled by JS) */
+.table-compact th,
+.table-compact td {
+    padding-top: 0.4rem;
+    padding-bottom: 0.4rem;
+    font-size: 0.85rem;
+}
+
 .font-numeric {
     font-variant-numeric: tabular-nums;
     font-family: 'Inter', sans-serif;
@@ -259,6 +267,12 @@ main {
     width: 100%;
 }
 
+.skeleton-table-row {
+    height: 3rem;
+    width: 100%;
+    margin-bottom: 0.5rem;
+}
+
 /* Botão de Cópia */
 .copy-text,
 .copy-trigger {
@@ -297,7 +311,7 @@ main {
     border-top: 1px solid var(--bs-border-color);
 }
 
-/* Mobile */
+/* Mobile - Sticky Actions */
 @media (max-width: 768px) {
     .navbar {
         padding: 0.5rem 0;
@@ -311,7 +325,37 @@ main {
     .table th {
         padding: 0.75rem;
     }
+
+    /* Bottom Sheet / Sticky Actions */
+    .mobile-action-bar {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background-color: var(--bs-card-bg);
+        /* Respeita dark mode */
+        padding: 1rem;
+        box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.1);
+        z-index: 1050;
+        border-top: 1px solid var(--bs-border-color);
+        display: flex;
+        gap: 0.5rem;
+        justify-content: stretch;
+    }
+
+    .mobile-action-bar .btn {
+        flex: 1;
+        /* Botões ocupam largura total */
+        padding: 0.8rem;
+        font-size: 1rem;
+    }
+
+    /* Espaço extra no final da página para não cobrir conteúdo */
+    body {
+        padding-bottom: 80px;
+    }
 }
+
 
 /* --- LAYOUT SIDEBAR (2025 STYLE) --- */
 
@@ -496,3 +540,4 @@ main {
         background: rgba(245, 158, 11, 0.1);
         color: #b45309;
     }
+}

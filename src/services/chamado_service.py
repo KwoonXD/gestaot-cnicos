@@ -1,45 +1,12 @@
-from ..models import db, Chamado, Tecnico
+from ..models import db, Chamado, Tecnico, CatalogoServico, ItemLPU, Cliente
 from datetime import datetime
 from .audit_service import AuditService
 import uuid
 import re
+from sqlalchemy.orm import joinedload
+from sqlalchemy import or_
 
 class ChamadoService:
-    LPU_LIST = {
-        # Reparo / Itens básicos
-        'Scanner': 180.0,
-        'CPU gerencia': 250.0,
-        'Monitor': 200.0,
-        'Teclado pdv': 250.0,
-        'Impressora Fiscal': 280.0,
-        'Memoria ram': 300.0,
-        'SSD/HD': 300.0,
-        'Cabo Scanner Zebra': 180.0,
-        'Cabo USB p/ Impressora 2mt': 38.70,
-        'HDMI': 43.86,
-        'VGA': 47.30,
-        'Cabo de força tripolar': 38.70,
-        'Cabo de força bipolar': 30.96,
-        'Cabo de força p/ fonte ATX': 38.70,
-        'Cabo de força SATA': 43.77,
-        'Cabo SATA': 27.43,
-        'Patch cord 3mt': 35.24,
-        'Conector RJ 45': 2.06,
-        'Conector RJ11': 2.06,
-        'Fonte CPU Interna mini': 300.00,
-        'Fonte Externa': 180.00,
-        
-        # Revenda / Peças Novas
-        'Scanner BR520 (Novo)': 289.00,
-        'CPU gerencia (Novo)': 1000.00,
-        'CPU PDV (Novo)': 1350.00,
-        'Monitor (Novo)': 500.00,
-        'Teclado GERTEC 44 (Novo)': 700.90,
-        'Impressora Fiscal MP4200 HS (Novo)': 515.00,
-        'Placa mãe (Novo)': 600.00,
-        'Gaveta GD56 M (Novo)': 289.00,
-        'Cabeça impressão (Novo)': 2300.00
-    }
 
     @staticmethod
     def extract_fsa_code(input_str):
@@ -80,7 +47,7 @@ class ChamadoService:
             return 2.0  # Default
         
         try:
-            from datetime import datetime, timedelta
+            from datetime import timedelta
             
             # Parse strings
             inicio = datetime.strptime(hora_inicio.strip(), '%H:%M')
@@ -102,7 +69,11 @@ class ChamadoService:
 
     @staticmethod
     def get_all(filters=None, page=1, per_page=20):
-        query = Chamado.query.join(Tecnico)
+        # Eager load Tecnico to avoid N+1
+        query = Chamado.query.options(joinedload(Chamado.tecnico))
+        
+        # Join explicitly for filtering if needed
+        query = query.join(Tecnico)
         
         if filters:
             if filters.get('tecnico_id'):
@@ -118,7 +89,6 @@ class ChamadoService:
                     query = query.filter(Chamado.pago == False)
             if filters.get('search'):
                 s = filters['search']
-                from sqlalchemy import or_
                 query = query.filter(
                     or_(
                         Chamado.codigo_chamado.ilike(f"%{s}%"),
@@ -133,217 +103,313 @@ class ChamadoService:
         )
 
     @staticmethod
+    def get_relatorio_faturamento(cliente_id, data_inicio, data_fim, estado=None):
+        """
+        Gera relatório financeiro de fechamento por contrato.
+        Filtra por Cliente (obrigatório), Range de Datas e Estado (opcional).
+        """
+        # Base query joining necessary tables
+        query = Chamado.query.join(Chamado.catalogo_servico).join(CatalogoServico.cliente)
+        query = query.filter(Cliente.id == int(cliente_id))
+        
+        # Date filter
+        query = query.filter(Chamado.data_atendimento >= data_inicio)
+        query = query.filter(Chamado.data_atendimento <= data_fim)
+        
+        # Join tecnico for State info
+        query = query.join(Chamado.tecnico)
+        
+        # State filter (Optional)
+        if estado:
+            query = query.filter(Tecnico.estado == estado)
+            
+        chamados = query.order_by(Chamado.data_atendimento).all()
+        
+        itens = []
+        total_geral = 0.0
+        
+        for c in chamados:
+            # Confia no valor calculado na criação (já considera Retorno=0 se regra aplicada)
+            # Mas como segurança, se for nulo, usa 0
+            valor_final = float(c.valor_receita_total or 0.0)
+            
+            nome_servico = c.catalogo_servico.nome if c.catalogo_servico else c.tipo_servico
+            
+            itens.append({
+                'data': c.data_atendimento.strftime('%d/%m/%Y'),
+                'codigo': c.codigo_chamado or f"ID-{c.id}",
+                'cidade': c.cidade,
+                'estado': c.tecnico.estado if c.tecnico else 'PB', # Default PB is fallback
+                'servico': nome_servico,
+                'valor': valor_final
+            })
+            total_geral += valor_final
+            
+        return {
+            'itens': itens,
+            'total_geral': total_geral,
+            'periodo': f"{data_inicio.strftime('%d/%m/%Y')} a {data_fim.strftime('%d/%m/%Y')}"
+        }
+
+    @staticmethod
     def create_multiplo(dados_logistica, lista_fsas):
         """
-        Cria múltiplos chamados usando CatalogoServico unificado.
-        - Usa catalogo_servico_id com regras de negócio (exige_peca, paga_tecnico)
-        - Registra horas_trabalhadas para cálculo de horas extras
-        - Gera batch_id para agrupar FSAs
-        - Sanitiza códigos FSA (extrai de URLs do Jira)
+        Cria múltiplos chamados com cálculo de RECEITA (por FSA) e CUSTO (Lote).
+        
+        Regras de Custo (Técnico):
+        - Index 0 (Principal): Recebe Base + Horas Extras.
+        - Index > 0 (Adicional): Recebe valor adicional fixo.
+        - Horas Extras: (Total Horas - 2) * Valor Hora Adicional.
         """
-        import datetime
         from datetime import datetime as dt
-        from src.models import CatalogoServico, ItemLPU
         from flask_login import current_user
         
-        tecnico_id = int(dados_logistica['tecnico_id'])
-        cidade = dados_logistica.get('cidade', 'Indefinido')
-        cliente_nome = dados_logistica.get('cliente_nome', '')
-        data_str = dados_logistica['data_atendimento']
-        data_atend = dt.strptime(data_str, '%Y-%m-%d').date()
-        
-        # Gerar UUID único para este lote de atendimento
-        batch_id = str(uuid.uuid4())
-        
-        # Capturar o usuário criador se disponível
-        created_by = None
         try:
-            if current_user and current_user.is_authenticated:
-                created_by = current_user.id
-        except:
-            pass
-        
-        created_chamados = []
-        
-        for index, fsa in enumerate(lista_fsas):
-            chamado = Chamado()
+            tecnico_id = int(dados_logistica['tecnico_id'])
             
-            # --- Dados Cabeçalho ---
-            chamado.tecnico_id = tecnico_id
-            chamado.cidade = cidade
-            chamado.data_atendimento = data_atend
-            chamado.status_chamado = 'Finalizado'
-            chamado.batch_id = batch_id
-            chamado.status_validacao = 'Pendente'
-            chamado.created_by_id = created_by
-            
-            # --- Dados Item (FSA) - COM SANITIZAÇÃO ---
-            raw_code = fsa.get('codigo_chamado', '')
-            chamado.codigo_chamado = ChamadoService.extract_fsa_code(raw_code)
-            
-            # --- CatalogoServico (Novo modelo unificado) ---
-            catalogo_id = fsa.get('catalogo_servico_id')
-            catalogo = None
-            servico_nome = ''
-            servico_valor = 0.0
-            
-            if catalogo_id:
-                catalogo = CatalogoServico.query.get(catalogo_id)
-                if catalogo:
-                    servico_nome = catalogo.nome
-                    servico_valor = float(catalogo.valor_receita or 0)
-                    chamado.catalogo_servico_id = catalogo.id
-            
-            chamado.tipo_servico = servico_nome
-            chamado.tipo_resolucao = f"{servico_nome} ({cliente_nome})" if cliente_nome else servico_nome
-            chamado.is_adicional = (index > 0)
-            
-            # --- Horas Trabalhadas (calculado de hora_inicio/hora_fim) ---
-            hora_inicio = fsa.get('hora_inicio', '')
-            hora_fim = fsa.get('hora_fim', '')
-            chamado.hora_inicio = hora_inicio
-            chamado.hora_fim = hora_fim
-            chamado.horas_trabalhadas = ChamadoService.calculate_hours_worked(hora_inicio, hora_fim)
-            
-            # --- Regras de RECEITA (Faturamento para WT) ---
-            # Se o catálogo não paga técnico (ex: Improdutivo), receita é 0
-            # Mas a empresa ainda fatura o valor do catálogo
-            rec_servico = servico_valor
-            
-            # Receita Peça
-            rec_peca = 0.0
-            peca_id = fsa.get('peca_id')
-            peca_nome = fsa.get('peca_usada', '')
-            peca_valor = float(fsa.get('peca_valor', 0))
-            
-            if peca_id:
-                item_lpu = ItemLPU.query.get(peca_id)
-                if item_lpu:
-                    peca_nome = item_lpu.nome
-                    peca_valor = float(item_lpu.valor_receita or 0)
-            elif peca_nome and peca_nome.strip():
-                # Fallback para lista hardcoded se não tiver ID
-                for nome, valor in ChamadoService.LPU_LIST.items():
-                    if nome.lower() in peca_nome.lower():
-                        peca_valor = valor
-                        break
-            
-            rec_peca = peca_valor if peca_nome and peca_nome.strip() else 0.0
-            
-            chamado.valor_receita_servico = rec_servico
-            chamado.valor_receita_peca = rec_peca
-            chamado.valor_receita_total = rec_servico + rec_peca
-            chamado.peca_usada = peca_nome.strip() if peca_nome and peca_nome.strip() else None
-            
-            # --- Dados de Peça/Custo ---
-            chamado.fornecedor_peca = fsa.get('fornecedor_peca', 'Empresa')
-            if chamado.fornecedor_peca == 'Tecnico':
-                chamado.custo_peca = float(fsa.get('custo_peca', 0.0))
-            else:
-                chamado.custo_peca = 0.0
+            # Buscar Técnico para pegar valores de contrato
+            tecnico = Tecnico.query.get(tecnico_id)
+            if not tecnico:
+                raise ValueError(f"Técnico ID {tecnico_id} não encontrado.")
                 
-            chamado.valor = chamado.valor_receita_total
+            cidade = dados_logistica.get('cidade', 'Indefinido')
+            cliente_nome = dados_logistica.get('cliente_nome', '')
+            data_str = dados_logistica['data_atendimento']
+            data_atend = dt.strptime(data_str, '%Y-%m-%d').date()
             
-            db.session.add(chamado)
-            created_chamados.append(chamado)
+            # Gerar UUID único para este lote
+            batch_id = str(uuid.uuid4())
             
-        db.session.commit()
-        
-        AuditService.log_change(
-            model_name='Chamado',
-            object_id=batch_id,
-            action='CREATE_MULTI',
-            changes=f"Created {len(created_chamados)} FSAs for Tech {tecnico_id} in {cidade}"
-        )
+            # Capturar criador
+            created_by = getattr(current_user, 'id', None) if current_user and current_user.is_authenticated else None
             
-        return created_chamados
+            # --- 1. Calcular Horas Totais do Lote ---
+            # Assume-se que o horário é compartilhado ou pega do primeiro
+            # O front-end geralmente manda o horário em todos, ou no cabeçalho.
+            # Vamos pegar do primeiro item da lista para referência do lote.
+            primeiro_fsa = lista_fsas[0] if lista_fsas else {}
+            hora_inicio_str = primeiro_fsa.get('hora_inicio', '')
+            hora_fim_str = primeiro_fsa.get('hora_fim', '')
+            
+            horas_reais = ChamadoService.calculate_hours_worked(hora_inicio_str, hora_fim_str)
+            horas_franquia = 2.0
+            
+            # Cálculo HE
+            horas_extras = max(0.0, horas_reais - horas_franquia)
+            valor_hora_adicional = float(tecnico.valor_hora_adicional or 30.0) # Default R$ 30 se nulo
+            valor_pagar_he = horas_extras * valor_hora_adicional
+            
+            created_chamados = []
+            
+            for index, fsa in enumerate(lista_fsas):
+                chamado = Chamado()
+                is_principal = (index == 0)
+                
+                # --- Cabeçalho ---
+                chamado.tecnico_id = tecnico.id
+                chamado.cidade = cidade
+                chamado.data_atendimento = data_atend
+                chamado.status_chamado = 'Concluído'
+                chamado.batch_id = batch_id
+                chamado.status_validacao = 'Pendente'
+                chamado.created_by_id = created_by
+                
+                # --- Item / FSA ---
+                raw_code = fsa.get('codigo_chamado', '')
+                chamado.codigo_chamado = ChamadoService.extract_fsa_code(raw_code)
+                chamado.is_adicional = not is_principal
+                
+                # --- Horários ---
+                chamado.hora_inicio = hora_inicio_str
+                chamado.hora_fim = hora_fim_str
+                chamado.horas_trabalhadas = horas_reais
+                
+                # --- RECEITA (Valor que a empresa ganha) ---
+                # Busca Serviço no Banco
+                catalogo_id = fsa.get('catalogo_servico_id')
+                catalogo = CatalogoServico.query.get(catalogo_id) if catalogo_id else None
+                
+                servico_nome = catalogo.nome if catalogo else 'Serviço Avulso'
+                
+                # --- Lógica de Retorno/SPARE (Smart Billing) ---
+                rec_servico = float(catalogo.valor_receita) if catalogo else 0.0
+                
+                is_retorno = False
+                if servico_nome:
+                    nome_lower = servico_nome.lower()
+                    if 'retorno' in nome_lower or 'spare' in nome_lower:
+                        is_retorno = True
+                
+                # Default peca vars
+                rec_peca = 0.0
+                peca_nome = fsa.get('peca_usada', '') or ''
+                # fornecedor_peca is retrieved later but needed for logic
+                fornecedor_peca_input = fsa.get('fornecedor_peca', 'Empresa') 
+                
+                if is_retorno:
+                    # Se for retorno, SÓ cobra se a peça for do Cliente
+                    if fornecedor_peca_input == 'Cliente':
+                         # Cobra valor cheio (mantém rec_servico)
+                         pass
+                    else:
+                         # Isenção de cobrança
+                         rec_servico = 0.0
+                
+                chamado.catalogo_servico_id = catalogo.id if catalogo else None
+                chamado.tipo_servico = servico_nome
+                chamado.tipo_resolucao = f"{servico_nome} ({cliente_nome})" if cliente_nome else servico_nome
+                
+                # Busca Peça no Banco ou Fallback
+                rec_peca = 0.0
+                peca_nome = fsa.get('peca_usada', '') or ''
+                peca_id = fsa.get('peca_id')
+                
+                if peca_id:
+                    item_lpu = ItemLPU.query.get(peca_id)
+                    if item_lpu:
+                        peca_nome = item_lpu.nome
+                        rec_peca = float(item_lpu.valor_receita or 0)
+                elif peca_nome.strip():
+                    # Fallback por nome
+                    item_lpu = ItemLPU.query.filter(ItemLPU.nome.ilike(f"%{peca_nome.strip()}%")).first()
+                    if item_lpu:
+                         rec_peca = float(item_lpu.valor_receita or 0)
+                         peca_nome = item_lpu.nome
+
+                chamado.valor_receita_servico = rec_servico
+                chamado.valor_receita_peca = rec_peca
+                chamado.valor_receita_total = rec_servico + rec_peca
+                chamado.peca_usada = peca_nome.strip() if peca_nome.strip() else None
+                chamado.valor = chamado.valor_receita_total # Compatibilidade legado
+                
+                # --- CUSTO (Quanto paga ao técnico) ---
+                custo_atribuido = 0.0
+                
+                if is_principal:
+                    # Principal: Base + HE
+                    base = float(tecnico.valor_por_atendimento or 120.0)
+                    custo_atribuido = base + valor_pagar_he
+                    chamado.valor_horas_extras = valor_pagar_he # Registra quanto foi HE
+                else:
+                    # Adicional: Valor fixo extra (loja ou ativo)
+                    custo_atribuido = float(tecnico.valor_adicional_loja or 20.0)
+                    chamado.valor_horas_extras = 0.0
+                
+                chamado.custo_atribuido = custo_atribuido
+                
+                # Custo Peça (Se comprada pelo técnico)
+                chamado.fornecedor_peca = fsa.get('fornecedor_peca', 'Empresa')
+                chamado.custo_peca = float(fsa.get('custo_peca', 0.0)) if chamado.fornecedor_peca == 'Tecnico' else 0.0
+                
+                db.session.add(chamado)
+                created_chamados.append(chamado)
+                
+            db.session.commit()
+            
+            msg_audit = f"Batch {batch_id}: {len(created_chamados)} FSAs. Tech: {tecnico.nome}. Total Time: {horas_reais}h. HE: R$ {valor_pagar_he:.2f}"
+            AuditService.log_change(
+                model_name='Chamado',
+                object_id=batch_id,
+                action='CREATE_MULTI_V2',
+                changes=msg_audit
+            )
+                
+            return created_chamados
+            
+        except Exception as e:
+            db.session.rollback()
+            print(f"Erro critical em create_multiplo: {e}")
+            raise e
 
     @staticmethod
     def aprovar_chamados(ids_lista, user_id):
         """Aprova chamados para processamento financeiro"""
-        from datetime import datetime
-        count = 0
-        for chamado_id in ids_lista:
-            chamado = Chamado.query.get(chamado_id)
-            if chamado and chamado.status_validacao == 'Pendente':
-                chamado.status_validacao = 'Aprovado'
-                chamado.data_validacao = datetime.utcnow()
-                chamado.validado_por_id = user_id
-                count += 1
-        db.session.commit()
-        
-        AuditService.log_change(
-            model_name='Chamado',
-            object_id=str(ids_lista),
-            action='APPROVE_BATCH',
-            changes=f"Approved {count} chamados"
-        )
-        return count
+        try:
+            count = 0
+            for chamado_id in ids_lista:
+                chamado = Chamado.query.get(chamado_id)
+                if chamado and chamado.status_validacao == 'Pendente':
+                    chamado.status_validacao = 'Aprovado'
+                    chamado.data_validacao = datetime.utcnow()
+                    chamado.validado_por_id = user_id
+                    count += 1
+            db.session.commit()
+            
+            AuditService.log_change(
+                model_name='Chamado',
+                object_id=str(ids_lista),
+                action='APPROVE_BATCH',
+                changes=f"Approved {count} chamados"
+            )
+            return count
+        except Exception as e:
+            db.session.rollback()
+            raise e
 
     @staticmethod
     def rejeitar_chamados(ids_lista, user_id, motivo):
         """
         Rejeita chamados com HARD DELETE e notifica o criador.
-        - Captura dados para notificação
-        - Cria Notification para o criador
-        - DELETA permanentemente o chamado
         """
-        from datetime import datetime
         from src.models import Notification
         
-        deleted_count = 0
-        notified_users = []
-        deleted_codes = []
-        
-        for chamado_id in ids_lista:
-            chamado = Chamado.query.get(chamado_id)
-            if not chamado:
-                continue
+        try:
+            deleted_count = 0
+            notified_users = []
+            deleted_codes = []
             
-            # Capturar dados antes de deletar
-            codigo = chamado.codigo_chamado or f"ID-{chamado.id}"
-            data_atend = chamado.data_atendimento.strftime('%d/%m/%Y') if chamado.data_atendimento else 'N/A'
-            tecnico_nome = chamado.tecnico.nome if chamado.tecnico else 'N/A'
-            cidade = chamado.cidade or 'N/A'
-            created_by = chamado.created_by_id
+            for chamado_id in ids_lista:
+                chamado = Chamado.query.get(chamado_id)
+                if not chamado:
+                    continue
+                
+                # Capturar dados antes de deletar
+                codigo = chamado.codigo_chamado or f"ID-{chamado.id}"
+                data_atend = chamado.data_atendimento.strftime('%d/%m/%Y') if chamado.data_atendimento else 'N/A'
+                tecnico_nome = chamado.tecnico.nome if chamado.tecnico else 'N/A'
+                cidade = chamado.cidade or 'N/A'
+                created_by = chamado.created_by_id
+                
+                # Criar notificação se houver criador
+                if created_by:
+                    notif = Notification(
+                        user_id=created_by,
+                        title=f"⚠️ Chamado {codigo} Rejeitado",
+                        message=f"O chamado foi rejeitado por um supervisor.\n\n"
+                                f"📋 Código: {codigo}\n"
+                                f"📅 Data: {data_atend}\n"
+                                f"👤 Técnico: {tecnico_nome}\n"
+                                f"📍 Local: {cidade}\n\n"
+                                f"❌ Motivo: {motivo}",
+                        notification_type='danger'
+                    )
+                    db.session.add(notif)
+                    notified_users.append(created_by)
+                
+                # HARD DELETE
+                db.session.delete(chamado)
+                deleted_count += 1
+                deleted_codes.append(codigo)
             
-            # Criar notificação se houver criador
-            if created_by:
-                notif = Notification(
-                    user_id=created_by,
-                    title=f"⚠️ Chamado {codigo} Rejeitado",
-                    message=f"O chamado foi rejeitado por um supervisor.\n\n"
-                            f"📋 Código: {codigo}\n"
-                            f"📅 Data: {data_atend}\n"
-                            f"👤 Técnico: {tecnico_nome}\n"
-                            f"📍 Local: {cidade}\n\n"
-                            f"❌ Motivo: {motivo}",
-                    notification_type='danger'
-                )
-                db.session.add(notif)
-                notified_users.append(created_by)
+            db.session.commit()
             
-            # HARD DELETE
-            db.session.delete(chamado)
-            deleted_count += 1
-            deleted_codes.append(codigo)
-        
-        db.session.commit()
-        
-        # Audit log
-        AuditService.log_change(
-            model_name='Chamado',
-            object_id=str(deleted_codes),
-            action='REJECT_DELETE',
-            changes=f"Hard-deleted {deleted_count} chamados. Motivo: {motivo[:100]}"
-        )
-        
-        return deleted_count
+            # Audit log
+            AuditService.log_change(
+                model_name='Chamado',
+                object_id=str(deleted_codes),
+                action='REJECT_DELETE',
+                changes=f"Hard-deleted {deleted_count} chamados. Motivo: {motivo[:100]}"
+            )
+            
+            return deleted_count
+        except Exception as e:
+            db.session.rollback()
+            raise e
 
     @staticmethod
     def get_pendentes_validacao():
         """Retorna chamados pendentes de validação"""
-        return Chamado.query.filter(
+        return Chamado.query.options(joinedload(Chamado.tecnico)).filter(
             Chamado.status_validacao == 'Pendente'
         ).order_by(Chamado.data_atendimento.desc()).all()
 
@@ -355,7 +421,8 @@ class ChamadoService:
         """
         from collections import defaultdict
         
-        query = Chamado.query.filter(Chamado.batch_id.isnot(None))
+        # Eager load tecnico
+        query = Chamado.query.options(joinedload(Chamado.tecnico)).filter(Chamado.batch_id.isnot(None))
         
         if filters:
             if filters.get('tecnico_id'):
@@ -399,7 +466,7 @@ class ChamadoService:
         from collections import defaultdict
         
         # Busca apenas pendentes
-        chamados = Chamado.query.filter(
+        chamados = Chamado.query.options(joinedload(Chamado.tecnico)).filter(
             Chamado.status_validacao == 'Pendente',
             Chamado.batch_id.isnot(None)
         ).order_by(Chamado.data_atendimento.desc(), Chamado.id).all()
@@ -464,82 +531,87 @@ class ChamadoService:
     @staticmethod
     def aprovar_batch(batch_id, user_id):
         """Aprova todos os chamados de um lote"""
-        from datetime import datetime
-        
-        chamados = Chamado.query.filter_by(
-            batch_id=batch_id,
-            status_validacao='Pendente'
-        ).all()
-        
-        count = 0
-        for c in chamados:
-            c.status_validacao = 'Aprovado'
-            c.data_validacao = datetime.utcnow()
-            c.validado_por_id = user_id
-            count += 1
-        
-        db.session.commit()
-        
-        AuditService.log_change(
-            model_name='Chamado',
-            object_id=batch_id,
-            action='APPROVE_BATCH',
-            changes=f"Approved {count} chamados in batch"
-        )
-        return count
+        try:
+            chamados = Chamado.query.filter_by(
+                batch_id=batch_id,
+                status_validacao='Pendente'
+            ).all()
+            
+            count = 0
+            for c in chamados:
+                c.status_validacao = 'Aprovado'
+                c.data_validacao = datetime.utcnow()
+                c.validado_por_id = user_id
+                count += 1
+            
+            db.session.commit()
+            
+            AuditService.log_change(
+                model_name='Chamado',
+                object_id=batch_id,
+                action='APPROVE_BATCH',
+                changes=f"Approved {count} chamados in batch"
+            )
+            return count
+        except Exception as e:
+            db.session.rollback()
+            raise e
 
     @staticmethod
     def rejeitar_batch(batch_id, user_id, motivo):
         """Rejeita e deleta todos os chamados de um lote, notificando criadores"""
-        from datetime import datetime
         from src.models import Notification
         
-        chamados = Chamado.query.filter_by(
-            batch_id=batch_id,
-            status_validacao='Pendente'
-        ).all()
-        
-        deleted_count = 0
-        deleted_codes = []
-        
-        for chamado in chamados:
-            # Capturar dados antes de deletar
-            codigo = chamado.codigo_chamado or f"ID-{chamado.id}"
-            data_atend = chamado.data_atendimento.strftime('%d/%m/%Y') if chamado.data_atendimento else 'N/A'
-            tecnico_nome = chamado.tecnico.nome if chamado.tecnico else 'N/A'
-            cidade = chamado.cidade or 'N/A'
-            created_by = chamado.created_by_id
+        try:
+            chamados = Chamado.query.filter_by(
+                batch_id=batch_id,
+                status_validacao='Pendente'
+            ).all()
             
-            # Criar notificação se houver criador
-            if created_by:
-                notif = Notification(
-                    user_id=created_by,
-                    title=f"⚠️ Chamado {codigo} Rejeitado",
-                    message=f"O chamado foi rejeitado por um supervisor.\n\n"
-                            f"📋 Código: {codigo}\n"
-                            f"📅 Data: {data_atend}\n"
-                            f"👤 Técnico: {tecnico_nome}\n"
-                            f"📍 Local: {cidade}\n\n"
-                            f"❌ Motivo: {motivo}",
-                    notification_type='danger'
-                )
-                db.session.add(notif)
+            deleted_count = 0
+            deleted_codes = []
             
-            # HARD DELETE
-            db.session.delete(chamado)
-            deleted_count += 1
-            deleted_codes.append(codigo)
-        
-        db.session.commit()
-        
-        AuditService.log_change(
-            model_name='Chamado',
-            object_id=batch_id,
-            action='REJECT_BATCH_DELETE',
-            changes=f"Hard-deleted {deleted_count} chamados. Motivo: {motivo[:100]}"
-        )
-        
-        return deleted_count
+            for chamado in chamados:
+                # Capturar dados antes de deletar
+                codigo = chamado.codigo_chamado or f"ID-{chamado.id}"
+                data_atend = chamado.data_atendimento.strftime('%d/%m/%Y') if chamado.data_atendimento else 'N/A'
+                tecnico_nome = chamado.tecnico.nome if chamado.tecnico else 'N/A'
+                cidade = chamado.cidade or 'N/A'
+                created_by = chamado.created_by_id
+                
+                # Criar notificação se houver criador
+                if created_by:
+                    notif = Notification(
+                        user_id=created_by,
+                        title=f"⚠️ Chamado {codigo} Rejeitado",
+                        message=f"O chamado foi rejeitado por um supervisor.\n\n"
+                                f"📋 Código: {codigo}\n"
+                                f"📅 Data: {data_atend}\n"
+                                f"👤 Técnico: {tecnico_nome}\n"
+                                f"📍 Local: {cidade}\n\n"
+                                f"❌ Motivo: {motivo}",
+                        notification_type='danger'
+                    )
+                    db.session.add(notif)
+                
+                # HARD DELETE
+                db.session.delete(chamado)
+                deleted_count += 1
+                deleted_codes.append(codigo)
+            
+            db.session.commit()
+            
+            AuditService.log_change(
+                model_name='Chamado',
+                object_id=batch_id,
+                action='REJECT_BATCH_DELETE',
+                changes=f"Hard-deleted {deleted_count} chamados. Motivo: {motivo[:100]}"
+            )
+            
+            return deleted_count
+        except Exception as e:
+            db.session.rollback()
+            raise e
 
     @staticmethod
     def get_by_id(id):
@@ -565,91 +637,102 @@ class ChamadoService:
 
     @staticmethod
     def update(id, data):
-        chamado = ChamadoService.get_by_id(id)
-        
-        # Capture old state for audit
-        old_data = {
+        try:
+            chamado = ChamadoService.get_by_id(id)
+            
+            # Capture old state for audit
+            old_data = {
+                'status': chamado.status_chamado,
+                'valor_receita': float(chamado.valor_receita_servico or 0),
+                'loja': chamado.loja
+            }
+            
+            horario_inicio = data.get('horario_inicio')
+            horario_saida = data.get('horario_saida')
+            
+            chamado.tecnico_id = int(data['tecnico_id'])
+            chamado.codigo_chamado = data.get('codigo_chamado', '')
+            chamado.loja = data.get('loja', '')
+            chamado.data_atendimento = datetime.strptime(data['data_atendimento'], '%Y-%m-%d').date()
+            chamado.horario_inicio = datetime.strptime(horario_inicio, '%H:%M').time() if horario_inicio else None
+            chamado.horario_saida = datetime.strptime(horario_saida, '%H:%M').time() if horario_saida else None
+            chamado.fsa_codes = data.get('fsa_codes', '')
+            chamado.tipo_servico = data['tipo_servico']
+            chamado.tipo_resolucao = data.get('tipo_resolucao', 'Resolvido')
+            chamado.status_chamado = data.get('status_chamado', 'Pendente')
+            chamado.endereco = data.get('endereco', '')
+            chamado.observacoes = data.get('observacoes', '')
+            
+            # Financeiro Updates 
+            rec_servico = float(data.get('valor_receita_servico', 0.0))
+            rec_peca = float(data.get('valor_receita_peca', 0.0))
+            
+            chamado.valor_receita_servico = rec_servico
+            chamado.peca_usada = data.get('peca_usada')
+            chamado.valor_receita_peca = rec_peca
+            chamado.custo_peca = float(data.get('custo_peca', 0.0))
+            chamado.fornecedor_peca = data.get('fornecedor_peca', 'Empresa')
+            
+            chamado.valor = rec_servico + rec_peca
+            
+            # Calculate changes
+            changes = {}
+            new_data = {
             'status': chamado.status_chamado,
-            'valor_receita': float(chamado.valor_receita_servico or 0),
+            'valor_receita': float(chamado.valor_receita_servico),
             'loja': chamado.loja
-        }
-        
-        horario_inicio = data.get('horario_inicio')
-        horario_saida = data.get('horario_saida')
-        
-        chamado.tecnico_id = int(data['tecnico_id'])
-        chamado.codigo_chamado = data.get('codigo_chamado', '')
-        chamado.loja = data.get('loja', '')
-        chamado.data_atendimento = datetime.strptime(data['data_atendimento'], '%Y-%m-%d').date()
-        chamado.horario_inicio = datetime.strptime(horario_inicio, '%H:%M').time() if horario_inicio else None
-        chamado.horario_saida = datetime.strptime(horario_saida, '%H:%M').time() if horario_saida else None
-        chamado.fsa_codes = data.get('fsa_codes', '')
-        chamado.tipo_servico = data['tipo_servico']
-        chamado.tipo_resolucao = data.get('tipo_resolucao', 'Resolvido')
-        chamado.status_chamado = data.get('status_chamado', 'Pendente')
-        chamado.endereco = data.get('endereco', '')
-        chamado.observacoes = data.get('observacoes', '')
-        
-        # Financeiro Updates
-        rec_servico, rec_peca = ChamadoService._calcular_receita(data)
-        chamado.valor_receita_servico = rec_servico
-        chamado.peca_usada = data.get('peca_usada')
-        chamado.valor_receita_peca = rec_peca
-        chamado.custo_peca = float(data.get('custo_peca', 0.0))
-        chamado.fornecedor_peca = data.get('fornecedor_peca', 'Empresa')
-        
-        chamado.valor = rec_servico + rec_peca
-        
-        # Calculate changes
-        changes = {}
-        new_data = {
-           'status': chamado.status_chamado,
-           'valor_receita': float(chamado.valor_receita_servico),
-           'loja': chamado.loja
-        }
-        
-        for k, v in new_data.items():
-            if v != old_data[k]:
-                changes[k] = {'old': old_data[k], 'new': v}
-        
-        if changes:
-             AuditService.log_change(
-                model_name='Chamado',
-                object_id=chamado.id,
-                action='UPDATE',
-                changes=changes
-            )
-        
-        db.session.commit()
-        return chamado
+            }
+            
+            for k, v in new_data.items():
+                if v != old_data[k]:
+                    changes[k] = {'old': old_data[k], 'new': v}
+            
+            if changes:
+                AuditService.log_change(
+                    model_name='Chamado',
+                    object_id=chamado.id,
+                    action='UPDATE',
+                    changes=changes
+                )
+            
+            db.session.commit()
+            return chamado
+        except Exception as e:
+            db.session.rollback()
+            raise e
 
     @staticmethod
     def update_status(id, status):
-        chamado = ChamadoService.get_by_id(id)
-        chamado.status_chamado = status
-        db.session.commit()
-        return chamado
+        try:
+            chamado = ChamadoService.get_by_id(id)
+            chamado.status_chamado = status
+            db.session.commit()
+            return chamado
+        except Exception as e:
+            db.session.rollback()
+            raise e
 
     @staticmethod
     def delete(id, user_id):
-        chamado = ChamadoService.get_by_id(id)
-        
-        # Security Check
-        if chamado.pago or chamado.pagamento_id:
-            raise ValueError("Não é possível excluir um chamado que já foi pago ou está em lote fechado.")
+        try:
+            chamado = ChamadoService.get_by_id(id)
             
-        # Log before delete (since object will be gone)
-        # However, for delete usually we log the ID and maybe a snapshot. 
-        # AuditService.log_change(action='DELETE')
-        AuditService.log_change(
-            model_name='Chamado',
-            object_id=chamado.id,
-            action='DELETE',
-            changes=f"Deleted Chamado {chamado.codigo_chamado or chamado.id}"
-        )
-        
-        db.session.delete(chamado)
-        db.session.commit()
+            # Security Check
+            if chamado.pago or chamado.pagamento_id:
+                raise ValueError("Não é possível excluir um chamado que já foi pago ou está em lote fechado.")
+                
+            AuditService.log_change(
+                model_name='Chamado',
+                object_id=chamado.id,
+                action='DELETE',
+                changes=f"Deleted Chamado {chamado.codigo_chamado or chamado.id}"
+            )
+            
+            db.session.delete(chamado)
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            raise e
 
     @staticmethod
     def get_evolution_stats():
@@ -715,14 +798,12 @@ class ChamadoService:
         ).count()
         
         chamados_por_status = {}
-        # Avoid direct import of constant to prevent circular dep, or pass it in. 
-        # Assuming we can just query distinct or use list.
-        # We'll use the query grouping for efficiency in real app, but for now simple:
         for status in ['Pendente', 'Em Andamento', 'Concluído', 'Cancelado']:
              chamados_por_status[status] = Chamado.query.filter_by(status_chamado=status).count()
              
         return {
             'chamados_mes': chamados_mes,
             'chamados_por_status': chamados_por_status,
-            'ultimos': Chamado.query.order_by(Chamado.data_criacao.desc()).limit(5).all()
+            # Eager load tecnico in dashboard ultimos to prevent N+1 in dashboard
+            'ultimos': Chamado.query.options(joinedload(Chamado.tecnico)).order_by(Chamado.data_criacao.desc()).limit(5).all()
         }

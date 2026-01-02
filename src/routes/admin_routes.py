@@ -298,21 +298,28 @@ def deletar_config(tipo, id):
 @login_required
 @admin_required
 def atualizar_config(tipo, id):
-    """Atualizar valor de serviço ou LPU via AJAX"""
+    """Atualizar valor ou nome de serviço/LPU via AJAX"""
     try:
         data = request.get_json()
-        valor = float(data.get('valor', 0))
         
+        # Determine model
         if tipo == 'servico':
             item = TipoServico.query.get_or_404(id)
-            item.valor_receita = valor
         elif tipo == 'lpu':
             item = ItemLPU.query.get_or_404(id)
-            item.valor_receita = valor
         else:
             return jsonify({'error': 'Tipo inválido'}), 400
+            
+        # Update fields if present
+        if 'valor' in data:
+            item.valor_receita = float(data['valor'])
+            
+        if 'nome' in data:
+            if not data['nome'].strip():
+                return jsonify({'error': 'Nome não pode ser vazio'}), 400
+            item.nome = data['nome'].strip()
         
         db.session.commit()
-        return jsonify({'success': True, 'valor': valor})
+        return jsonify({'success': True})
     except Exception as e:
         return jsonify({'error': str(e)}), 500

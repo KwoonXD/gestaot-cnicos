@@ -56,13 +56,10 @@
 
                 <a href="{{ url_for('operacional.atendimentos') }}"
                     class="list-group-item list-group-item-action {{ 'active' if request.endpoint == 'operacional.atendimentos' }}">
-                    <i class="bi bi-collection me-2"></i> Atendimentos
+                    <i class="bi bi-check-circle me-2"></i> Fila de Validação
                 </a>
 
-                <a href="{{ url_for('operacional.validacao_fila') }}"
-                    class="list-group-item list-group-item-action d-flex justify-content-between align-items-center {{ 'active' if 'validacao' in request.endpoint }}">
-                    <span><i class="bi bi-check2-square me-2"></i> Fila de Validação</span>
-                </a>
+
 
                 {% if current_user.is_admin %}
                 <div class="my-3 border-top"></div>
@@ -71,6 +68,11 @@
                 <a href="{{ url_for('financeiro.pagamentos') }}"
                     class="list-group-item list-group-item-action {{ 'active' if 'financeiro' in request.endpoint }}">
                     <i class="bi bi-wallet2 me-2"></i> Financeiro
+                </a>
+
+                <a href="{{ url_for('operacional.relatorio_fechamento') }}"
+                    class="list-group-item list-group-item-action {{ 'active' if 'relatorios' in request.endpoint }}">
+                    <i class="bi bi-file-earmark-bar-graph me-2"></i> Relatórios
                 </a>
 
                 <a href="{{ url_for('admin.users_list') }}"

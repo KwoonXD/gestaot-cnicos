@@ -202,7 +202,7 @@
                             <div class="modal fade" id="pagarModal{{ pagamento.id }}" tabindex="-1">
                                 <div class="modal-dialog">
                                     <div class="modal-content">
-                                        <form method="POST"
+                                        <form method="POST" enctype="multipart/form-data"
                                             action="{{ url_for('financeiro.marcar_como_pago', id=pagamento.id) }}">
                                             <div class="modal-header">
                                                 <h5 class="modal-title">Confirmar Pagamento</h5>
@@ -220,38 +220,39 @@
                                                     pagamento.periodo_fim.strftime('%d/%m/%Y') }}<br>
                                                     <strong>Chamados:</strong> {{ pagamento.numero_chamados }}
                                                 </p>
-                                                <div class="mb-3">
-                                                    <label class="form-label">Observações</label>
-                                                    <textarea name="observacoes" class="form-control" rows="2"
-                                                        placeholder="Ex: Pago via PIX"></textarea>
-                                                </div>
+                                                placeholder="Ex: Pago via PIX"></textarea>
                                             </div>
-                                            <div class="modal-footer">
-                                                <button type="button" class="btn btn-secondary"
-                                                    data-bs-dismiss="modal">Cancelar</button>
-                                                <button type="submit" class="btn btn-success">
-                                                    <i class="bi bi-check"></i> Confirmar Pagamento
-                                                </button>
+                                            <div class="mb-3">
+                                                <label class="form-label">Comprovante (Opcional)</label>
+                                                <input type="file" name="comprovante" class="form-control">
                                             </div>
-                                        </form>
                                     </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary"
+                                            data-bs-dismiss="modal">Cancelar</button>
+                                        <button type="submit" class="btn btn-success">
+                                            <i class="bi bi-check"></i> Confirmar Pagamento
+                                        </button>
+                                    </div>
+                                    </form>
                                 </div>
                             </div>
-                            {% endif %}
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                {% else %}
-                <div class="empty-state text-center py-5">
-                    <i class="bi bi-journal-x display-1 text-muted opacity-50"></i>
-                    <h4 class="mt-4 text-muted fw-bold">Nenhum histórico encontrado</h4>
-                    <p class="text-muted">Os pagamentos realizados aparecerão aqui.</p>
                 </div>
                 {% endif %}
+                {% endfor %}
+                </tbody>
+                </table>
             </div>
+            {% else %}
+            <div class="empty-state text-center py-5">
+                <i class="bi bi-journal-x display-1 text-muted opacity-50"></i>
+                <h4 class="mt-4 text-muted fw-bold">Nenhum histórico encontrado</h4>
+                <p class="text-muted">Os pagamentos realizados aparecerão aqui.</p>
+            </div>
+            {% endif %}
         </div>
     </div>
+</div>
 </div>
 
 <!-- Modal for New Payment Generation (from Tab 1) -->

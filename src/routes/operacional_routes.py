@@ -2,8 +2,9 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 import csv
 import io
+from sqlalchemy import func
 # CORREÇÃO AQUI: Importamos Chamado, Pagamento e Tecnico explicitamente
-from ..models import ESTADOS_BRASIL, FORMAS_PAGAMENTO, Chamado, Pagamento, Tecnico, Tag
+from ..models import ESTADOS_BRASIL, FORMAS_PAGAMENTO, Chamado, Pagamento, Tecnico, Tag, Cliente, db
 from ..services.tecnico_service import TecnicoService
 from ..services.chamado_service import ChamadoService
 from ..services.financeiro_service import FinanceiroService
@@ -39,7 +40,7 @@ def importar_tecnicos():
 
 STATUS_TECNICO = ['Ativo', 'Inativo']
 TIPOS_SERVICO = ['Americanas', 'Escolas', 'Telmex', 'Telmex Urgente', 'Esteira']
-STATUS_CHAMADO = ['Pendente', 'Em Andamento', 'Concluído', 'Cancelado']
+STATUS_CHAMADO = ['Pendente', 'Em Andamento', 'Concluído', 'SPARE', 'Cancelado']
 
 @operacional_bp.route('/')
 @login_required
@@ -90,6 +91,21 @@ def tecnicos():
     # For now, we can get unique tags to show in filter dropdown if desired.
     available_tags = TagService.get_all_unique()
 
+    # Capilaridade Stats
+    tecnicos_por_estado = db.session.query(
+        Tecnico.estado, func.count(Tecnico.id)
+    ).filter(
+        Tecnico.status == 'Ativo',
+        Tecnico.estado != ''
+    ).group_by(Tecnico.estado).all()
+    
+    # Convert to dict for easier access if needed, or list of tuples is fine
+    # Let's clean up state names if null
+    tecnicos_por_estado = [(e if e else 'Indefinido', c) for e, c in tecnicos_por_estado]
+    
+    # Sort by count desc
+    tecnicos_por_estado.sort(key=lambda x: x[1], reverse=True)
+
     return render_template('tecnicos.html',
         tecnicos=tecnicos_list,
         pagination=pagination,  # Passamos o objeto de paginação
@@ -104,7 +120,8 @@ def tecnicos():
         search_filter=filters['search'],
         tag_filter=filters['tag'],
         saved_views=saved_views,
-        available_tags=available_tags
+        available_tags=available_tags,
+        tecnicos_por_estado=tecnicos_por_estado
     )
 
 # Task 3: Relatórios (Exportação CSV)
@@ -335,23 +352,19 @@ def novo_chamado():
                  chamado_mock.tecnico = None
             
             tecnicos = TecnicoService.get_all({'status': 'Ativo'})
-            lpu_items = sorted(ChamadoService.LPU_LIST.keys())
             return render_template('chamado_form.html',
                 chamado=chamado_mock,
                 tecnicos=tecnicos,
                 tipos_servico=TIPOS_SERVICO,
-                status_options=STATUS_CHAMADO,
-                lpu_items=lpu_items
+                status_options=STATUS_CHAMADO
             )
     
     tecnicos = TecnicoService.get_all({'status': 'Ativo'})
-    lpu_items = sorted(ChamadoService.LPU_LIST.keys())
     return render_template('chamado_form.html',
         chamado=None,
         tecnicos=tecnicos,
         tipos_servico=TIPOS_SERVICO,
-        status_options=STATUS_CHAMADO,
-        lpu_items=lpu_items
+        status_options=STATUS_CHAMADO
     )
 
 @operacional_bp.route('/chamados/<int:id>/editar', methods=['GET', 'POST'])
@@ -368,13 +381,11 @@ def editar_chamado(id):
             flash(f'Erro ao atualizar chamado: {str(e)}', 'danger')
     
     tecnicos = TecnicoService.get_all({'status': 'Ativo'})
-    lpu_items = sorted(ChamadoService.LPU_LIST.keys())
     return render_template('chamado_form.html',
         chamado=chamado,
         tecnicos=tecnicos,
         tipos_servico=TIPOS_SERVICO,
-        status_options=STATUS_CHAMADO,
-        lpu_items=lpu_items
+        status_options=STATUS_CHAMADO
     )
 
 @operacional_bp.route('/chamados/<int:id>/status', methods=['POST'])
@@ -453,55 +464,56 @@ def deletar_tecnico(id):
 
 
 # =============================================================================
-# FILA DE VALIDAÇÃO
+# FILA DE VALIDAÇÃO (LEGADO - 02/01/2026)
+# Substituído pela "Fila de Validação por Lote" (/atendimentos)
 # =============================================================================
 
-@operacional_bp.route('/validacao')
-@login_required
-def validacao_fila():
-    """Lista chamados pendentes de validação"""
-    chamados = ChamadoService.get_pendentes_validacao()
-    
-    # Contagem para badge
-    pendentes_count = len(chamados)
-    
-    return render_template('validacao_fila.html', 
-        chamados=chamados,
-        pendentes_count=pendentes_count
-    )
-
-
-@operacional_bp.route('/validar', methods=['POST'])
-@login_required
-def validar_chamados():
-    """Processa aprovação ou rejeição de chamados"""
-    try:
-        ids = request.form.getlist('chamado_ids')
-        acao = request.form.get('acao')
-        motivo = request.form.get('motivo', '').strip()
-        
-        if not ids:
-            flash('Nenhum chamado selecionado.', 'warning')
-            return redirect(url_for('operacional.validacao_fila'))
-        
-        ids_int = [int(i) for i in ids]
-        
-        if acao == 'aprovar':
-            count = ChamadoService.aprovar_chamados(ids_int, current_user.id)
-            flash(f'{count} chamado(s) aprovado(s) com sucesso!', 'success')
-        elif acao == 'rejeitar':
-            if not motivo:
-                flash('O motivo da rejeição é obrigatório.', 'danger')
-                return redirect(url_for('operacional.validacao_fila'))
-            count = ChamadoService.rejeitar_chamados(ids_int, current_user.id, motivo)
-            flash(f'{count} chamado(s) rejeitado(s) e excluídos permanentemente.', 'warning')
-        else:
-            flash('Ação inválida.', 'danger')
-            
-    except Exception as e:
-        flash(f'Erro ao processar validação: {str(e)}', 'danger')
-    
-    return redirect(url_for('operacional.validacao_fila'))
+# @operacional_bp.route('/validacao')
+# @login_required
+# def validacao_fila():
+#     """Lista chamados pendentes de validação"""
+#     chamados = ChamadoService.get_pendentes_validacao()
+#     
+#     # Contagem para badge
+#     pendentes_count = len(chamados)
+#     
+#     return render_template('validacao_fila.html', 
+#         chamados=chamados,
+#         pendentes_count=pendentes_count
+#     )
+# 
+# 
+# @operacional_bp.route('/validar', methods=['POST'])
+# @login_required
+# def validar_chamados():
+#     """Processa aprovação ou rejeição de chamados"""
+#     try:
+#         ids = request.form.getlist('chamado_ids')
+#         acao = request.form.get('acao')
+#         motivo = request.form.get('motivo', '').strip()
+#         
+#         if not ids:
+#             flash('Nenhum chamado selecionado.', 'warning')
+#             return redirect(url_for('operacional.validacao_fila'))
+#         
+#         ids_int = [int(i) for i in ids]
+#         
+#         if acao == 'aprovar':
+#             count = ChamadoService.aprovar_chamados(ids_int, current_user.id)
+#             flash(f'{count} chamado(s) aprovado(s) com sucesso!', 'success')
+#         elif acao == 'rejeitar':
+#             if not motivo:
+#                 flash('O motivo da rejeição é obrigatório.', 'danger')
+#                 return redirect(url_for('operacional.validacao_fila'))
+#             count = ChamadoService.rejeitar_chamados(ids_int, current_user.id, motivo)
+#             flash(f'{count} chamado(s) rejeitado(s) e excluídos permanentemente.', 'warning')
+#         else:
+#             flash('Ação inválida.', 'danger')
+#             
+#     except Exception as e:
+#         flash(f'Erro ao processar validação: {str(e)}', 'danger')
+#     
+#     return redirect(url_for('operacional.validacao_fila'))
 
 
 # =============================================================================
@@ -592,3 +604,105 @@ def ler_notificacao(id):
         db.session.commit()
     
     return jsonify({'success': True})
+
+# =============================================================================
+# RELATÓRIOS
+# =============================================================================
+
+@operacional_bp.route('/relatorios/fechamento')
+@login_required
+def relatorio_fechamento():
+    """Tela de Relatório de Fechamento por Contrato"""
+    from datetime import datetime, date
+    
+    # Filtros
+    cliente_id = request.args.get('cliente')
+    data_inicio_str = request.args.get('inicio')
+    data_fim_str = request.args.get('fim')
+    estado = request.args.get('estado')
+    
+    # Defaults
+    today = date.today()
+    if not data_inicio_str:
+        data_inicio = date(today.year, today.month, 1)
+        data_inicio_str = data_inicio.strftime('%Y-%m-%d')
+    else:
+        data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
+        
+    if not data_fim_str:
+        data_fim = today
+        data_fim_str = data_fim.strftime('%Y-%m-%d')
+    else:
+        data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date()
+        
+    # Dados para dropdowns
+    clientes = Cliente.query.filter_by(ativo=True).all()
+    
+    report_data = None
+    if cliente_id:
+        report_data = ChamadoService.get_relatorio_faturamento(
+            cliente_id, data_inicio, data_fim, estado
+        )
+        
+    return render_template('relatorios/fechamento.html',
+        clientes=clientes,
+        estados=ESTADOS_BRASIL,
+        report=report_data,
+        filters={
+            'cliente': int(cliente_id) if cliente_id else '',
+            'inicio': data_inicio_str,
+            'fim': data_fim_str,
+            'estado': estado or ''
+        }
+    )
+
+@operacional_bp.route('/relatorios/fechamento/exportar')
+@login_required
+def exportar_fechamento():
+    """Exporta CSV do fechamento"""
+    from datetime import datetime
+    
+    cliente_id = request.args.get('cliente')
+    data_inicio_str = request.args.get('inicio')
+    data_fim_str = request.args.get('fim')
+    estado = request.args.get('estado')
+    
+    if not cliente_id or not data_inicio_str or not data_fim_str:
+        flash('Filtros inválidos para exportação', 'danger')
+        return redirect(url_for('operacional.relatorio_fechamento'))
+        
+    data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
+    data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date()
+    
+    report_data = ChamadoService.get_relatorio_faturamento(
+        cliente_id, data_inicio, data_fim, estado
+    )
+    
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=';')
+    
+    # Header
+    writer.writerow(['Data', 'Código FSA', 'Cidade', 'Estado', 'Serviço', 'Valor Ticket'])
+    
+    # Rows
+    for item in report_data['itens']:
+        writer.writerow([
+            item['data'],
+            item['codigo'],
+            item['cidade'],
+            item['estado'],
+            item['servico'],
+            str(item['valor']).replace('.', ',')
+        ])
+        
+    # Footer
+    writer.writerow([])
+    writer.writerow(['', '', '', '', 'TOTAL GERAL', str(report_data['total_geral']).replace('.', ',')])
+    
+    filename = f"fechamento_contrato_{data_inicio_str}_{data_fim_str}.csv"
+    
+    return Response(
+        output.getvalue().encode('utf-8-sig'),
+        mimetype="text/csv",
+        headers={"Content-disposition": f"attachment; filename={filename}"}
+    )

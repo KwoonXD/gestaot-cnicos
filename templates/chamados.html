@@ -37,6 +37,9 @@
         {% endif %}
     </div>
 
+    <button type="button" class="btn btn-sm btn-outline-secondary" id="btnDensityToggle" title="Alternar Densidade">
+        <i class="bi bi-arrows-collapse"></i>
+    </button>
     <button type="button" class="btn btn-sm btn-outline-primary" onclick="saveCurrentView()">
         <i class="bi bi-bookmark-plus"></i> Salvar Filtro Atual
     </button>
@@ -144,18 +147,41 @@
                         <td>{{ chamado.data_atendimento.strftime('%d/%m/%Y') }}</td>
                         <td>{{ chamado.cidade or chamado.loja or chamado.localizacao or '-' }}</td>
                         <td>
-                            <span class="badge bg-light text-dark border">{{ chamado.tipo_resolucao or 'N/A' }}</span>
+                            <div class="d-flex flex-column gap-1">
+                                <span class="badge bg-light text-dark border">{{ chamado.tipo_resolucao or 'N/A'
+                                    }}</span>
+                                {% if chamado.status_chamado == 'Concluído' %}
+                                <span class="badge bg-success">Concluído</span>
+                                {% elif chamado.status_chamado == 'SPARE' %}
+                                <span class="badge bg-warning text-dark">SPARE</span>
+                                {% elif chamado.status_chamado == 'Pendente' %}
+                                <span class="badge bg-warning">Pendente</span>
+                                {% elif chamado.status_chamado == 'Cancelado' %}
+                                <span class="badge bg-danger">Cancelado</span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ chamado.status_chamado }}</span>
+                                {% endif %}
+                            </div>
                         </td>
                         <td>
                             <div class="d-flex flex-column gap-1">
                                 {% set receita = chamado.valor_receita_total if chamado.valor_receita_total else
                                 (chamado.valor_receita_servico|default(0) + chamado.valor_receita_peca|default(0)) %}
+
                                 {% if receita > 0 %}
                                 <span
                                     class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">
                                     Rec: R$ {{ "%.2f"|format(receita) }}
                                 </span>
+                                {% elif (chamado.status_chamado == 'Concluído' or chamado.status_chamado == 'SPARE') and
+                                receita == 0 %}
+                                <span
+                                    class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25"
+                                    title="Isento (Retorno/Garantia)">
+                                    <i class="bi bi-slash-circle me-1"></i> Isento
+                                </span>
                                 {% endif %}
+
                                 {% if chamado.custo_peca and chamado.custo_peca > 0 %}
                                 <span
                                     class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25">
@@ -177,7 +203,8 @@
                                 aria-label="Editar Chamado {{ chamado.codigo_chamado or chamado.id }}">
                                 <i class="bi bi-pencil" aria-hidden="true"></i>
                             </a>
-                            {% if chamado.status_chamado != 'Concluído' and chamado.status_chamado != 'Cancelado' %}
+                            {% if chamado.status_chamado != 'Concluído' and chamado.status_chamado != 'Cancelado' and
+                            chamado.status_chamado != 'SPARE' %}
                             <form method="POST"
                                 action="{{ url_for('operacional.atualizar_status_chamado', id=chamado.id) }}"
                                 class="d-inline">

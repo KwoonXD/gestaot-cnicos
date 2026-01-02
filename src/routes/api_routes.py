@@ -101,3 +101,53 @@ def top_tecnicos_volume():
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/tecnicos/<int:id>/pendencias')
+@login_required
+def tecnicos_pendencias(id):
+    """
+    Retorna os detalhes de pendências financeiras de um técnico específico.
+    Usado pelo modal 'Visualizar e Pagar' em pagamentos.html.
+    """
+    try:
+        tecnico = Tecnico.query.get_or_404(id)
+        
+        # Filtra chamados pendentes seguindo a regra rigorosa do Financeiro
+        chamados = Chamado.query.filter(
+            Chamado.tecnico_id == id,
+            Chamado.status_chamado.in_(['Concluído', 'SPARE']),
+            Chamado.status_validacao == 'Aprovado',
+            Chamado.pago == False,
+            Chamado.pagamento_id == None
+        ).order_by(Chamado.data_atendimento).all()
+        
+        chamados_data = []
+        total_pendente = 0.0
+        
+        for c in chamados:
+            valor = float(c.custo_atribuido or 0.0)
+            total_pendente += valor
+            
+            chamados_data.append({
+                'data': c.data_atendimento.strftime('%d/%m/%Y'),
+                'codigo': c.codigo_chamado or f"ID: {c.id}",
+                'fsa_codes': c.fsa_codes or '',
+                'tipo': c.tipo_servico or 'N/A',
+                'endereco': f"{c.cidade or ''}",
+                'valor': valor
+            })
+            
+        return jsonify({
+            'tecnico': {
+                'id': tecnico.id,
+                'nome': tecnico.nome,
+                'chave_pagamento': tecnico.chave_pagamento or 'Não cadastrada', 
+                'forma_pagamento': tecnico.forma_pagamento or 'N/A'
+            },
+            'total_pendente': total_pendente,
+            'chamados': chamados_data
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

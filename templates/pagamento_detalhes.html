@@ -11,6 +11,12 @@
             <li class="breadcrumb-item active">{{ pagamento.id_pagamento }}</li>
         </ol>
     </nav>
+    <style>
+        .bg-purple {
+            background-color: #6f42c1;
+            color: white;
+        }
+    </style>
     <div class="d-flex justify-content-between align-items-center">
         <h1>Detalhes do Pagamento</h1>
         {% if pagamento.status_pagamento != 'Pago' %}
@@ -22,6 +28,32 @@
 </div>
 
 <div class="row g-4">
+    <!-- Financial Summary Card (New) -->
+    <div class="col-12">
+        {% set total_faturar = chamados | sum(attribute='valor_receita_total') %}
+        {% set lucro_bruto = total_faturar - pagamento.valor_total %}
+        <div class="card bg-light border-0 shadow-sm">
+            <div class="card-body">
+                <div class="row text-center align-items-center">
+                    <div class="col-md-4 border-end">
+                        <small class="text-secondary text-uppercase fw-bold ls-1">Total Pago ao Técnico</small>
+                        <h3 class="text-danger mb-0 mt-2">R$ {{ "%.2f"|format(pagamento.valor_total) }}</h3>
+                    </div>
+                    <div class="col-md-4 border-end">
+                        <small class="text-secondary text-uppercase fw-bold ls-1">Faturamento Estimado</small>
+                        <h3 class="text-success mb-0 mt-2">R$ {{ "%.2f"|format(total_faturar) }}</h3>
+                    </div>
+                    <div class="col-md-4">
+                        <small class="text-secondary text-uppercase fw-bold ls-1">Resultado (Margem)</small>
+                        <h3 class="{% if lucro_bruto >= 0 %}text-primary{% else %}text-danger{% endif %} mb-0 mt-2">
+                            R$ {{ "%.2f"|format(lucro_bruto) }}
+                        </h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="col-lg-4">
         <div class="card">
             <div class="card-header">
@@ -78,6 +110,17 @@
                     <div class="value">{{ pagamento.data_pagamento.strftime('%d/%m/%Y') }}</div>
                 </div>
                 {% endif %}
+                {% if pagamento.comprovante_path %}
+                <div class="detail-item">
+                    <div class="label">Comprovante</div>
+                    <div class="value">
+                        <a href="{{ url_for('static', filename=pagamento.comprovante_path) }}" target="_blank"
+                            class="btn btn-sm btn-outline-info">
+                            <i class="bi bi-file-earmark-text"></i> Ver Comprovante
+                        </a>
+                    </div>
+                </div>
+                {% endif %}
                 {% if pagamento.observacoes %}
                 <div class="detail-item">
                     <div class="label">Observações</div>
@@ -100,38 +143,57 @@
             <div class="card-body">
                 {% if chamados %}
                 <div class="table-responsive">
-                    <table class="table table-hover">
+                    <table class="table table-hover align-middle">
                         <thead>
                             <tr>
                                 <th>ID</th>
                                 <th>Data</th>
                                 <th>Tipo</th>
                                 <th>Cliente</th>
-                                <th>Status</th>
-                                <th>Valor</th>
+                                <th>Composição do Valor</th>
+                                <th class="text-end">Custo Total</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for chamado in chamados %}
                             <tr>
-                                <td><code>{{ chamado.id_chamado }}</code></td>
-                                <td>{{ chamado.data_atendimento.strftime('%d/%m/%Y') }}</td>
-                                <td>{{ chamado.tipo_servico }}</td>
-                                <td>{{ chamado.cliente or '-' }}</td>
                                 <td>
-                                    <span
-                                        class="badge badge-status badge-{{ chamado.status_chamado|lower|replace(' ', '-') }}">
-                                        {{ chamado.status_chamado }}
-                                    </span>
+                                    <code>{{ chamado.codigo_chamado or chamado.id_chamado }}</code>
                                 </td>
-                                <td>R$ {{ "%.2f"|format(chamado.valor) }}</td>
+                                <td>{{ chamado.data_atendimento.strftime('%d/%m') }}</td>
+                                <td>{{ chamado.tipo_servico }}</td>
+                                <td>
+                                    {{ chamado.cliente or '-' }}
+                                    {% if chamado.status_chamado == 'SPARE' %}
+                                    <span class="badge bg-purple ms-1" title="Peça em trânsito/pendente">SPARE</span>
+                                    {% endif %}
+                                    {% if chamado.valor_receita_total == 0 and chamado.custo_atribuido > 0 %}
+                                    <span class="badge bg-secondary ms-1"
+                                        title="Retorno sem custo para o cliente">ISENTO</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if chamado.is_adicional %}
+                                    <span class="badge bg-info text-dark">Adicional (Posto/Peça)</span>
+                                    {% else %}
+                                    <span class="badge bg-success">Base (Visita)</span>
+                                    {% endif %}
+
+                                    {% if chamado.valor_horas_extras and chamado.valor_horas_extras > 0 %}
+                                    <span class="badge bg-warning text-dark">+ HE ({{
+                                        "%.2f"|format(chamado.valor_horas_extras) }})</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end font-monospace">R$ {{ "%.2f"|format(chamado.custo_atribuido or
+                                    chamado.valor) }}</td>
                             </tr>
                             {% endfor %}
                         </tbody>
                         <tfoot>
                             <tr class="table-light">
-                                <td colspan="5" class="text-end"><strong>Total:</strong></td>
-                                <td><strong>R$ {{ "%.2f"|format(pagamento.valor_total) }}</strong></td>
+                                <td colspan="5" class="text-end"><strong>Total a Pagar:</strong></td>
+                                <td class="text-end text-success fs-5"><strong>R$ {{
+                                        "%.2f"|format(pagamento.valor_total) }}</strong></td>
                             </tr>
                         </tfoot>
                     </table>
@@ -148,10 +210,11 @@
 </div>
 
 {% if pagamento.status_pagamento == 'Pendente' %}
-<div class="modal fade" id="pagarModal" tabindex="-1">
+<div class="modal fade" id="confirmPayModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
-            <form method="POST" action="{{ url_for('financeiro.marcar_como_pago', id=pagamento.id) }}">
+            <form method="POST" enctype="multipart/form-data"
+                action="{{ url_for('financeiro.marcar_como_pago', id=pagamento.id) }}">
                 <div class="modal-header">
                     <h5 class="modal-title">Confirmar Pagamento</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -168,6 +231,10 @@
                         <label class="form-label">Observações</label>
                         <textarea name="observacoes" class="form-control" rows="2"
                             placeholder="Ex: Pago via PIX"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Comprovante (Opcional)</label>
+                        <input type="file" name="comprovante" class="form-control">
                     </div>
                 </div>
                 <div class="modal-footer">

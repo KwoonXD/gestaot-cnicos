@@ -31,9 +31,11 @@
                     <h6>Colunas Recomendadas:</h6>
                     <ul class="class=list-group list-group-flush small text-muted">
                         <li class="list-group-item px-0 py-1"><i class="bi bi-check-circle-fill text-success"></i>
-                            <strong>Nome</strong> (Obrigatório)</li>
+                            <strong>Nome</strong> (Obrigatório)
+                        </li>
                         <li class="list-group-item px-0 py-1"><i class="bi bi-check-circle-fill text-success"></i>
-                            <strong>Documento</strong> (CPF/CNPJ - Obrigatório)</li>
+                            <strong>Documento</strong> (CPF/CNPJ - Obrigatório)
+                        </li>
                         <li class="list-group-item px-0 py-1"><i class="bi bi-check-circle text-muted"></i> Telefone /
                             Celular</li>
                         <li class="list-group-item px-0 py-1"><i class="bi bi-check-circle text-muted"></i> Cidade</li>
@@ -55,10 +57,20 @@
                     </div>
 
                     <div class="d-grid gap-2 mt-4">
-                        <button type="submit" class="btn btn-primary btn-lg">
-                            <i class="bi bi-file-earmark-check"></i> Processar Importação
-                        </button>
-                        <a href="{{ url_for('operacional.tecnicos') }}" class="btn btn-outline-secondary">Cancelar</a>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <button type="button" class="btn btn-info text-white w-100" onclick="analisarArquivo()">
+                                    <i class="bi bi-search"></i> Analisar Arquivo
+                                </button>
+                            </div>
+                            <div class="col-6">
+                                <button type="submit" id="btnProcessar" class="btn btn-primary w-100" disabled>
+                                    <i class="bi bi-file-earmark-check"></i> Processar Importação
+                                </button>
+                            </div>
+                        </div>
+                        <a href="{{ url_for('operacional.tecnicos') }}"
+                            class="btn btn-outline-secondary w-100">Cancelar</a>
                     </div>
                 </form>
             </div>
@@ -68,4 +80,134 @@
         </div>
     </div>
 </div>
+
+<!-- Modal Analysis -->
+<div class="modal fade" id="modalAnalise" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title"><i class="bi bi-table"></i> Prévia da Importação</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="analiseLoading" class="text-center py-5" style="display: none;">
+                    <div class="spinner-border text-info" role="status"></div>
+                    <p class="mt-2 text-muted">Lendo arquivo...</p>
+                </div>
+
+                <div id="analiseContent" style="display: none;">
+                    <div class="alert alert-light border">
+                        <div class="row text-center">
+                            <div class="col-md-6 border-end">
+                                <h6 class="text-muted">Total de Linhas</h6>
+                                <h3 class="text-primary fw-bold" id="totalLinhas">0</h3>
+                            </div>
+                            <div class="col-md-6">
+                                <h6 class="text-muted">Colunas Identificadas</h6>
+                                <span id="colunasTags" class="d-flex flex-wrap justify-content-center gap-1"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h6 class="mb-2">Amostra dos Dados (5 primeiros registros)</h6>
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover table-sm border table-bordered">
+                            <thead class="table-light" id="tabelaHead"></thead>
+                            <tbody id="tabelaBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Corrigir Arquivo</button>
+                <button type="button" class="btn btn-success" id="btnConfirmarAnalise">
+                    <i class="bi bi-check-lg"></i> Tudo Certo, Habilitar Importação
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function analisarArquivo() {
+        const fileInput = document.getElementById('arquivo_excel');
+        const file = fileInput.files[0];
+
+        if (!file) {
+            alert('Por favor, selecione um arquivo primeiro.');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('arquivo_excel', file);
+
+        const modalElement = document.getElementById('modalAnalise');
+        const modal = new bootstrap.Modal(modalElement);
+        modal.show();
+
+        // UI States
+        document.getElementById('analiseLoading').style.display = 'block';
+        document.getElementById('analiseContent').style.display = 'none';
+
+        fetch('/api/importar/analisar', {
+            method: 'POST',
+            body: formData
+        })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('analiseLoading').style.display = 'none';
+
+                if (data.status === 'success') {
+                    document.getElementById('analiseContent').style.display = 'block';
+                    document.getElementById('totalLinhas').textContent = data.total_linhas;
+
+                    // Headers
+                    const thead = document.getElementById('tabelaHead');
+                    const colTags = document.getElementById('colunasTags');
+                    thead.innerHTML = '';
+                    colTags.innerHTML = '';
+
+                    let headerRow = '<tr>';
+                    data.headers.forEach(h => {
+                        headerRow += `<th>${h}</th>`;
+                        colTags.innerHTML += `<span class="badge bg-secondary">${h}</span>`;
+                    });
+                    headerRow += '</tr>';
+                    thead.innerHTML = headerRow;
+
+                    // Body
+                    const tbody = document.getElementById('tabelaBody');
+                    tbody.innerHTML = '';
+
+                    data.preview.forEach(row => {
+                        let tr = '<tr>';
+                        data.headers.forEach(h => {
+                            tr += `<td>${row[h]}</td>`;
+                        });
+                        tr += '</tr>';
+                        tbody.innerHTML += tr;
+                    });
+
+                    // Setup Confirmation
+                    document.getElementById('btnConfirmarAnalise').onclick = function () {
+                        document.getElementById('btnProcessar').disabled = false;
+                        document.getElementById('btnProcessar').classList.add('pulse-animation'); // Optional visual cue
+                        modal.hide();
+                        fileInput.classList.add('is-valid');
+                    };
+
+                } else {
+                    alert('Erro na análise: ' + data.message);
+                    modal.hide();
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                document.getElementById('analiseLoading').style.display = 'none';
+                alert('Erro ao conectar com o servidor.');
+                modal.hide();
+            });
+    }
+</script>
+
 {% endblock %}

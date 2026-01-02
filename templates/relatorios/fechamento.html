@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block title %}Relatório de Fechamento | WT{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4" style="padding-bottom: 80px;"> <!-- Padding for sticky footer -->
+
+    <!-- Header & Filters -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <h5 class="card-title fw-bold mb-3"><i class="bi bi-file-earmark-spreadsheet me-2"></i>Fechamento de
+                Contrato</h5>
+
+            <form method="GET" action="{{ url_for('operacional.relatorio_fechamento') }}"
+                class="row g-3 align-items-end">
+                <!-- Cliente -->
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold text-muted">Cliente (Obrigatório)</label>
+                    <select name="cliente" class="form-select" required>
+                        <option value="">Selecione...</option>
+                        {% for c in clientes %}
+                        <option value="{{ c.id }}" {% if filters.cliente==c.id %}selected{% endif %}>{{ c.nome }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Datas -->
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold text-muted">Data Inicial</label>
+                    <input type="date" name="inicio" class="form-control" value="{{ filters.inicio }}" required>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold text-muted">Data Final</label>
+                    <input type="date" name="fim" class="form-control" value="{{ filters.fim }}" required>
+                </div>
+
+                <!-- Estado -->
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold text-muted">UF (Opcional)</label>
+                    <select name="estado" class="form-select">
+                        <option value="">Todas</option>
+                        {% for uf in estados %}
+                        <option value="{{ uf }}" {% if filters.estado==uf %}selected{% endif %}>{{ uf }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Actions -->
+                <div class="col-md-3 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-filter"></i> Filtrar
+                    </button>
+                    {% if report %}
+                    <a href="{{ url_for('operacional.exportar_fechamento', **filters) }}" class="btn btn-success"
+                        title="Exportar CSV">
+                        <i class="bi bi-file-earmark-excel"></i>
+                    </a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Results -->
+    {% if report %}
+    <div class="card shadow-sm">
+        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+            <span class="fw-bold text-muted">Período: {{ report.periodo }}</span>
+            <span class="badge bg-primary">{{ report.itens|length }} Atendimentos</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover table-striped align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 120px;">Data</th>
+                        <th style="width: 150px;">Código FSA</th>
+                        <th>Cidade / UF</th>
+                        <th>Serviço Executado</th>
+                        <th class="text-end" style="width: 150px;">Valor Ticket (R$)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in report.itens %}
+                    <tr>
+                        <td>{{ item.data }}</td>
+                        <td class="fw-bold text-primary">{{ item.codigo }}</td>
+                        <td>
+                            {{ item.cidade }} <span class="text-muted small">/ {{ item.estado }}</span>
+                        </td>
+                        <td>
+                            {{ item.servico }}
+                            {% if item.valor == 0 %}
+                            <span class="badge bg-secondary ms-1" style="font-size: 0.65rem;">ISENTO</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end fw-bold">
+                            {{ "%.2f"|format(item.valor)|replace('.', ',') }}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="text-center py-5 text-muted">
+                            <i class="bi bi-search display-6 d-block mb-3"></i>
+                            Nenhum atendimento encontrado para os filtros selecionados.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <!-- Empty State -->
+    <div class="text-center py-5">
+        <div class="mb-3 text-muted opacity-50">
+            <i class="bi bi-arrow-up-circle display-4"></i>
+        </div>
+        <h5 class="text-muted">Utilize os filtros acima para gerar o relatório.</h5>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Sticky Footer for Total -->
+{% if report %}
+<div class="fixed-bottom bg-white border-top shadow p-3" style="z-index: 1050;">
+    <div class="container-fluid d-flex justify-content-between align-items-center">
+        <div>
+            <span class="text-muted small text-uppercase fw-bold ls-1">Total do Fechamento</span>
+        </div>
+        <div class="d-flex align-items-baseline gap-2">
+            <span class="text-muted small">R$</span>
+            <span class="display-6 fw-bold text-success lh-1">
+                {{ "%.2f"|format(report.total_geral)|replace('.', ',') }}
+            </span>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}

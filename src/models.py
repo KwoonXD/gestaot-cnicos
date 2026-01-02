@@ -76,7 +76,7 @@ class Tecnico(db.Model):
     
     @property
     def total_atendimentos_concluidos(self):
-        return self.chamados.filter_by(status_chamado='Concluído').count()
+        return self.chamados.filter(Chamado.status_chamado.in_(['Concluído', 'SPARE'])).count()
     
     @property
     def total_atendimentos_nao_pagos(self):
@@ -85,11 +85,11 @@ class Tecnico(db.Model):
             return 0
         
         # Start with my own count
-        count = self.chamados.filter(Chamado.status_chamado == 'Concluído', Chamado.pago == False, Chamado.pagamento_id == None).count()
+        count = self.chamados.filter(Chamado.status_chamado.in_(['Concluído', 'SPARE']), Chamado.status_validacao == 'Aprovado', Chamado.pago == False, Chamado.pagamento_id == None).count()
         
         # Add counts from sub-technicians
         for sub in self.sub_tecnicos:
-            count += sub.chamados.filter(Chamado.status_chamado == 'Concluído', Chamado.pago == False, Chamado.pagamento_id == None).count()
+            count += sub.chamados.filter(Chamado.status_chamado.in_(['Concluído', 'SPARE']), Chamado.status_validacao == 'Aprovado', Chamado.pago == False, Chamado.pagamento_id == None).count()
             
         return count
     
@@ -99,12 +99,12 @@ class Tecnico(db.Model):
             return 0.0
             
         # Start with my own debt
-        chamados_pendentes = self.chamados.filter(Chamado.status_chamado == 'Concluído', Chamado.pago == False, Chamado.pagamento_id == None).all()
+        chamados_pendentes = self.chamados.filter(Chamado.status_chamado.in_(['Concluído', 'SPARE']), Chamado.status_validacao == 'Aprovado', Chamado.pago == False, Chamado.pagamento_id == None).all()
         total = sum(c.valor for c in chamados_pendentes)
         
         # Add debt from sub-technicians
         for sub in self.sub_tecnicos:
-            sub_pendentes = sub.chamados.filter(Chamado.status_chamado == 'Concluído', Chamado.pago == False, Chamado.pagamento_id == None).all()
+            sub_pendentes = sub.chamados.filter(Chamado.status_chamado.in_(['Concluído', 'SPARE']), Chamado.status_validacao == 'Aprovado', Chamado.pago == False, Chamado.pagamento_id == None).all()
             total += sum(c.valor for c in sub_pendentes)
             
         return float(total)
@@ -134,9 +134,9 @@ class Tecnico(db.Model):
         if self.tecnico_principal_id:
             return []
             
-        chamados = list(self.chamados.filter(Chamado.status_chamado == 'Concluído', Chamado.pago == False, Chamado.pagamento_id == None))
+        chamados = list(self.chamados.filter(Chamado.status_chamado.in_(['Concluído', 'SPARE']), Chamado.status_validacao == 'Aprovado', Chamado.pago == False, Chamado.pagamento_id == None))
         for sub in self.sub_tecnicos:
-            chamados.extend(list(sub.chamados.filter(Chamado.status_chamado == 'Concluído', Chamado.pago == False, Chamado.pagamento_id == None)))
+            chamados.extend(list(sub.chamados.filter(Chamado.status_chamado.in_(['Concluído', 'SPARE']), Chamado.status_validacao == 'Aprovado', Chamado.pago == False, Chamado.pagamento_id == None)))
         return chamados
 
     @property
@@ -316,6 +316,7 @@ class Pagamento(db.Model):
     status_pagamento = db.Column(db.String(20), default='Pendente')
     data_pagamento = db.Column(db.Date, nullable=True)
     observacoes = db.Column(db.Text, nullable=True)
+    comprovante_path = db.Column(db.String(255), nullable=True)
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
     
     chamados_incluidos = db.relationship('Chamado', backref='pagamento', lazy='dynamic')

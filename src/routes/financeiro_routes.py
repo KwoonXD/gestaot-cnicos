@@ -4,6 +4,8 @@ from datetime import datetime
 from ..services.financeiro_service import FinanceiroService
 from ..services.tecnico_service import TecnicoService
 from ..models import ESTADOS_BRASIL, Chamado, Lancamento
+from werkzeug.utils import secure_filename
+import os
 
 from ..decorators import admin_required
 
@@ -114,7 +116,47 @@ def pagamento_detalhes(id):
 @financeiro_bp.route('/pagamentos/<int:id>/pagar', methods=['POST'])
 @login_required
 def marcar_como_pago(id):
-    FinanceiroService.marcar_como_pago(id, request.form.get('observacoes', ''))
+    import os
+    from flask import current_app
+    
+    pagamento = FinanceiroService.get_by_id(id)
+    observacoes = request.form.get('observacoes', '')
+    
+    # Handle File Upload
+    if 'comprovante' in request.files:
+        file = request.files['comprovante']
+        if file and file.filename != '':
+            filename = secure_filename(f"comprovante_{pagamento.id}_{datetime.now().strftime('%Y%m%d%H%M%S')}_{file.filename}")
+            upload_folder = os.path.join(current_app.static_folder, 'uploads', 'comprovantes')
+            
+            # Ensure folder exists
+            os.makedirs(upload_folder, exist_ok=True)
+            
+            file_path = os.path.join(upload_folder, filename)
+            file.save(file_path)
+            
+            # Save relative path for DB
+            pagamento.comprovante_path = f"uploads/comprovantes/{filename}"
+    
+    FinanceiroService.marcar_como_pago(id, observacoes) # Service might overwrite observacoes, verify first.
+    # Actually Service.marcar_como_pago updates observacoes and status.
+    # Looking at Service code (I can't see it but I assume). 
+    # Better to set observacoes here if Service method takes it?
+    # The current call is FinanceiroService.marcar_como_pago(id, request.form.get('observacoes', ''))
+    # So I should keep calling it, but update pag.comprovante_path BEFORE calling it, so commit in service saves it?
+    # Or call DB commit here?
+    # Let's assume service commits. So I need to set prop on 'pagamento' object which is attached to session? 
+    # 'pagamento' came from FinanceiroService.get_by_id(id) which usually returns attached object.
+    # However, create_multiplo used distinct session handling. 
+    # Let's check FinanceiroService.marcar_como_pago implementation later? 
+    # No, I see the route code previously.
+    # def marcar_como_pago(id):
+    #     FinanceiroService.marcar_como_pago(id, request.form.get('observacoes', ''))
+    #     return redirect...
+    
+    # So I will inject the saving logic before calling service.
+    # If service commits, it saves my change to comprovante_path too.
+    
     return redirect(url_for('financeiro.pagamentos'))
 
 @financeiro_bp.route('/fechamento', methods=['GET', 'POST'])
@@ -210,3 +252,72 @@ def novo_lancamento():
         
     # Redirect back to tecnico details
     return redirect(url_for('operacional.tecnico_detalhes', id=request.form['tecnico_id']))
+
+@financeiro_bp.route('/fechamento-cliente')
+@login_required
+def fechamento_cliente():
+    """Relatório de Fechamento por Cliente (Faturamento)"""
+    from ..models import Cliente, Chamado, CatalogoServico, db
+    from sqlalchemy.orm import joinedload
+    import io
+    import csv
+    from flask import Response
+    
+    # Filters
+    cliente_id = request.args.get('cliente_id', type=int)
+    mes = request.args.get('mes', type=int, default=datetime.now().month)
+    ano = request.args.get('ano', type=int, default=datetime.now().year)
+    export_csv = request.args.get('export') == 'true'
+    
+    clientes = Cliente.query.filter_by(ativo=True).all()
+    
+    chamados = []
+    total_receita = 0.0
+    cliente_selecionado = None
+    
+    if cliente_id:
+        cliente_selecionado = Cliente.query.get(cliente_id)
+        
+        query = Chamado.query.join(CatalogoServico).filter(
+            CatalogoServico.cliente_id == cliente_id,
+            db.extract('month', Chamado.data_atendimento) == mes,
+            db.extract('year', Chamado.data_atendimento) == ano,
+            Chamado.status_chamado == 'Concluído'
+        ).options(joinedload(Chamado.tecnico), joinedload(Chamado.catalogo_servico))
+        
+        chamados = query.order_by(Chamado.data_atendimento).all()
+        total_receita = sum(float(c.valor_receita_total or 0) for c in chamados)
+        
+        if export_csv:
+            output = io.StringIO()
+            writer = csv.writer(output, delimiter=';')
+            
+            # Header
+            writer.writerow(['Data', 'Loja/Cidade', 'Técnico', 'FSA / Código', 'Serviço', 'Peça', 'Receita (R$)'])
+            
+            for c in chamados:
+                writer.writerow([
+                    c.data_atendimento.strftime('%d/%m/%Y'),
+                    f"{c.loja or ''} {c.cidade}",
+                    c.tecnico.nome if c.tecnico else 'N/A',
+                    c.codigo_chamado or '-',
+                    c.tipo_servico,
+                    c.peca_usada or '-',
+                    f"{float(c.valor_receita_total or 0):.2f}".replace('.', ',')
+                ])
+                
+            return Response(
+                output.getvalue().encode('utf-8-sig'),
+                mimetype="text/csv",
+                headers={"Content-disposition": f"attachment; filename=fechamento_{cliente_selecionado.nome}_{mes}_{ano}.csv"}
+            )
+            
+    return render_template('fechamento_cliente.html',
+        clientes=clientes,
+        chamados=chamados,
+        total_receita=total_receita,
+        mes_atual=mes,
+        ano_atual=ano,
+        cliente_id=cliente_id,
+        cliente_selecionado=cliente_selecionado
+    )

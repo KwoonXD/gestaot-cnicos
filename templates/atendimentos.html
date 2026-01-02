@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Atendimentos Pendentes | WT{% endblock %}
+{% block title %}Fila de Validação | WT{% endblock %}
 
 {% block content %}
 <div class="container-fluid py-4">
@@ -8,7 +8,7 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h2 class="h4 fw-bold">
-                <i class="bi bi-inbox me-2"></i>Caixa de Entrada
+                <i class="bi bi-check-circle-fill me-2"></i>Fila de Validação
                 {% if batches %}
                 <span class="badge bg-warning text-dark ms-2">{{ batches|length }}</span>
                 {% endif %}
@@ -50,8 +50,8 @@
 
                     <div class="d-flex justify-content-between align-items-center border-top pt-3">
                         <span class="fw-bold text-success">R$ {{ "%.2f"|format(batch.valor_total) }}</span>
-                        <button type="button" class="btn btn-outline-primary btn-sm"
-                            onclick='openValidationModal({{ batch | tojson | safe }})'>
+                        <button type="button" class="btn btn-outline-primary btn-sm validation-trigger"
+                            data-batch="{{ batch | tojson | forceescape }}">
                             <i class="bi bi-eye me-1"></i> Analisar
                         </button>
                     </div>
@@ -204,18 +204,48 @@
         </div>
     </div>
 </div>
+{% endblock %}
 
+{% block scripts %}
 <script>
+    // Variáveis globais simples (seguras)
     let currentBatch = null;
     let rejectMode = false;
-    const validationModal = new bootstrap.Modal(document.getElementById('modalValidacao'));
-    const copyToast = new bootstrap.Toast(document.getElementById('copyToast'));
+
+    // AVISO: Removemos o 'const validationModal = ...' global para evitar o erro de inicialização.
+    // O modal será chamado diretamente dentro da função.
+
+    // Inicialização segura do Toast
+    const toastEl = document.getElementById('copyToast');
+    const copyToast = toastEl ? new bootstrap.Toast(toastEl) : null;
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const triggers = document.querySelectorAll('.validation-trigger');
+        triggers.forEach(monitor => {
+            monitor.addEventListener('click', function () {
+                try {
+                    // forceescape encodes it, so we might need to be careful. 
+                    // However, standard data params usually auto-decode entities? 
+                    // Let's test standard behavior. If forceescape makes it &quot;, dataset might read it as string &quot;?
+                    // Actually, simple strings work best.
+                    // But if we use Jinja forceescape, we get HTML entities.
+                    // JS dataset property usually decodes them.
+
+                    const batchData = JSON.parse(this.dataset.batch);
+                    openValidationModal(batchData);
+                } catch (e) {
+                    console.error('Error parsing batch data', e);
+                    alert('Erro ao carregar dados do lote.');
+                }
+            });
+        });
+    });
 
     function openValidationModal(batchData) {
         currentBatch = batchData;
         rejectMode = false;
 
-        // Preencher dados do modal
+        // 1. Preencher dados do cabeçalho
         document.getElementById('modalTitle').innerHTML =
             `<i class="bi bi-clipboard-check me-2"></i>${batchData.tecnico_nome} - ${batchData.data}`;
         document.getElementById('modalTecnico').textContent = batchData.tecnico_nome;
@@ -223,41 +253,63 @@
         document.getElementById('modalCidade').textContent = batchData.cidade;
         document.getElementById('formBatchId').value = batchData.batch_id;
 
-        // Preview dos códigos
+        // 2. Preview dos códigos Jira
         document.getElementById('jiraCodesPreview').textContent = batchData.jira_codes || 'Sem códigos';
 
-        // Preencher tabela
+        // 3. Preencher tabela de serviços
         const tbody = document.getElementById('modalTableBody');
-        tbody.innerHTML = '';
+        tbody.innerHTML = ''; // Limpa tabela antiga
 
         let total = 0;
-        batchData.chamados_lista.forEach(item => {
-            total += item.valor;
-            const row = document.createElement('tr');
-            row.innerHTML = `
-            <td>
-                <a href="https://delfia.atlassian.net/browse/${item.codigo}" target="_blank" 
-                    class="text-decoration-none fw-bold">
-                    ${item.codigo} <i class="bi bi-box-arrow-up-right" style="font-size: 0.7rem;"></i>
-                </a>
-            </td>
-            <td>${item.tipo}</td>
-            <td>${item.peca}</td>
-            <td class="text-end">R$ ${item.valor.toFixed(2)}</td>
-        `;
-            tbody.appendChild(row);
-        });
+        if (batchData.chamados_lista && batchData.chamados_lista.length > 0) {
+            batchData.chamados_lista.forEach(item => {
+                total += item.valor;
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                <td>
+                    <a href="https://delfia.atlassian.net/browse/${item.codigo}" target="_blank" 
+                       class="text-decoration-none fw-bold">
+                        ${item.codigo} <i class="bi bi-box-arrow-up-right" style="font-size: 0.7rem;"></i>
+                    </a>
+                </td>
+                <td>${item.tipo}</td>
+                <td>${item.peca}</td>
+                <td class="text-end">R$ ${item.valor.toFixed(2)}</td>
+            `;
+                tbody.appendChild(row);
+            });
+        } else {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center">Nenhum chamado neste lote.</td></tr>';
+        }
 
         document.getElementById('modalTotal').textContent = `R$ ${total.toFixed(2)}`;
 
-        // Reset UI
-        document.getElementById('rejectSection').style.display = 'none';
-        document.getElementById('motivoInput').value = '';
-        document.getElementById('rejectBtn').textContent = ' Rejeitar Lote';
-        document.getElementById('rejectBtn').innerHTML = '<i class="bi bi-x-lg me-1"></i> Rejeitar Lote';
-        document.getElementById('approveBtn').style.display = '';
+        // 4. Resetar UI dos botões
+        const rejectSection = document.getElementById('rejectSection');
+        const rejectBtn = document.getElementById('rejectBtn');
+        const approveBtn = document.getElementById('approveBtn');
+        const motivoInput = document.getElementById('motivoInput');
 
-        validationModal.show();
+        if (rejectSection) rejectSection.style.display = 'none';
+        if (motivoInput) motivoInput.value = '';
+
+        if (rejectBtn) {
+            rejectBtn.innerHTML = '<i class="bi bi-x-lg me-1"></i> Rejeitar Lote';
+            rejectBtn.className = 'btn btn-outline-danger'; // Reset classes
+            rejectBtn.onclick = toggleRejectMode;
+        }
+
+        if (approveBtn) approveBtn.style.display = '';
+
+        // 5. ABRIR MODAL DE FORMA SEGURA
+        // Aqui está a correção principal: Instanciamos o modal apenas quando precisamos dele.
+        const modalElement = document.getElementById('modalValidacao');
+        if (modalElement) {
+            const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+            modal.show();
+        } else {
+            console.error('Elemento modalValidacao não encontrado no HTML.');
+        }
     }
 
     function copyJiraLink() {
@@ -270,24 +322,44 @@
         const jql = `key in (${codes.join(', ')})`;
         const url = `https://delfia.atlassian.net/issues/?jql=${encodeURIComponent(jql)}`;
 
-        navigator.clipboard.writeText(url).then(() => {
-            copyToast.show();
-            // Visual feedback
-            const btn = document.getElementById('copyJiraBtn');
+        // Tenta copiar para a área de transferência
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(url).then(() => {
+                showToastFeedback();
+            }).catch(err => {
+                manualCopyFallback(url);
+            });
+        } else {
+            manualCopyFallback(url);
+        }
+    }
+
+    function manualCopyFallback(text) {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+            document.execCommand('copy');
+            showToastFeedback();
+        } catch (err) {
+            console.error('Erro ao copiar', err);
+            prompt("Copie o link manualmente:", text);
+        }
+        document.body.removeChild(textarea);
+    }
+
+    function showToastFeedback() {
+        if (copyToast) copyToast.show();
+
+        const btn = document.getElementById('copyJiraBtn');
+        if (btn) {
+            const originalHtml = btn.innerHTML;
             btn.innerHTML = '<i class="bi bi-check-lg me-2"></i> Copiado!';
             setTimeout(() => {
-                btn.innerHTML = '<i class="bi bi-clipboard me-2"></i> Copiar Link Jira';
+                btn.innerHTML = originalHtml;
             }, 2000);
-        }).catch(err => {
-            // Fallback
-            const textarea = document.createElement('textarea');
-            textarea.value = url;
-            document.body.appendChild(textarea);
-            textarea.select();
-            document.execCommand('copy');
-            document.body.removeChild(textarea);
-            copyToast.show();
-        });
+        }
     }
 
     function toggleRejectMode() {
@@ -295,19 +367,18 @@
         const section = document.getElementById('rejectSection');
         const btn = document.getElementById('rejectBtn');
         const approveBtn = document.getElementById('approveBtn');
+        const motivoInput = document.getElementById('motivoInput');
 
         if (rejectMode) {
             section.style.display = 'block';
-            btn.classList.remove('btn-outline-danger');
-            btn.classList.add('btn-danger');
+            btn.className = 'btn btn-danger';
             btn.innerHTML = '<i class="bi bi-trash me-1"></i> Confirmar Exclusão';
             btn.onclick = submitRejection;
             approveBtn.style.display = 'none';
-            document.getElementById('motivoInput').focus();
+            if (motivoInput) motivoInput.focus();
         } else {
             section.style.display = 'none';
-            btn.classList.remove('btn-danger');
-            btn.classList.add('btn-outline-danger');
+            btn.className = 'btn btn-outline-danger';
             btn.innerHTML = '<i class="bi bi-x-lg me-1"></i> Rejeitar Lote';
             btn.onclick = toggleRejectMode;
             approveBtn.style.display = '';
@@ -315,21 +386,25 @@
     }
 
     function submitApproval() {
+        const form = document.getElementById('validationForm');
         document.getElementById('formAcao').value = 'aprovar';
-        document.getElementById('validationForm').submit();
+        if (form) form.submit();
     }
 
     function submitRejection() {
-        const motivo = document.getElementById('motivoInput').value.trim();
+        const motivoInput = document.getElementById('motivoInput');
+        const motivo = motivoInput.value.trim();
+
         if (motivo.length < 10) {
             alert('O motivo deve ter no mínimo 10 caracteres.');
-            document.getElementById('motivoInput').focus();
+            motivoInput.focus();
             return;
         }
 
+        const form = document.getElementById('validationForm');
         document.getElementById('formMotivo').value = motivo;
         document.getElementById('formAcao').value = 'rejeitar';
-        document.getElementById('validationForm').submit();
+        if (form) form.submit();
     }
 </script>
 {% endblock %}
