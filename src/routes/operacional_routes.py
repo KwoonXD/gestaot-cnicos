@@ -39,8 +39,16 @@ def importar_tecnicos():
     return render_template('importar_tecnicos.html')
 
 STATUS_TECNICO = ['Ativo', 'Inativo']
-TIPOS_SERVICO = ['Americanas', 'Escolas', 'Telmex', 'Telmex Urgente', 'Esteira']
+# TIPOS_SERVICO removed: Fetch dynamically from CatalogoServico
 STATUS_CHAMADO = ['Pendente', 'Em Andamento', 'Concluído', 'SPARE', 'Cancelado']
+
+# Helper to get Types
+def get_tipos_servico():
+    from ..models import CatalogoServico
+    # Get distinct names or all active
+    # Using distinct names used in system + catalog
+    return [s.nome for s in CatalogoServico.query.with_entities(CatalogoServico.nome).distinct().order_by(CatalogoServico.nome).all()]
+
 
 @operacional_bp.route('/')
 @login_required
@@ -246,7 +254,8 @@ def chamados():
         chamados=chamados_list,
         pagination=pagination, # Passamos o objeto de paginação
         tecnicos=tecnicos_list,
-        tipos_servico=TIPOS_SERVICO,
+        tecnicos=tecnicos_list,
+        tipos_servico=get_tipos_servico(),
         status_options=STATUS_CHAMADO,
         tecnico_filter=filters['tecnico_id'],
         status_filter=filters['status'],
@@ -355,7 +364,7 @@ def novo_chamado():
             return render_template('chamado_form.html',
                 chamado=chamado_mock,
                 tecnicos=tecnicos,
-                tipos_servico=TIPOS_SERVICO,
+                tipos_servico=get_tipos_servico(),
                 status_options=STATUS_CHAMADO
             )
     
@@ -363,7 +372,7 @@ def novo_chamado():
     return render_template('chamado_form.html',
         chamado=None,
         tecnicos=tecnicos,
-        tipos_servico=TIPOS_SERVICO,
+        tipos_servico=get_tipos_servico(),
         status_options=STATUS_CHAMADO
     )
 
@@ -384,7 +393,7 @@ def editar_chamado(id):
     return render_template('chamado_form.html',
         chamado=chamado,
         tecnicos=tecnicos,
-        tipos_servico=TIPOS_SERVICO,
+        tipos_servico=get_tipos_servico(),
         status_options=STATUS_CHAMADO
     )
 

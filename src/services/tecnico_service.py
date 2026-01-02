@@ -1,10 +1,12 @@
 from ..models import db, Tecnico, Chamado, Tag
 from datetime import datetime
+from sqlalchemy.orm import joinedload
 
 class TecnicoService:
     @staticmethod
     def get_all(filters=None, page=1, per_page=20):
-        query = Tecnico.query
+        # Eager load Tags by default to prevent N+1
+        query = Tecnico.query.options(joinedload(Tecnico.tags))
         
         if filters:
             # Filtros Simples
@@ -19,6 +21,8 @@ class TecnicoService:
             
             if filters.get('tag'):
                 # Filtro por Tag (nome exato)
+                # Note: joinedload might conflict with explicit join if not careful, but usually ok.
+                # Here we filter by EXISTENCE of a tag.
                 query = query.join(Tag).filter(Tag.nome == filters['tag'])
             
             # Filtro Avançado: Pagamento (Recuperado via SQL)
@@ -47,7 +51,7 @@ class TecnicoService:
 
     @staticmethod
     def get_by_id(id):
-        return Tecnico.query.get_or_404(id)
+        return Tecnico.query.options(joinedload(Tecnico.tags)).get_or_404(id)
 
     @staticmethod
     def create(data):
