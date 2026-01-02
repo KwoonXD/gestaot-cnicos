@@ -254,7 +254,6 @@ def chamados():
         chamados=chamados_list,
         pagination=pagination, # Passamos o objeto de paginação
         tecnicos=tecnicos_list,
-        tecnicos=tecnicos_list,
         tipos_servico=get_tipos_servico(),
         status_options=STATUS_CHAMADO,
         tecnico_filter=filters['tecnico_id'],

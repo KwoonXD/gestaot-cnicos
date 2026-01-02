@@ -153,8 +153,8 @@
                                     {{ tecnico.nome }}
                                 </a>
                                 <div class="d-flex gap-1 mt-1">
-                                    {% if tecnico.tags_list %}
-                                    {% for tag in tecnico.tags_list %}
+                                    {% if tecnico.tags %}
+                                    {% for tag in tecnico.tags %}
                                     <span class="badge rounded-pill"
                                         style="font-size: 0.6rem; background-color: {{ tag.cor }}; opacity: 0.8;">
                                         {{ tag.nome }}

@@ -22,6 +22,58 @@ class ImportService:
         return normalized
 
     @staticmethod
+    def analisar_arquivo(file_storage):
+        """
+        Lê o arquivo e retorna preview para validação antes da importação real.
+        """
+        filename = file_storage.filename
+        try:
+            if filename.endswith('.csv'):
+                df = pd.read_csv(file_storage)
+            else:
+                df = pd.read_excel(file_storage)
+        except Exception as e:
+            return {'success': False, 'message': f'Erro ao ler arquivo: {str(e)}'}
+            
+        col_map = ImportService.normalize_columns(df)
+        
+        # Mapeamento
+        def get_col(candidates):
+            for c in candidates:
+                if c in col_map: return col_map[c]
+            return None
+            
+        mapping = {
+            'nome': get_col(['nome', 'nome_completo', 'tecnico', 'nome_tecnico']),
+            'documento': get_col(['documento', 'cpf', 'cnpj', 'doc', 'cpf_cnpj']),
+            'telefone': get_col(['telefone', 'celular', 'contato', 'whatsapp', 'tel']),
+            'cidade': get_col(['cidade', 'municipio']),
+            'estado': get_col(['estado', 'uf']),
+            'pix': get_col(['pix', 'chave_pix', 'chave_pagamento'])
+        }
+        
+        # Validação Básica
+        missing_required = []
+        if not mapping['nome']: missing_required.append('Nome')
+        if not mapping['documento']: missing_required.append('Documento/CPF')
+        
+        # Preview das primeiras 5 linhas
+        preview_rows = []
+        df_head = df.head(10).fillna('')
+        
+        for _, row in df_head.iterrows():
+            preview_rows.append(row.to_dict())
+            
+        return {
+            'success': True,
+            'total_rows': len(df),
+            'columns': list(df.columns),
+            'mapping': mapping,
+            'missing_required': missing_required,
+            'preview': preview_rows
+        }
+
+    @staticmethod
     def importar_tecnicos(file_storage):
         filename = file_storage.filename
         

@@ -45,6 +45,7 @@ class Tecnico(db.Model):
     valor_por_atendimento = db.Column(db.Numeric(10, 2), default=120.00)
     valor_adicional_loja = db.Column(db.Numeric(10, 2), default=20.00)
     valor_hora_adicional = db.Column(db.Numeric(10, 2), default=30.00)  # Valor por hora extra
+    saldo_atual = db.Column(db.Float, default=0.0)  # Conta Corrente (Ledger)
     forma_pagamento = db.Column(db.String(50), nullable=True)
     chave_pagamento = db.Column(db.String(200), nullable=True)
     tecnico_principal_id = db.Column(db.Integer, db.ForeignKey('tecnicos.id'), nullable=True)
@@ -56,7 +57,7 @@ class Tecnico(db.Model):
     tecnico_principal = db.relationship('Tecnico', remote_side=[id], backref='sub_tecnicos', foreign_keys=[tecnico_principal_id])
     chamados = db.relationship('Chamado', backref='tecnico', lazy='dynamic', foreign_keys='Chamado.tecnico_id')
     pagamentos = db.relationship('Pagamento', backref='tecnico', lazy='dynamic')
-    tags_list = db.relationship('Tag', backref='tecnico', lazy='dynamic')
+    tags = db.relationship('Tag', backref='tecnico')
     
     @property
     def id_tecnico(self):
@@ -210,7 +211,7 @@ class Tecnico(db.Model):
             'total_atendimentos_nao_pagos': self.total_atendimentos_nao_pagos,
             'total_a_pagar': self.total_a_pagar,
             'status_pagamento': self.status_pagamento,
-            'tags': [t.to_dict() for t in self.tags_list]
+            'tags': [t.to_dict() for t in self.tags]
         }
 
 
@@ -377,13 +378,17 @@ class Lancamento(db.Model):
     tecnico_id = db.Column(db.Integer, db.ForeignKey('tecnicos.id'), nullable=False)
     pagamento_id = db.Column(db.Integer, db.ForeignKey('pagamentos.id'), nullable=True)
     data = db.Column(db.Date, nullable=False, default=date.today)
-    tipo = db.Column(db.String(20), nullable=False)  # Bonus, Desconto
+    tipo = db.Column(db.String(20), nullable=False)  # CREDITO_SERVICO, DEBITO_PAGAMENTO, ADIANTAMENTO, MULTA, BONUS
     valor = db.Column(db.Numeric(10, 2), nullable=False)
     descricao = db.Column(db.String(200), nullable=False)
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
     
+    # Rastreio de origem (opcional)
+    chamado_id = db.Column(db.Integer, db.ForeignKey('chamados.id'), nullable=True)
+    
     tecnico = db.relationship('Tecnico', backref='lancamentos')
     pagamento = db.relationship('Pagamento', backref='lancamentos')
+    chamado = db.relationship('Chamado', backref='lancamentos')
     
     def to_dict(self):
         return {
@@ -526,3 +531,60 @@ class Notification(db.Model):
             'is_read': self.is_read,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
+
+
+# =============================================================================
+# GESTÃO DE ESTOQUE DECENTRALIZADO (STOCK EM TRÂNSITO)
+# =============================================================================
+
+class TecnicoStock(db.Model):
+    """Estoque atual na mão do técnico"""
+    __tablename__ = 'tecnico_stock'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    tecnico_id = db.Column(db.Integer, db.ForeignKey('tecnicos.id'), nullable=False)
+    item_lpu_id = db.Column(db.Integer, db.ForeignKey('itens_lpu.id'), nullable=False)
+    quantidade = db.Column(db.Integer, default=0)
+    data_atualizacao = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    tecnico = db.relationship('Tecnico', backref='estoque')
+    item_lpu = db.relationship('ItemLPU', backref='estoque_tecnicos')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'tecnico_id': self.tecnico_id,
+            'tecnico_nome': self.tecnico.nome,
+            'item_lpu_id': self.item_lpu_id,
+            'item_nome': self.item_lpu.nome,
+            'quantidade': self.quantidade,
+            'data_atualizacao': self.data_atualizacao.isoformat()
+        }
+
+
+class StockMovement(db.Model):
+    """Histórico de Movimentações de Estoque"""
+    __tablename__ = 'stock_movements'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    item_lpu_id = db.Column(db.Integer, db.ForeignKey('itens_lpu.id'), nullable=False)
+    
+    # Origem e Destino
+    # Envios: Origem=NULL (Almoxarifado Central) -> Destino=Tecnico
+    # Uso: Origem=Tecnico -> Destino=Chamado (ou NULL)
+    # Devolução: Origem=Tecnico -> Destino=NULL (Almoxarifado Central)
+    
+    origem_tecnico_id = db.Column(db.Integer, db.ForeignKey('tecnicos.id'), nullable=True)
+    destino_tecnico_id = db.Column(db.Integer, db.ForeignKey('tecnicos.id'), nullable=True)
+    
+    quantidade = db.Column(db.Integer, nullable=False)
+    tipo_movimento = db.Column(db.String(20), nullable=False) # 'ENVIO', 'USO', 'DEVOLUCAO', 'AJUSTE'
+    data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    observacao = db.Column(db.String(200), nullable=True)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    
+    item_lpu = db.relationship('ItemLPU')
+    origem_tecnico = db.relationship('Tecnico', foreign_keys=[origem_tecnico_id])
+    destino_tecnico = db.relationship('Tecnico', foreign_keys=[destino_tecnico_id])
+    created_by = db.relationship('User')

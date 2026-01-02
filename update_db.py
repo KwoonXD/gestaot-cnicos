@@ -1,43 +1,39 @@
-from src import create_app, db
-from sqlalchemy import text, inspect
+from app import create_app
+from sqlalchemy import text
+from src.models import db, TecnicoStock, StockMovement
 
-app = create_app()
-
-def update_schema():
+def update_database():
+    app = create_app()
     with app.app_context():
-        inspector = inspect(db.engine)
+        print("Iniciando atualização do banco de dados...")
         
-        # 1. Update Tecnicos
-        columns = [c['name'] for c in inspector.get_columns('tecnicos')]
-        
-        if 'valor_adicional_loja' not in columns:
-            print("Adicionando valor_adicional_loja a tecnicos...")
+        # 1. Adicionar coluna saldo_atual em tecnicos
+        try:
             with db.engine.connect() as conn:
-                conn.execute(text("ALTER TABLE tecnicos ADD COLUMN valor_adicional_loja NUMERIC(10, 2) DEFAULT 20.00"))
-                conn.commit()
+                conn.execute(text("ALTER TABLE tecnicos ADD COLUMN saldo_atual FLOAT DEFAULT 0.0"))
+                print("Coluna 'saldo_atual' adicionada em 'tecnicos'.")
+        except Exception as e:
+            if "duplicate column" in str(e) or "no such column" not in str(e): 
+                # SQLite sometimes gives generic errors or specific ones. 
+                # If column exists, it fails. We treat this as "already done".
+                print(f"Nota: Coluna 'saldo_atual' provavelmente já existe ou erro ignorável: {e}")
+            else:
+                 print(f"Erro ao adicionar 'saldo_atual': {e}")
+
+        # 2. Adicionar coluna chamado_id em lancamentos
+        try:
+            with db.engine.connect() as conn:
+                conn.execute(text("ALTER TABLE lancamentos ADD COLUMN chamado_id INTEGER REFERENCES chamados(id)"))
+                print("Coluna 'chamado_id' adicionada em 'lancamentos'.")
+        except Exception as e:
+             print(f"Nota: Coluna 'chamado_id' provavelmente já existe ou erro ignorável: {e}")
+
+        # 3. Criar novas tabelas (TecnicoStock, StockMovement)
+        # db.create_all() creates tables that don't exist.
+        db.create_all()
+        print("Tabelas novas (se houver) criadas via db.create_all().")
         
-        # 2. Update Chamados
-        columns = [c['name'] for c in inspector.get_columns('chamados')]
-        
-        new_cols = [
-            ('loja', 'VARCHAR(100)'),
-            ('tipo_resolucao', "VARCHAR(50) DEFAULT 'Resolvido'"),
-            ('valor_receita_servico', 'NUMERIC(10, 2) DEFAULT 0.00'),
-            ('peca_usada', 'VARCHAR(100)'),
-            ('valor_receita_peca', 'NUMERIC(10, 2) DEFAULT 0.00'),
-            ('custo_peca', 'NUMERIC(10, 2) DEFAULT 0.00'),
-            ('fornecedor_peca', "VARCHAR(20) DEFAULT 'Empresa'"),
-            ('custo_atribuido', 'NUMERIC(10, 2) DEFAULT 0.00')
-        ]
-        
-        with db.engine.connect() as conn:
-            for col_name, col_type in new_cols:
-                if col_name not in columns:
-                    print(f"Adicionando {col_name} a chamados...")
-                    conn.execute(text(f"ALTER TABLE chamados ADD COLUMN {col_name} {col_type}"))
-            conn.commit()
-            
-        print("Schema atualizado com sucesso!")
+        print("Atualização concluída.")
 
 if __name__ == "__main__":
-    update_schema()
+    update_database()

@@ -93,6 +93,10 @@ def create_app():
     from .routes.admin_routes import admin_bp
     from .routes.public_routes import public_bp
     app.register_blueprint(admin_bp, url_prefix='/admin')
+    
+    from .routes.stock_routes import stock_bp
+    app.register_blueprint(stock_bp, url_prefix='/stock')
+    
     app.register_blueprint(public_bp)
     
     return app

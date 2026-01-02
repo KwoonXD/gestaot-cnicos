@@ -301,6 +301,26 @@ class ChamadoService:
                 chamado.fornecedor_peca = fsa.get('fornecedor_peca', 'Empresa')
                 chamado.custo_peca = float(fsa.get('custo_peca', 0.0)) if chamado.fornecedor_peca == 'Tecnico' else 0.0
                 
+                # --- STOCK VALIDATION HOOK ---
+                # Se a peça é da Empresa, assume-se que saiu do estoque do técnico (Almoxarifado Virtual)
+                # A menos que seja um item que não controla estoque (ex: cabos menores? Para MVP, todos Itens LPU controlam).
+                if chamado.fornecedor_peca == 'Empresa' and 'item_lpu' in locals() and item_lpu:
+                     from .stock_service import StockService
+                     # Consome 1 unidade. Se falhar, faz raise e rollback em tudo.
+                     # Passamos None no chamado_id pois ainda não tem ID. Opcional: Atualizar obs depois?
+                     # Ou apenas logar "Uso no Batch {batch_id}"
+                     try:
+                        StockService.consumir_peca(
+                            tecnico_id=tecnico.id, 
+                            item_id=item_lpu.id, 
+                            quantidade=1, 
+                            user_id=created_by,
+                            chamado_id=None # Será vinculado via Batch/Data
+                        )
+                     except ValueError as ve:
+                        # Repassa erro de estoque amigavel
+                        raise ValueError(f"Estoque Insuficiente para o item '{item_lpu.nome}': {str(ve)}")
+
                 db.session.add(chamado)
                 created_chamados.append(chamado)
                 
@@ -332,6 +352,11 @@ class ChamadoService:
                     chamado.status_validacao = 'Aprovado'
                     chamado.data_validacao = datetime.utcnow()
                     chamado.validado_por_id = user_id
+                    
+                    # Automating Ledger Credit
+                    from .financeiro_service import FinanceiroService
+                    FinanceiroService.registrar_credito_servico(chamado)
+                    
                     count += 1
             db.session.commit()
             
@@ -542,6 +567,11 @@ class ChamadoService:
                 c.status_validacao = 'Aprovado'
                 c.data_validacao = datetime.utcnow()
                 c.validado_por_id = user_id
+                
+                # Automating Ledger Credit
+                from .financeiro_service import FinanceiroService
+                FinanceiroService.registrar_credito_servico(c)
+                
                 count += 1
             
             db.session.commit()

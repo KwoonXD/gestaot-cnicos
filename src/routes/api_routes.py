@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from flask_login import login_required
 from ..services.chamado_service import ChamadoService
 from ..models import Cliente, Chamado, Tecnico, db
@@ -151,3 +151,21 @@ def tecnicos_pendencias(id):
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@api_bp.route('/importar/analisar', methods=['POST'])
+@login_required
+def analisar_importacao():
+    """
+    Recebe um arquivo e retorna o preview da análise.
+    """
+    from ..services.import_service import ImportService
+    
+    if 'file' not in request.files:
+        return jsonify({'error': 'Nenhum arquivo enviado'}), 400
+        
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'Arquivo vazio'}), 400
+        
+    result = ImportService.analisar_arquivo(file)
+    return jsonify(result)

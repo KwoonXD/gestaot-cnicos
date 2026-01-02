@@ -321,3 +321,73 @@ def fechamento_cliente():
         cliente_id=cliente_id,
         cliente_selecionado=cliente_selecionado
     )
+
+@financeiro_bp.route('/ledger')
+@login_required
+def ledger():
+    """Visão Geral da Conta Corrente dos Técnicos"""
+    from ..models import Tecnico, Lancamento, db
+    
+    # Busca tecnicos ativos
+    tecnicos = Tecnico.query.filter_by(status='Ativo').order_by(Tecnico.nome).all()
+    
+    # Calcular totais (opcional, pode ser pesado se tiver muitos lançamentos)
+    # Para MVP, vamos iterar ou fazer uma query agrupada.
+    # Query agrupada é melhor.
+    
+    stats = db.session.query(
+        Lancamento.tecnico_id,
+        db.func.sum(db.case((Lancamento.tipo.in_(['CREDITO_SERVICO', 'BONUS', 'REEMBOLSO']), Lancamento.valor), else_=0)).label('total_creditos'),
+        db.func.sum(db.case((Lancamento.tipo.in_(['DEBITO_PAGAMENTO', 'ADIANTAMENTO', 'MULTA']), Lancamento.valor), else_=0)).label('total_debitos')
+    ).group_by(Lancamento.tecnico_id).all()
+    
+    stats_map = {s.tecnico_id: {'creditos': s.total_creditos or 0, 'debitos': s.total_debitos or 0} for s in stats}
+    
+    dados = []
+    for t in tecnicos:
+        s = stats_map.get(t.id, {'creditos': 0, 'debitos': 0})
+        dados.append({
+            'tecnico': t,
+            'total_creditos': s['creditos'],
+            'total_debitos': s['debitos'],
+            'saldo_atual': t.saldo_atual # Confia no saldo persistido
+        })
+        
+    return render_template('financeiro_ledger.html', dados=dados, today=datetime.now().date())
+
+@financeiro_bp.route('/extrato/<int:tecnico_id>')
+@login_required
+def extrato(tecnico_id):
+    """Extrato detalhado de um técnico"""
+    from ..models import Tecnico, Lancamento
+    
+    tecnico = Tecnico.query.get_or_404(tecnico_id)
+    lancamentos = Lancamento.query.filter_by(tecnico_id=tecnico.id).order_by(Lancamento.data.desc(), Lancamento.id.desc()).all()
+    
+    return render_template('financeiro_extrato.html', tecnico=tecnico, lancamentos=lancamentos)
+
+@financeiro_bp.route('/dashboard/geografico')
+@login_required
+def dashboard_geo():
+    """Matriz de Rentabilidade por Geografia"""
+    from ..services.report_service import ReportService
+    from ..models import Cliente
+    
+    # Filtros
+    inicio_str = request.args.get('inicio', datetime.now().replace(day=1).strftime('%Y-%m-%d'))
+    fim_str = request.args.get('fim', datetime.now().strftime('%Y-%m-%d'))
+    cliente_id = request.args.get('cliente_id')
+    
+    inicio = datetime.strptime(inicio_str, '%Y-%m-%d').date()
+    fim = datetime.strptime(fim_str, '%Y-%m-%d').date()
+    
+    dados = ReportService.rentabilidade_geografica(inicio, fim, cliente_id=int(cliente_id) if cliente_id else None)
+    clientes = Cliente.query.filter_by(ativo=True).all()
+    
+    return render_template('dashboard_geo.html', 
+        dados=dados, 
+        inicio=inicio_str, 
+        fim=fim_str, 
+        clientes=clientes,
+        cliente_id=int(cliente_id) if cliente_id else None
+    )

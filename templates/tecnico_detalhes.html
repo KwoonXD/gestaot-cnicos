@@ -15,7 +15,7 @@
         <div>
             <h1>{{ tecnico.nome }}</h1>
             <div class="d-flex flex-wrap gap-2 mb-2 align-items-center">
-                {% for tag in tecnico.tags_list %}
+                {% for tag in tecnico.tags %}
                 <span class="badge" style="background-color: {{ tag.cor }};">
                     {{ tag.nome }}
                     <form action="{{ url_for('operacional.deletar_tag', id=tag.id) }}" method="POST"
@@ -585,7 +585,6 @@
                 }
             });
         }
-    });
     });
 
     async function copyLink(token) {

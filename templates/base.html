@@ -65,14 +65,29 @@
                 <div class="my-3 border-top"></div>
                 <small class="text-uppercase text-muted fw-bold px-3 mb-2" style="font-size: 0.7rem;">Gestão</small>
 
+                <a href="{{ url_for('financeiro.ledger') }}"
+                    class="list-group-item list-group-item-action {{ 'active' if 'ledger' in request.endpoint }}">
+                    <i class="bi bi-wallet-fill me-2"></i> Conta Corrente
+                </a>
+
                 <a href="{{ url_for('financeiro.pagamentos') }}"
-                    class="list-group-item list-group-item-action {{ 'active' if 'financeiro' in request.endpoint }}">
-                    <i class="bi bi-wallet2 me-2"></i> Financeiro
+                    class="list-group-item list-group-item-action {{ 'active' if request.endpoint == 'financeiro.pagamentos' }}">
+                    <i class="bi bi-cash-stack me-2"></i> Pagamentos (Lote)
                 </a>
 
                 <a href="{{ url_for('operacional.relatorio_fechamento') }}"
                     class="list-group-item list-group-item-action {{ 'active' if 'relatorios' in request.endpoint }}">
-                    <i class="bi bi-file-earmark-bar-graph me-2"></i> Relatórios
+                    <i class="bi bi-file-earmark-bar-graph me-2"></i> Relatório Fechamento
+                </a>
+
+                <a href="{{ url_for('financeiro.dashboard_geo') }}"
+                    class="list-group-item list-group-item-action {{ 'active' if 'dashboard_geo' in request.endpoint }}">
+                    <i class="bi bi-geo-alt me-2"></i> Rentabilidade Geo
+                </a>
+
+                <a href="{{ url_for('stock.painel') }}"
+                    class="list-group-item list-group-item-action {{ 'active' if 'stock' in request.endpoint }}">
+                    <i class="bi bi-box-seam me-2"></i> Almoxarifado
                 </a>
 
                 <a href="{{ url_for('admin.users_list') }}"

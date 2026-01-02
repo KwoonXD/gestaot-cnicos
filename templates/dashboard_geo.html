@@ -1,0 +1,95 @@
+{% extends 'base.html' %}
+
+{% block title %}Matriz de Rentabilidade - Gestão de Técnicos{% endblock %}
+
+{% block content %}
+<div class="page-header mb-4">
+    <h1><i class="bi bi-geo-alt"></i> Matriz de Rentabilidade (Geográfica)</h1>
+    <p class="text-muted">Análise de margem de contribuição por cidade/estado.</p>
+</div>
+
+<!-- Filters -->
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <form method="GET" class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label">Data Início</label>
+                <input type="date" name="inicio" class="form-control" value="{{ inicio }}" required>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Data Fim</label>
+                <input type="date" name="fim" class="form-control" value="{{ fim }}" required>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Contrato (Cliente)</label>
+                <select name="cliente_id" class="form-select">
+                    <option value="">Todos os Clientes</option>
+                    {% for c in clientes %}
+                    <option value="{{ c.id }}" {{ 'selected' if cliente_id==c.id else '' }}>{{ c.nome }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-filter"></i> Filtrar Analise
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card shadow-sm">
+    <div class="card-header bg-light">
+        <h5 class="mb-0">Detalhamento por Cidade</h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-bordered mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Cidade/UF</th>
+                        <th class="text-center">Volume</th>
+                        <th class="text-end">Receita Total</th>
+                        <th class="text-end">Custo Total</th>
+                        <th class="text-end">Margem Contrib. (R$)</th>
+                        <th class="text-end">Margem %</th>
+                        <th class="text-end">CMA (Custo Médio)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in dados %}
+                    <tr>
+                        <td>
+                            <div class="fw-bold">{{ row.cidade }}</div>
+                            <small class="text-muted">{{ row.estado }}</small>
+                        </td>
+                        <td class="text-center">{{ row.volume }}</td>
+                        <td class="text-end">R$ {{ "%.2f"|format(row.receita) }}</td>
+                        <td class="text-end text-danger">- R$ {{ "%.2f"|format(row.custo) }}</td>
+                        <td class="text-end fw-bold">R$ {{ "%.2f"|format(row.margem) }}</td>
+
+                        <!-- Conditional Formatting -->
+                        {% set p = row.margem_percent %}
+                        <td
+                            class="text-end fw-bold 
+                            {% if p < 10 %} text-danger {% elif p < 30 %} text-warning {% else %} text-success {% endif %}">
+                            {{ "%.1f"|format(p) }}%
+                        </td>
+
+                        <td class="text-end text-muted">R$ {{ "%.2f"|format(row.cma) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-5">
+                            <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                            Nenhum dado encontrado para o período selecionado.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

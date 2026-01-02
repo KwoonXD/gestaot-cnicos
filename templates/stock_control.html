@@ -1,0 +1,144 @@
+{% extends 'base.html' %}
+
+{% block title %}Controle de Estoque - Almoxarifado Virtual{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="h3"><i class="bi bi-box-seam"></i> Controle de Stock (Trânsito)</h1>
+        <p class="text-muted">Gerenciamento de peças em posse dos técnicos.</p>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Card Transferência -->
+    <div class="col-md-4">
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-primary text-white">
+                <i class="bi bi-send"></i> Enviar Peça (Transferência)
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('stock.transferir') }}" method="POST">
+                    <div class="mb-3">
+                        <label class="form-label">Técnico Destinatário</label>
+                        <select name="tecnico_id" class="form-select" required>
+                            <option value="">Selecione...</option>
+                            {% for t in tecnicos %}
+                            {% if t.status == 'Ativo' %}
+                            <option value="{{ t.id }}">{{ t.nome }}</option>
+                            {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Peça (Item LPU)</label>
+                        <select name="item_id" class="form-select" required>
+                            <option value="">Selecione...</option>
+                            {% for item in itens %}
+                            <option value="{{ item.id }}">{{ item.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Quantidade</label>
+                        <input type="number" name="quantidade" class="form-control" value="1" min="1" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Observação</label>
+                        <textarea name="observacao" class="form-control" rows="2"></textarea>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100">
+                        Confirmar Envio
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Card Consulta Estoque Técnico -->
+    <div class="col-md-8">
+        <div class="card shadow-sm">
+            <div class="card-header">
+                <i class="bi bi-search"></i> Consultar Estoque
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Selecione o Técnico para ver o inventário:</label>
+                    <select id="selectTecnicoConsulta" class="form-select" onchange="loadStock(this.value)">
+                        <option value="">Selecione...</option>
+                        {% for t in tecnicos %}
+                        <option value="{{ t.id }}">{{ t.nome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <h5 class="mt-4">Inventário Atual</h5>
+                <div class="table-responsive">
+                    <table class="table table-bordered table-hover">
+                        <thead>
+                            <tr>
+                                <th>Item</th>
+                                <th class="text-center" style="width: 100px;">Qtd</th>
+                                <th>Atualizado em</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stockTableBody">
+                            <tr>
+                                <td colspan="3" class="text-center text-muted">Selecione um técnico acima.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    async function loadStock(tecnicoId) {
+        const tbody = document.getElementById('stockTableBody');
+        if (!tecnicoId) {
+            tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Selecione um técnico acima.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = '<tr><td colspan="3" class="text-center"><div class="spinner-border spinner-border-sm" role="status"></div> Carregando...</td></tr>';
+
+        try {
+            const response = await fetch(`/stock/tecnico/${tecnicoId}/api`);
+            const data = await response.json();
+
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Nenhum item em estoque para este técnico.</td></tr>';
+                return;
+            }
+
+            let html = '';
+            data.forEach(item => {
+                html += `
+                <tr>
+                    <td>${item.item_nome}</td>
+                    <td class="text-center fw-bold">${item.quantidade}</td>
+                    <td>${new Date(item.data_atualizacao).toLocaleDateString("pt-BR")}</td>
+                </tr>
+            `;
+            });
+            tbody.innerHTML = html;
+
+        } catch (error) {
+            console.error(error);
+            tbody.innerHTML = '<tr><td colspan="3" class="text-center text-danger">Erro ao carregar estoque.</td></tr>';
+        }
+    }
+
+    // Bind to window for inline onchange
+    window.loadStock = loadStock;
+</script>
+{% endblock %}

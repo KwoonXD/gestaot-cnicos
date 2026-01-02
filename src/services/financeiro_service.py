@@ -301,6 +301,105 @@ class FinanceiroService:
             data=datetime.strptime(data.get('data'), '%Y-%m-%d').date() if data.get('data') else datetime.now().date(),
             descricao=data.get('descricao')
         )
+        
+        # Atualizar Saldo do Técnico
+        tecnico = Tecnico.query.get(lancamento.tecnico_id)
+        if lancamento.tipo in ['CREDITO_SERVICO', 'BONUS', 'REEMBOLSO']:
+            tecnico.saldo_atual += float(lancamento.valor)
+        elif lancamento.tipo in ['DEBITO_PAGAMENTO', 'ADIANTAMENTO', 'MULTA']:
+            tecnico.saldo_atual -= float(lancamento.valor)
+            
+        db.session.add(lancamento)
+        db.session.commit()
+        return lancamento
+
+    @staticmethod
+    def registrar_credito_servico(chamado):
+        """
+        Calcula o valor do serviço (considerando regras de lote dia/cidade) e lança crédito.
+        Deve ser chamado quando o chamado é APROVADO.
+        """
+        tecnico = chamado.tecnico
+        
+        # 1. Calcular Valor (Lógica Simplificada de Lote em Tempo Real)
+        # Verifica se já existe outro chamado PAGAVEL (Aprovado/Concluido) no mesmo dia e cidade/loja
+        # que NÃO seja este mesmo chamado.
+        
+        # Chave de agrupamento: Data + (Cidade ou Loja)
+        city_key = chamado.cidade if chamado.cidade and chamado.cidade != 'Indefinido' else chamado.loja
+        
+        outros_chamados_dia = Chamado.query.filter(
+            Chamado.tecnico_id == tecnico.id,
+            Chamado.data_atendimento == chamado.data_atendimento,
+            Chamado.status_chamado == 'Concluído',
+            Chamado.status_validacao == 'Aprovado',
+            Chamado.id != chamado.id
+        ).all()
+        
+        # Filtra por cidade/loja (Python side filtering for complex logic OR)
+        outros_no_lote = [c for c in outros_chamados_dia if (getattr(c, 'cidade', '') == chamado.cidade or getattr(c, 'loja', '') == chamado.loja)]
+        
+        is_primeiro = len(outros_no_lote) == 0
+        
+        valor_base = 0.0
+        descricao = f"Crédito ref. Chamado {chamado.codigo_chamado or chamado.id}"
+        
+        # Regras Específicas
+        tipo_res = chamado.tipo_resolucao or ''
+        
+        if 'Falha' in tipo_res:
+             valor_base = 0.0
+             descricao += " (Falha - R$ 0,00)"
+        elif 'Retorno SPARE' in tipo_res:
+             valor_base = float(tecnico.valor_por_atendimento)
+             descricao += " (Retorno SPARE - Valor Cheio)"
+        else:
+            if is_primeiro:
+                valor_base = float(tecnico.valor_por_atendimento)
+                descricao += " (Base)"
+            else:
+                valor_base = float(tecnico.valor_adicional_loja) # R$ 20.00
+                descricao += " (Adicional)"
+                
+        # Adicionar Custo Peça (Reembolso)
+        if chamado.fornecedor_peca == 'Tecnico and chamado.custo_peca':
+             valor_base += float(chamado.custo_peca)
+             descricao += f" + Peça (R$ {chamado.custo_peca})"
+
+        chamado.custo_atribuido = valor_base
+        
+        if valor_base > 0:
+            lancamento = Lancamento(
+                tecnico_id=tecnico.id,
+                tipo='CREDITO_SERVICO',
+                valor=valor_base,
+                data=datetime.now().date(),
+                descricao=descricao,
+                chamado_id=chamado.id
+            )
+            tecnico.saldo_atual += valor_base
+            db.session.add(lancamento)
+            # Nota: commit deve ser feito pelo caller (ChamadoService) para atomicidade? 
+            # Ou fazemos flush aqui. Vamos fazer flush para garantir ID mas deixar caller commitar se quiser.
+            # Mas aqui estamos num service method que parece ser atomico. Vamos commitar.
+            db.session.commit()
+            return lancamento
+        
+        return None
+
+    @staticmethod
+    def realizar_pagamento_conta_corrente(tecnico_id, valor, observacao=None):
+        tecnico = Tecnico.query.get_or_404(tecnico_id)
+        
+        lancamento = Lancamento(
+            tecnico_id=tecnico.id,
+            tipo='DEBITO_PAGAMENTO',
+            valor=valor,
+            data=datetime.now().date(),
+            descricao=observacao or "Pagamento realizado"
+        )
+        
+        tecnico.saldo_atual -= float(valor)
         db.session.add(lancamento)
         db.session.commit()
         return lancamento
