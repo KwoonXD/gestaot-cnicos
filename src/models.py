@@ -235,9 +235,11 @@ class Chamado(db.Model):
     status_chamado = db.Column(db.String(20), default='Finalizado')
     is_adicional = db.Column(db.Boolean, default=False)
     
-    # Horas Trabalhadas
-    horas_trabalhadas = db.Column(db.Float, default=2.0)
-    valor_horas_extras = db.Column(db.Numeric(10, 2), default=0.00)  # Calculado e persistido
+    # Horas Trabalhadas (Entrada: hora_inicio/hora_fim, Calculado: horas_trabalhadas)
+    hora_inicio = db.Column(db.String(5), nullable=True)  # Ex: "09:00"
+    hora_fim = db.Column(db.String(5), nullable=True)      # Ex: "12:30"
+    horas_trabalhadas = db.Column(db.Float, default=2.0)   # Calculado automaticamente
+    valor_horas_extras = db.Column(db.Numeric(10, 2), default=0.00)
     
     # Financeiro - RECEITA
     valor_receita_total = db.Column(db.Numeric(10, 2), default=0.00)
@@ -250,14 +252,14 @@ class Chamado(db.Model):
     fornecedor_peca = db.Column(db.String(20), default='Empresa')
     custo_atribuido = db.Column(db.Numeric(10, 2), default=0.00)
     
-    valor = db.Column(db.Numeric(10, 2), nullable=False, default=0.00) # Mantendo por compatibilidade
+    valor = db.Column(db.Numeric(10, 2), nullable=False, default=0.00)
     pago = db.Column(db.Boolean, default=False)
     pagamento_id = db.Column(db.Integer, db.ForeignKey('pagamentos.id'), nullable=True)
     endereco = db.Column(db.Text, nullable=True)
     observacoes = db.Column(db.Text, nullable=True)
     fsa_codes = db.Column(db.Text, nullable=True)
-    horario_inicio = db.Column(db.Time, nullable=True)
-    horario_saida = db.Column(db.Time, nullable=True)
+    horario_inicio = db.Column(db.Time, nullable=True)  # Legado
+    horario_saida = db.Column(db.Time, nullable=True)   # Legado
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Agrupamento por Lote/Atendimento

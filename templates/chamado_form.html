@@ -65,10 +65,10 @@
                         <thead class="bg-light">
                             <tr>
                                 <th style="width: 4%">#</th>
-                                <th style="width: 14%">Código FSA</th>
-                                <th style="width: 25%">Serviço *</th>
-                                <th style="width: 8%">Horas</th>
-                                <th style="width: 20%" id="pecaHeader">Peça LPU</th>
+                                <th style="width: 12%">Código FSA</th>
+                                <th style="width: 22%">Serviço *</th>
+                                <th style="width: 14%">Horário</th>
+                                <th style="width: 18%" id="pecaHeader">Peça LPU</th>
                                 <th style="width: 10%">Fornecedor</th>
                                 <th style="width: 10%">Custo (R$)</th>
                                 <th style="width: 4%"></th>
@@ -148,7 +148,6 @@
 
         if (cliente && cliente.servicos) {
             cliente.servicos.forEach(s => {
-                // data-exige-peca e data-franquia para lógica condicional
                 selectEl.innerHTML += `<option value="${s.id}" 
                     data-valor="${s.valor}" 
                     data-exige-peca="${s.exige_peca}" 
@@ -184,7 +183,7 @@
             <td class="text-center fw-bold text-muted">${rowCount}</td>
             <td>
                 <input type="text" class="form-control form-control-sm" 
-                    name="codigo_chamado_${rowCount}" placeholder="FSA-12345 ou URL Jira" required>
+                    name="codigo_chamado_${rowCount}" placeholder="FSA-12345" required>
             </td>
             <td>
                 <select class="form-select form-select-sm servico-select" name="servico_${rowCount}" 
@@ -193,8 +192,16 @@
                 </select>
             </td>
             <td>
-                <input type="number" step="0.5" min="0.5" max="12" class="form-control form-control-sm" 
-                    name="horas_${rowCount}" value="2" required>
+                <div class="d-flex gap-1 align-items-center flex-nowrap">
+                    <input type="time" class="form-control form-control-sm" 
+                        name="hora_inicio_${rowCount}" value="09:00" required 
+                        style="min-width: 95px; padding: 0.25rem 0.4rem;" onchange="updateHorasCalc(${rowCount})">
+                    <span class="text-muted small">→</span>
+                    <input type="time" class="form-control form-control-sm" 
+                        name="hora_fim_${rowCount}" value="11:00" required 
+                        style="min-width: 95px; padding: 0.25rem 0.4rem;" onchange="updateHorasCalc(${rowCount})">
+                </div>
+                <small class="text-primary d-block mt-1" id="horas-calc-${rowCount}">2h 0m</small>
             </td>
             <td class="peca-cell" id="peca-cell-${rowCount}">
                 <select class="form-select form-select-sm peca-lpu-select" name="peca_usada_${rowCount}">
@@ -298,9 +305,8 @@
             fsas.push({
                 codigo_chamado: form.querySelector(`input[name="codigo_chamado_${rowId}"]`).value,
                 catalogo_servico_id: servicoSelect.value,
-                catalogo_servico_nome: servicoOption ? servicoOption.text : '',
-                catalogo_servico_valor: servicoOption ? servicoOption.dataset.valor : 0,
-                horas_trabalhadas: parseFloat(form.querySelector(`input[name="horas_${rowId}"]`).value) || 2,
+                hora_inicio: form.querySelector(`input[name="hora_inicio_${rowId}"]`).value,
+                hora_fim: form.querySelector(`input[name="hora_fim_${rowId}"]`).value,
                 peca_id: pecaSelect ? pecaSelect.value : '',
                 peca_usada: pecaOption && pecaOption.value ? pecaOption.text : '',
                 peca_valor: pecaOption && pecaOption.dataset ? pecaOption.dataset.valor : 0,
@@ -325,12 +331,47 @@
 
             if (response.ok) {
                 alert('✅ ' + (result.message || 'Atendimento registrado com sucesso!'));
-                window.location.href = '{{ url_for('operacional.atendimentos') }}';
+                window.location.href = '/operacional/atendimentos';
             } else {
                 alert('❌ Erro: ' + (result.error || 'Erro desconhecido'));
             }
         } catch (err) {
             alert('❌ Erro de rede: ' + err.message);
+        }
+    }
+
+    // Calculate and display hours in real-time
+    function updateHorasCalc(rowId) {
+        const inicio = document.querySelector(`input[name="hora_inicio_${rowId}"]`).value;
+        const fim = document.querySelector(`input[name="hora_fim_${rowId}"]`).value;
+        const display = document.getElementById(`horas-calc-${rowId}`);
+
+        if (!inicio || !fim) {
+            display.textContent = '-';
+            return;
+        }
+
+        // Parse times
+        const [h1, m1] = inicio.split(':').map(Number);
+        const [h2, m2] = fim.split(':').map(Number);
+
+        let mins1 = h1 * 60 + m1;
+        let mins2 = h2 * 60 + m2;
+
+        // Handle overnight
+        if (mins2 < mins1) mins2 += 24 * 60;
+
+        const diffMins = mins2 - mins1;
+        const hours = Math.floor(diffMins / 60);
+        const mins = diffMins % 60;
+
+        display.textContent = `${hours}h ${mins}m`;
+
+        // Color code based on hours
+        if (hours > 4) {
+            display.className = 'text-warning fw-bold';
+        } else {
+            display.className = 'text-primary';
         }
     }
 

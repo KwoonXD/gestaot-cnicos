@@ -175,7 +175,38 @@
     </div>
 </div>
 
-<!-- Charts Row 2: Evolução -->
+<!-- Charts Row 2: Top Técnicos -->
+<div class="row g-4 mb-4">
+    <!-- Top Técnicos HE (Ineficiência) -->
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-stopwatch"></i> Top Ineficiência (Horas Extras)</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="tecnicosHEChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top Técnicos Volume (Produtividade) -->
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-activity"></i> Top Produtividade (Volume)</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="tecnicosVolumeChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row 3: Evolução -->
 <div class="row g-4 mb-4">
     <div class="col-12">
         <div class="card h-100">
@@ -349,6 +380,89 @@
         })
         .catch(err => console.error('Erro ao carregar gráfico de evolução:', err));
 
+    // Fetch Top Tecnicos HE
+    let tecnicosHEChart = null;
+    fetch('/api/dashboard/top_tecnicos_he')
+        .then(res => res.json())
+        .then(data => {
+            const ctxHE = document.getElementById('tecnicosHEChart').getContext('2d');
+            const colors = getThemeColors();
+
+            tecnicosHEChart = new Chart(ctxHE, {
+                type: 'bar',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        label: 'Valor (R$)',
+                        data: data.valores,
+                        backgroundColor: 'rgba(239, 68, 68, 0.7)', // Red
+                        borderColor: '#EF4444',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    indexAxis: 'y', // Horizontal Bar
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            grid: { color: colors.grid },
+                            ticks: { color: colors.text }
+                        },
+                        y: {
+                            grid: { display: false },
+                            ticks: { color: colors.text }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        })
+        .catch(console.error);
+
+    // Fetch Top Tecnicos Volume
+    let tecnicosVolumeChart = null;
+    fetch('/api/dashboard/top_tecnicos_volume')
+        .then(res => res.json())
+        .then(data => {
+            const ctxVol = document.getElementById('tecnicosVolumeChart').getContext('2d');
+            const colors = getThemeColors();
+
+            tecnicosVolumeChart = new Chart(ctxVol, {
+                type: 'bar',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        label: 'Chamados',
+                        data: data.valores,
+                        backgroundColor: 'rgba(16, 185, 129, 0.7)', // Green
+                        borderColor: '#10B981',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: colors.text }
+                        },
+                        y: {
+                            grid: { color: colors.grid },
+                            ticks: { color: colors.text }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        })
+        .catch(console.error);
+
     // Listen for Theme Changes
     window.addEventListener('theme-changed', (e) => {
         const newColors = getThemeColors();
@@ -372,6 +486,20 @@
             evolucaoChart.options.plugins.legend.labels.color = newColors.text;
 
             evolucaoChart.update();
+        }
+
+        if (tecnicosHEChart) {
+            tecnicosHEChart.options.scales.x.grid.color = newColors.grid;
+            tecnicosHEChart.options.scales.x.ticks.color = newColors.text;
+            tecnicosHEChart.options.scales.y.ticks.color = newColors.text;
+            tecnicosHEChart.update();
+        }
+
+        if (tecnicosVolumeChart) {
+            tecnicosVolumeChart.options.scales.y.grid.color = newColors.grid;
+            tecnicosVolumeChart.options.scales.y.ticks.color = newColors.text;
+            tecnicosVolumeChart.options.scales.x.ticks.color = newColors.text;
+            tecnicosVolumeChart.update();
         }
     });
 </script>

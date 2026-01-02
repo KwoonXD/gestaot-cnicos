@@ -70,6 +70,37 @@ class ChamadoService:
         return text.upper() if text else None
 
     @staticmethod
+    def calculate_hours_worked(hora_inicio, hora_fim):
+        """
+        Calcula horas trabalhadas a partir de strings "HH:MM".
+        Retorna float (ex: 2.5 para 2h30m).
+        Tratamento: Se fim < início, assume virada de dia (+24h).
+        """
+        if not hora_inicio or not hora_fim:
+            return 2.0  # Default
+        
+        try:
+            from datetime import datetime, timedelta
+            
+            # Parse strings
+            inicio = datetime.strptime(hora_inicio.strip(), '%H:%M')
+            fim = datetime.strptime(hora_fim.strip(), '%H:%M')
+            
+            # Calcula diferença
+            diff = fim - inicio
+            
+            # Se negativo, assumir virada de dia
+            if diff.total_seconds() < 0:
+                diff = diff + timedelta(hours=24)
+            
+            # Converte para horas decimais
+            horas = diff.total_seconds() / 3600
+            return round(horas, 2)
+        except Exception as e:
+            print(f"Erro ao calcular horas: {e}")
+            return 2.0  # Default em caso de erro
+
+    @staticmethod
     def get_all(filters=None, page=1, per_page=20):
         query = Chamado.query.join(Tecnico)
         
@@ -167,8 +198,12 @@ class ChamadoService:
             chamado.tipo_resolucao = f"{servico_nome} ({cliente_nome})" if cliente_nome else servico_nome
             chamado.is_adicional = (index > 0)
             
-            # --- Horas Trabalhadas ---
-            chamado.horas_trabalhadas = float(fsa.get('horas_trabalhadas', 2))
+            # --- Horas Trabalhadas (calculado de hora_inicio/hora_fim) ---
+            hora_inicio = fsa.get('hora_inicio', '')
+            hora_fim = fsa.get('hora_fim', '')
+            chamado.hora_inicio = hora_inicio
+            chamado.hora_fim = hora_fim
+            chamado.horas_trabalhadas = ChamadoService.calculate_hours_worked(hora_inicio, hora_fim)
             
             # --- Regras de RECEITA (Faturamento para WT) ---
             # Se o catálogo não paga técnico (ex: Improdutivo), receita é 0
