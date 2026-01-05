@@ -137,14 +137,7 @@ def gerar_pagamento():
             
     return render_template('pagamento_gerar.html', tecnicos=tecnicos_display, error=None)
 
-@financeiro_bp.route('/pagamentos/<int:id>')
-@login_required
-def pagamento_detalhes(id):
-    pagamento = FinanceiroService.get_by_id(id)
-    return render_template('pagamento_detalhes.html',
-        pagamento=pagamento,
-        chamados=pagamento.chamados_incluidos.all()
-    )
+
 
 @financeiro_bp.route('/pagamentos/<int:id>/pagar', methods=['POST'])
 @login_required

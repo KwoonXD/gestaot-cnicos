@@ -390,6 +390,51 @@ def atualizar_status_chamado(id):
             flash(f'Erro ao atualizar status: {str(e)}', 'danger')
     return redirect(url_for('operacional.chamados'))
 
+@operacional_bp.route('/api/chamados/<int:id>', methods=['GET'])
+@login_required
+def get_chamado_api(id):
+    chamado = ChamadoService.get_by_id(id)
+    if not chamado:
+        return jsonify({'error': 'Chamado não encontrado'}), 404
+        
+    return jsonify({
+        'id': chamado.id,
+        'codigo_chamado': chamado.codigo_chamado,
+        'tecnico_id': chamado.tecnico_id,
+        'status_chamado': chamado.status_chamado,
+        'data_atendimento': chamado.data_atendimento.isoformat() if chamado.data_atendimento else None,
+        'fsa_codes': chamado.fsa_codes,
+        'observacoes': chamado.observacoes
+    })
+
+@operacional_bp.route('/api/chamados/<int:id>/editar-rapido', methods=['POST'])
+@login_required
+def editar_chamado_rapido(id):
+    try:
+        data = request.get_json()
+        chamado = ChamadoService.get_by_id(id)
+        if not chamado:
+            return jsonify({'error': 'Chamado não encontrado'}), 404
+            
+        # Update allowed fields
+        if 'status' in data:
+            chamado.status_chamado = data['status']
+        if 'tecnico_id' in data:
+            chamado.tecnico_id = int(data['tecnico_id'])
+        if 'data_atendimento' in data and data['data_atendimento']:
+            from datetime import datetime
+            chamado.data_atendimento = datetime.strptime(data['data_atendimento'], '%Y-%m-%d').date()
+        if 'fsa_codes' in data:
+            chamado.fsa_codes = data['fsa_codes']
+        if 'observacoes' in data:
+            chamado.observacoes = data['observacoes']
+            
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+
 @operacional_bp.route('/tecnicos/<int:id>/resumo')
 @login_required
 def tecnico_resumo(id):

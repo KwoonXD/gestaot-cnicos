@@ -4,66 +4,67 @@
 
 {% block head %}
 <link href="https://cdn.jsdelivr.net/npm/tom-select/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
-<style>
-    /* Ajustes para o TomSelect combinar com Bootstrap 5 */
-    .ts-control {
-        border-radius: 0.375rem;
-        padding: 0.375rem 0.75rem;
-    }
-
-    .ts-wrapper.form-select {
-        padding: 0 !important;
-        border: none;
-    }
-</style>
 {% endblock %}
 
 {% block content %}
 <div class="container-fluid py-4">
-    <div class="row mb-4">
-        <div class="col">
-            <h2 class="h4 fw-bold text-gray-800"><i class="bi bi-clipboard-plus me-2"></i>Novo Atendimento</h2>
-            <p class="text-muted small">Cadastre um deslocamento e múltiplos chamados (FSAs) de uma só vez.</p>
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="h4 fw-bold text-gray-800">Novo Atendimento</h2>
+            <p class="text-muted small mb-0">Cadastro de deslocamento e ordens de serviço.</p>
         </div>
+        <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#smartPasteModal">
+            <i class="bi bi-magic me-2"></i>Colar Dados (WhatsApp/Email)
+        </button>
     </div>
 
     <form id="masterForm" onsubmit="submitMasterForm(event)">
+
         <div class="card shadow-sm mb-4">
-            <div class="card-header bg-light fw-bold text-primary">
-                <i class="bi bi-geo-alt me-2"></i> Dados Logísticos
+            <div class="card-header bg-light py-3">
+                <h6 class="m-0 fw-bold text-primary"><i class="bi bi-geo-alt me-2"></i>Logística</h6>
             </div>
             <div class="card-body">
                 <div class="row g-3">
-                    <div class="col-md-3">
-                        <label class="form-label fw-bold">Técnico Responsável *</label>
-                        <select name="tecnico_id" id="tecnico_id" class="form-select" required
-                            placeholder="Busque por Nome, Estado (ex: SP) ou Cidade...">
-                            <option value="">Selecione...</option>
+
+                    <div class="col-md-5">
+                        <label for="tecnico_id" class="form-label fw-bold">Técnico Responsável *</label>
+                        <select name="tecnico_id" id="tecnico_id" required>
+                            <option value="">Selecione ou digite...</option>
                             {% for doc in tecnicos %}
-                            <option value="{{ doc.id }}">
+                            <option value="{{ doc.id }}" data-estado="{{ doc.estado }}">
                                 {{ doc.nome }} | {{ doc.estado }} - {{ doc.cidade }}
                             </option>
                             {% endfor %}
                         </select>
-                        <div class="form-text text-muted small" id="stock-feedback">
-                            <i class="bi bi-info-circle"></i> Selecione para carregar estoque.
+                        <div class="form-text mt-1" id="stock-feedback">
+                            <i class="bi bi-info-circle"></i> Selecione para verificar estoque.
                         </div>
                     </div>
-                    <div class="col-md-2">
-                        <label class="form-label fw-bold">Data Atendimento *</label>
+
+                    <div class="col-md-3">
+                        <label for="data_atendimento" class="form-label fw-bold">Data Atendimento *</label>
                         <input type="date" name="data_atendimento" id="data_atendimento" class="form-control" required>
                     </div>
-                    <div class="col-md-3">
-                        <label class="form-label fw-bold">Cliente / Contrato *</label>
-                        <select name="cliente_id" id="cliente_id" class="form-select" required
-                            onchange="onClienteChange()" placeholder="Busque o contrato...">
+
+                    <div class="col-md-4">
+                        <label for="cliente_id" class="form-label fw-bold">Cliente / Contrato *</label>
+                        <select name="cliente_id" id="cliente_id" onchange="onClienteChange()" required>
                             <option value="">Carregando...</option>
                         </select>
                     </div>
-                    <div class="col-md-4">
-                        <label class="form-label fw-bold">Cidade / Local *</label>
+
+                    <div class="col-md-6">
+                        <label for="cidade" class="form-label fw-bold">Local / Cidade *</label>
                         <input type="text" name="cidade" id="cidade" class="form-control"
-                            placeholder="Ex: Shopping Iguatemi, São Paulo" required>
+                            placeholder="Ex: Shopping Iguatemi, Loja 10..." required>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label for="observacoes" class="form-label fw-bold">Observações</label>
+                        <input type="text" name="observacoes" id="observacoes" class="form-control"
+                            placeholder="Imprevistos, detalhes de acesso...">
                     </div>
                 </div>
             </div>
@@ -71,9 +72,7 @@
 
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                <span class="fw-bold text-success">
-                    <i class="bi bi-list-check me-2"></i> Chamados (FSAs)
-                </span>
+                <h6 class="m-0 fw-bold text-success"><i class="bi bi-list-check me-2"></i>Ordens de Serviço (FSAs)</h6>
                 <button type="button" class="btn btn-sm btn-success" onclick="addFsaRow()">
                     <i class="bi bi-plus-lg"></i> Adicionar FSA
                 </button>
@@ -81,16 +80,16 @@
             <div class="card-body p-0">
                 <div class="table-responsive">
                     <table class="table table-bordered mb-0 align-middle" id="fsaTable">
-                        <thead class="bg-light">
+                        <thead class="bg-light text-center">
                             <tr>
-                                <th style="width: 4%">#</th>
-                                <th style="width: 12%">Código FSA</th>
-                                <th style="width: 22%">Serviço *</th>
-                                <th style="width: 14%">Horário</th>
-                                <th style="width: 18%" id="pecaHeader">Peça LPU</th>
+                                <th style="width: 5%">#</th>
+                                <th style="width: 15%">Código FSA</th>
+                                <th style="width: 25%">Serviço</th>
+                                <th style="width: 15%">Horário</th>
+                                <th style="width: 20%" id="pecaHeader">Peça</th>
                                 <th style="width: 10%">Fornecedor</th>
-                                <th style="width: 10%">Custo (R$)</th>
-                                <th style="width: 4%"></th>
+                                <th style="width: 10%">Custo</th>
+                                <th style="width: 5%"></th>
                             </tr>
                         </thead>
                         <tbody id="fsaTableBody">
@@ -98,189 +97,167 @@
                     </table>
                 </div>
             </div>
-            <div class="card-footer bg-white text-muted small">
-                * Primeiro FSA = "Principal". Os demais = "Carona" (Adicional). Pagamento calculado automaticamente.
-            </div>
         </div>
 
-        <div class="d-flex justify-content-end gap-2 mobile-action-bar">
-            <a href="{{ url_for('operacional.chamados') }}" class="btn btn-outline-secondary">Cancelar</a>
-            <button type="submit" class="btn btn-primary px-4">
-                <i class="bi bi-save me-2"></i> Salvar Atendimento
-            </button>
+        <div class="d-flex justify-content-end gap-2 pb-5">
+            <a href="{{ url_for('operacional.chamados') }}" class="btn btn-secondary">Cancelar</a>
+            <button type="submit" class="btn btn-primary px-4 fw-bold">Salvar Atendimento</button>
         </div>
     </form>
+</div>
+
+<div class="modal fade" id="smartPasteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Importar Dados (Texto)</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <textarea id="pasteArea" class="form-control" rows="8"
+                    placeholder="Cole aqui o texto do WhatsApp ou E-mail..."></textarea>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" onclick="processSmartPaste()">Preencher
+                    Formulário</button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/tom-select/dist/js/tom-select.complete.min.js"></script>
 
 <script>
-    // Global data stores
+    // Configuração Padrão do TomSelect (Funciona como um select pesquisável nativo)
+    const tomSelectConfig = {
+        create: false,
+        sortField: { field: "text", direction: "asc" },
+        placeholder: "Selecione ou digite...",
+        plugins: ['dropdown_input'], // Garante que a busca funcione bem
+    };
+
     let contratosData = { clientes: [] };
     let currentClienteId = null;
     let rowCount = 0;
+    let currentTechStock = {};
+    let tsTecnico = null;
+    let tsCliente = null;
 
-    // Feature B: Estoque Cache
-    let currentTechStock = {}; // { itemId: qtd }
-    let tsTecnico = null;      // Instância TomSelect Técnico
-    let tsCliente = null;      // Instância TomSelect Cliente
+    // --- LÓGICA DE NEGÓCIO RESTAURADA ---
 
-    // Fetch contract data on page load
     async function loadContratosData() {
         try {
             const response = await fetch('/api/dados_contrato');
             if (!response.ok) throw new Error('Erro ao carregar dados');
             contratosData = await response.json();
             populateClienteSelect();
-        } catch (err) {
-            console.error(err);
-            document.getElementById('cliente_id').innerHTML = '<option value="">Erro ao carregar</option>';
-        }
+        } catch (err) { console.error(err); }
     }
 
     function populateClienteSelect() {
         const select = document.getElementById('cliente_id');
-        // Limpa opções (mantendo placeholder se nativo, mas TomSelect vai gerenciar)
-        select.innerHTML = '<option value="">Selecione o Cliente...</option>';
-
+        if (!select) return;
+        select.innerHTML = '<option value="">Selecione...</option>';
         contratosData.clientes.forEach(c => {
             select.innerHTML += `<option value="${c.id}">${c.nome}</option>`;
         });
 
-        // Feature A: Init TomSelect Cliente
-        if (!tsCliente) {
-            tsCliente = new TomSelect('#cliente_id', {
-                create: false,
-                sortField: { field: "text", direction: "asc" },
-                onChange: onClienteChange // Hook change event
-            });
-        } else {
-            tsCliente.sync();
-        }
+        // Reinicia TomSelect do Cliente se já existir
+        if (tsCliente) { tsCliente.destroy(); }
+
+        tsCliente = new TomSelect('#cliente_id', {
+            ...tomSelectConfig,
+            onChange: onClienteChange
+        });
     }
 
-    // Feature B: Fetch Stock on Tech Change
     async function onTecnicoChange(val) {
         const feedback = document.getElementById('stock-feedback');
         if (!val) {
             currentTechStock = {};
-            feedback.innerHTML = '<i class="bi bi-info-circle"></i> Selecione para carregar estoque.';
+            feedback.innerHTML = '<i class="bi bi-info-circle"></i> Selecione para verificar estoque.';
             updateAllRowsStock();
             return;
         }
 
-        feedback.innerHTML = '<span class="spinner-border spinner-border-sm text-primary" role="status"></span> Carregando estoque...';
+        feedback.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Verificando estoque...';
 
         try {
             const res = await fetch(`/api/estoque/tecnico/${val}`);
             if (res.ok) {
                 currentTechStock = await res.json();
-                feedback.innerHTML = '<i class="bi bi-check-circle text-success"></i> Estoque sincronizado.';
-                updateAllRowsStock(); // Atualiza badges nas linhas existentes
+                const total = Object.values(currentTechStock).reduce((a, b) => a + b, 0);
+
+                if (total > 0) feedback.innerHTML = `<span class="text-success fw-bold"><i class="bi bi-check-circle"></i> ${total} itens em estoque.</span>`;
+                else feedback.innerHTML = `<span class="text-warning"><i class="bi bi-exclamation-triangle"></i> Sem estoque volante.</span>`;
+
+                updateAllRowsStock();
             } else {
-                feedback.innerHTML = '<i class="bi bi-exclamation-circle text-danger"></i> Erro ao buscar estoque.';
+                feedback.innerHTML = '<span class="text-danger">Erro ao buscar estoque.</span>';
             }
-        } catch (e) {
-            console.error(e);
-            feedback.innerHTML = '<i class="bi bi-wifi-off text-danger"></i> Falha de rede.';
-        }
+        } catch (e) { console.error(e); }
     }
 
     function updateAllRowsStock() {
-        // Percorre todas as linhas e atualiza o badge de saldo da peça selecionada
         document.querySelectorAll('#fsaTableBody tr').forEach(tr => {
             const rowId = tr.dataset.rowId;
-            const pecaSelect = tr.querySelector(`select[name="peca_usada_${rowId}"]`);
-            if (pecaSelect) {
-                updateStockBadge(rowId, pecaSelect.value);
-            }
+            const select = tr.querySelector(`select[name="peca_usada_${rowId}"]`);
+            if (select) updateStockBadge(rowId, select.value);
         });
     }
 
     function updateStockBadge(rowId, itemId) {
-        // Encontra ou cria o elemento badge
         let badge = document.getElementById(`stock-badge-${rowId}`);
-        if (!badge) {
-            // Se não existe, cria ao lado do select de peça (dentro da td)
-            const td = document.getElementById(`peca-cell-${rowId}`);
-            if (td) {
-                badge = document.createElement('span');
-                badge.id = `stock-badge-${rowId}`;
-                badge.className = 'badge ms-2';
-                badge.style.fontSize = '0.75em';
-                // Insere após o select (ou wrapper do select)
-                td.appendChild(badge);
-            }
+        const td = document.getElementById(`peca-cell-${rowId}`);
+
+        // Cria o badge se não existir
+        if (!badge && td) {
+            badge = document.createElement('span');
+            badge.id = `stock-badge-${rowId}`;
+            badge.className = 'badge bg-secondary ms-2';
+            td.appendChild(badge);
         }
 
-        if (!itemId || !currentTechStock) {
-            badge.style.display = 'none';
+        if (!itemId || !badge) {
+            if (badge) badge.style.display = 'none';
             return;
         }
 
-        // Recupera saldo
         const qtd = currentTechStock[parseInt(itemId)] || 0;
-
-        // Atualiza visual
         badge.style.display = 'inline-block';
         badge.textContent = `Saldo: ${qtd}`;
-
-        if (qtd > 0) {
-            badge.className = 'badge bg-success ms-1';
-        } else {
-            badge.className = 'badge bg-danger ms-1';
-        }
+        badge.className = qtd > 0 ? 'badge bg-success ms-2' : 'badge bg-danger ms-2';
     }
 
-    // Modified onClienteChange because TomSelect handles events differently
     function onClienteChange() {
-        // TomSelect value access
-        const clienteId = document.getElementById('cliente_id').value;
-        currentClienteId = clienteId ? parseInt(clienteId) : null;
-
-        document.querySelectorAll('.servico-select').forEach(select => {
-            updateServicoOptions(select);
-        });
-
-        document.querySelectorAll('.peca-lpu-select').forEach(select => {
-            updateLpuOptions(select);
-        });
+        const val = document.getElementById('cliente_id').value;
+        currentClienteId = val ? parseInt(val) : null;
+        document.querySelectorAll('.servico-select').forEach(s => updateServicoOptions(s));
+        document.querySelectorAll('.peca-lpu-select').forEach(s => updateLpuOptions(s));
     }
 
-    function getClienteData() {
-        if (!currentClienteId) return null;
-        return contratosData.clientes.find(c => c.id === currentClienteId);
-    }
+    function getClienteData() { return contratosData.clientes.find(c => c.id === currentClienteId); }
 
-    function updateServicoOptions(selectEl) {
+    function updateServicoOptions(select) {
         const cliente = getClienteData();
-        selectEl.innerHTML = '<option value="">-- Selecione o Serviço --</option>';
-
+        select.innerHTML = '<option value="">-- Serviço --</option>';
         if (cliente && cliente.servicos) {
             cliente.servicos.forEach(s => {
-                selectEl.innerHTML += `<option value="${s.id}" 
-                    data-valor="${s.valor}" 
-                    data-exige-peca="${s.exige_peca}" 
-                    data-franquia="${s.horas_franquia}"
-                    data-paga-tecnico="${s.paga_tecnico}">
-                    ${s.nome} (R$ ${s.valor.toFixed(2)})
+                select.innerHTML += `<option value="${s.id}" 
+                    data-exige-peca="${s.exige_peca}"
+                    data-franquia="${s.horas_franquia || 2}">
+                    ${s.nome}
                 </option>`;
             });
         }
     }
 
-    function updateLpuOptions(selectEl) {
+    function updateLpuOptions(select) {
         const cliente = getClienteData();
-        selectEl.innerHTML = '<option value="">-- Nenhuma --</option>';
-
+        select.innerHTML = '<option value="">-- Nenhuma --</option>';
         if (cliente && cliente.lpu) {
             cliente.lpu.forEach(l => {
-                // Check if we have stock info to append to text?
-                // Optional: We could add (Saldo: X) directly in text, 
-                // but the badge approach is cleaner for dynamic updates.
-                selectEl.innerHTML += `<option value="${l.id}" data-valor="${l.valor}">
-                    ${l.nome} (R$ ${l.valor.toFixed(2)})
-                </option>`;
+                select.innerHTML += `<option value="${l.id}">${l.nome}</option>`;
             });
         }
     }
@@ -293,215 +270,139 @@
         tr.dataset.rowId = rowCount;
 
         tr.innerHTML = `
-            <td class="text-center fw-bold text-muted">${rowCount}</td>
+            <td class="text-center fw-bold">${rowCount}</td>
+            <td><input type="text" class="form-control form-control-sm" name="codigo_chamado_${rowCount}" placeholder="FSA..." required></td>
+            <td><select class="form-select form-select-sm servico-select" name="servico_${rowCount}" onchange="onServicoChange(this, ${rowCount})" required><option value="">--</option></select></td>
             <td>
-                <input type="text" class="form-control form-control-sm" 
-                    name="codigo_chamado_${rowCount}" placeholder="FSA-12345" required>
-            </td>
-            <td>
-                <select class="form-select form-select-sm servico-select" name="servico_${rowCount}" 
-                    onchange="onServicoChange(this, ${rowCount})" required>
-                    <option value="">-- Serviço --</option>
-                </select>
-            </td>
-            <td>
-                <div class="d-flex gap-1 align-items-center flex-nowrap">
-                    <input type="time" class="form-control form-control-sm" 
-                        name="hora_inicio_${rowCount}" value="09:00" required 
-                        style="min-width: 95px; padding: 0.25rem 0.4rem;" onchange="updateHorasCalc(${rowCount})">
-                    <span class="text-muted small">→</span>
-                    <input type="time" class="form-control form-control-sm" 
-                        name="hora_fim_${rowCount}" value="11:00" required 
-                        style="min-width: 95px; padding: 0.25rem 0.4rem;" onchange="updateHorasCalc(${rowCount})">
+                <div class="d-flex gap-1">
+                    <input type="time" class="form-control form-control-sm" name="hora_inicio_${rowCount}" value="09:00" required>
+                    <input type="time" class="form-control form-control-sm" name="hora_fim_${rowCount}" value="11:00" required>
                 </div>
-                <small class="text-primary d-block mt-1" id="horas-calc-${rowCount}">2h 0m</small>
             </td>
-            <td class="peca-cell" id="peca-cell-${rowCount}">
-                <div class="d-flex align-items-center">
-                    <select class="form-select form-select-sm peca-lpu-select" name="peca_usada_${rowCount}" onchange="updateStockBadge(${rowCount}, this.value)">
-                        <option value="">-- Nenhuma --</option>
-                    </select>
-                    </div>
+            <td id="peca-cell-${rowCount}" class="d-flex align-items-center">
+                <select class="form-select form-select-sm peca-lpu-select" name="peca_usada_${rowCount}" onchange="updateStockBadge(${rowCount}, this.value)"><option value="">--</option></select>
             </td>
             <td>
-                <select class="form-select form-select-sm" name="fornecedor_peca_${rowCount}" 
-                    onchange="checkSupplier(this, ${rowCount})">
+                <select class="form-select form-select-sm" name="fornecedor_peca_${rowCount}" onchange="checkSupplier(this, ${rowCount})">
                     <option value="Empresa">Empresa</option>
                     <option value="Tecnico">Técnico</option>
                 </select>
             </td>
-            <td>
-                <input type="number" step="0.01" class="form-control form-control-sm" 
-                    name="custo_peca_${rowCount}" placeholder="0.00" disabled>
-            </td>
+            <td><input type="number" step="0.01" class="form-control form-control-sm" name="custo_peca_${rowCount}" placeholder="0.00" disabled></td>
             <td class="text-center">
-                <button type="button" class="btn btn-ghost-danger btn-icon" onclick="removeRow(${rowCount})">
-                    <i class="bi bi-trash"></i>
-                </button>
+                <button type="button" class="btn btn-sm btn-danger" onclick="removeRow(${rowCount})"><i class="bi bi-trash"></i></button>
             </td>
         `;
         tbody.appendChild(tr);
-
-        // Populate dynamic selects
-        const servicoSelect = tr.querySelector('.servico-select');
-        const lpuSelect = tr.querySelector('.peca-lpu-select');
-        updateServicoOptions(servicoSelect);
-        updateLpuOptions(lpuSelect);
+        updateServicoOptions(tr.querySelector('.servico-select'));
+        updateLpuOptions(tr.querySelector('.peca-lpu-select'));
     }
 
-    function removeRow(id) {
-        const tr = document.getElementById(`row-${id}`);
-        if (tr) tr.remove();
+    function removeRow(id) { document.getElementById(`row-${id}`)?.remove(); }
+
+    function checkSupplier(select, id) {
+        const input = document.querySelector(`input[name="custo_peca_${id}"]`);
+        input.disabled = select.value !== 'Tecnico';
+        if (!input.disabled) input.focus(); else input.value = '';
     }
 
     function onServicoChange(select, rowId) {
-        const option = select.options[select.selectedIndex];
-        const exigePeca = option.dataset.exigePeca === 'true';
-        const franquia = option.dataset.franquia || 2;
-
-        const pecaCell = document.getElementById(`peca-cell-${rowId}`);
-        const pecaSelect = pecaCell.querySelector('.peca-lpu-select');
-        const horasInput = document.querySelector(`input[name="horas_${rowId}"]`);
-
-        // Toggle LPU visibility
-        if (exigePeca) {
-            // Visualmente ativo
-            pecaSelect.disabled = false;
-            pecaSelect.required = true;
-            pecaCell.style.opacity = '1';
-        } else {
-            // Visualmente inativo
-            pecaSelect.disabled = false; // Mantém habilitado caso queira selecionar opcional
-            pecaSelect.required = false;
-            pecaSelect.value = '';
-            pecaCell.style.opacity = '1'; // Mantém visível, mas opcional
-            updateStockBadge(rowId, ''); // Clear badge
-        }
-    }
-
-    function checkSupplier(select, id) {
-        const inputCusto = document.querySelector(`input[name="custo_peca_${id}"]`);
-        if (select.value === 'Tecnico') {
-            inputCusto.disabled = false;
-            inputCusto.required = true;
-            inputCusto.focus();
-        } else {
-            inputCusto.disabled = true;
-            inputCusto.value = '';
-            inputCusto.required = false;
-        }
+        // Lógica de toggle visual se necessário
+        const opt = select.options[select.selectedIndex];
+        const exige = opt.dataset.exigePeca === 'true';
+        // (Opcional) Poderia destacar o campo de peça se exigido
     }
 
     async function submitMasterForm(e) {
         e.preventDefault();
-
         const form = document.getElementById('masterForm');
-        const cliente = getClienteData();
+        const btn = form.querySelector('button[type="submit"]');
+        const originalText = btn.innerHTML;
 
-        // Build logistica object
+        // Coleta Logística
         const logistica = {
             tecnico_id: document.getElementById('tecnico_id').value,
             data_atendimento: document.getElementById('data_atendimento').value,
             cidade: document.getElementById('cidade').value,
             cliente_id: currentClienteId,
-            cliente_nome: cliente ? cliente.nome : ''
+            observacoes: document.getElementById('observacoes').value
         };
 
-        // Build FSA list
+        // Coleta FSAs
         const fsas = [];
         document.querySelectorAll('#fsaTableBody tr').forEach(tr => {
-            const rowId = tr.dataset.rowId;
-            if (!rowId) return;
+            const r = tr.dataset.rowId;
+            if (!r) return;
 
-            const servicoSelect = tr.querySelector(`select[name="servico_${rowId}"]`);
-            const pecaSelect = tr.querySelector(`select[name="peca_usada_${rowId}"]`);
-            const pecaOption = pecaSelect ? pecaSelect.options[pecaSelect.selectedIndex] : null;
+            const serv = tr.querySelector(`select[name="servico_${r}"]`);
+            const peca = tr.querySelector(`select[name="peca_usada_${r}"]`);
+            const pecaOpt = peca ? peca.options[peca.selectedIndex] : null;
 
             fsas.push({
-                codigo_chamado: form.querySelector(`input[name="codigo_chamado_${rowId}"]`).value,
-                catalogo_servico_id: servicoSelect.value,
-                hora_inicio: form.querySelector(`input[name="hora_inicio_${rowId}"]`).value,
-                hora_fim: form.querySelector(`input[name="hora_fim_${rowId}"]`).value,
-                peca_id: pecaSelect ? pecaSelect.value : '',
-                peca_usada: pecaOption && pecaOption.value ? pecaOption.text : '',
-                fornecedor_peca: form.querySelector(`select[name="fornecedor_peca_${rowId}"]`).value,
-                custo_peca: parseFloat(form.querySelector(`input[name="custo_peca_${rowId}"]`).value) || 0
+                codigo_chamado: form.querySelector(`input[name="codigo_chamado_${r}"]`).value,
+                catalogo_servico_id: serv.value,
+                hora_inicio: form.querySelector(`input[name="hora_inicio_${r}"]`).value,
+                hora_fim: form.querySelector(`input[name="hora_fim_${r}"]`).value,
+                peca_id: peca ? peca.value : '',
+                peca_usada: pecaOpt ? pecaOpt.text : '',
+                fornecedor_peca: form.querySelector(`select[name="fornecedor_peca_${r}"]`).value,
+                custo_peca: parseFloat(form.querySelector(`input[name="custo_peca_${r}"]`).value) || 0
             });
         });
 
-        if (fsas.length === 0) {
-            alert('Adicione pelo menos um FSA.');
-            return;
-        }
+        if (fsas.length === 0) { alert('Adicione pelo menos um FSA.'); return; }
 
-        // --- UX Feature: Button Loading State ---
-        const btnSubmit = form.querySelector('button[type="submit"]');
-        const originalBtnText = btnSubmit.innerHTML;
-        btnSubmit.disabled = true;
-        btnSubmit.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Salvando...';
+        btn.disabled = true;
+        btn.innerHTML = 'Salvando...';
 
         try {
-            const response = await fetch('/chamados/criar/multiplo', {
+            const res = await fetch('/chamados/criar/multiplo', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ logistica, fsas })
             });
+            const data = await res.json();
 
-            const result = await response.json();
-
-            if (response.ok) {
-                // Sucesso: Redirecionar
+            if (res.ok) {
                 window.location.href = '/operacional/atendimentos';
             } else {
-                alert('❌ Erro: ' + (result.error || 'Erro desconhecido'));
-                btnSubmit.disabled = false;
-                btnSubmit.innerHTML = originalBtnText;
+                alert('Erro: ' + (data.error || 'Desconhecido'));
+                btn.disabled = false;
+                btn.innerHTML = originalText;
             }
         } catch (err) {
-            alert('❌ Erro de rede: ' + err.message);
-            btnSubmit.disabled = false;
-            btnSubmit.innerHTML = originalBtnText;
+            alert('Erro de rede.');
+            btn.disabled = false;
+            btn.innerHTML = originalText;
         }
     }
 
-    function updateHorasCalc(rowId) {
-        const inicio = document.querySelector(`input[name="hora_inicio_${rowId}"]`).value;
-        const fim = document.querySelector(`input[name="hora_fim_${rowId}"]`).value;
-        const display = document.getElementById(`horas-calc-${rowId}`);
+    function processSmartPaste() {
+        const text = document.getElementById('pasteArea').value;
+        if (!text) return;
 
-        if (!inicio || !fim) {
-            display.textContent = '-';
-            return;
+        const city = text.match(/(?:Cidade|Local|Loja)[:\s]+([^\n]+)/i);
+        const date = text.match(/(\d{2}\/\d{2}\/\d{2,4})/);
+
+        if (city) document.getElementById('cidade').value = city[1].trim();
+        if (date) {
+            const parts = date[1].split('/');
+            let y = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+            document.getElementById('data_atendimento').value = `${y}-${parts[1]}-${parts[0]}`;
         }
 
-        const [h1, m1] = inicio.split(':').map(Number);
-        const [h2, m2] = fim.split(':').map(Number);
-
-        let mins1 = h1 * 60 + m1;
-        let mins2 = h2 * 60 + m2;
-
-        if (mins2 < mins1) mins2 += 24 * 60;
-
-        const diffMins = mins2 - mins1;
-        const hours = Math.floor(diffMins / 60);
-        const mins = diffMins % 60;
-
-        display.textContent = `${hours}h ${mins}m`;
-
-        if (hours > 4) display.className = 'text-warning fw-bold';
-        else display.className = 'text-primary';
+        bootstrap.Modal.getInstance(document.getElementById('smartPasteModal')).hide();
     }
 
+    // Inicialização
     document.addEventListener('DOMContentLoaded', () => {
         loadContratosData();
         addFsaRow();
-        const today = new Date().toISOString().split('T')[0];
-        document.getElementById('data_atendimento').value = today;
+        document.getElementById('data_atendimento').value = new Date().toISOString().split('T')[0];
 
-        // Feature A: Init TomSelect Técnico
+        // INICIALIZA TOMSELECT TÉCNICO
         tsTecnico = new TomSelect('#tecnico_id', {
-            create: false,
-            sortField: { field: "text", direction: "asc" },
+            ...tomSelectConfig,
             onChange: onTecnicoChange
         });
     });

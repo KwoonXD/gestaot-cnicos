@@ -279,7 +279,7 @@
                                 </span>
                             </td>
                             <td>
-                                <a href="{{ url_for('financeiro.pagamento_detalhes', id=pg.id) }}"
+                                <a href="#" onclick="openHistoryDetails({{ pg.id }}); return false;"
                                     class="btn btn-sm btn-outline-info">
                                     <i class="bi bi-eye"></i>
                                 </a>
@@ -487,7 +487,7 @@
                             {% for pagamento in pagamentos %}
                             <tr>
                                 <td>
-                                    <a href="{{ url_for('financeiro.pagamento_detalhes', id=pagamento.id) }}">
+                                    <a href="#" onclick="openHistoryDetails({{ pagamento.id }}); return false;">
                                         <code>{{ pagamento.id_pagamento }}</code>
                                     </a>
                                 </td>
@@ -615,6 +615,168 @@
             console.error(err);
             alert('Erro ao copiar link.');
         }
+    }
+</script>
+
+<!-- Modal for Payment Details (Copied from pagamentos.html) -->
+<div class="modal fade" id="paymentModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-cash-stack"></i> Detalhes do Pagamento</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Loading State -->
+                <div id="modalLoading" class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Carregando...</span>
+                    </div>
+                </div>
+
+                <!-- Content State -->
+                <div id="modalContent" style="display: none;">
+                    <!-- Financial Stats -->
+                    <div id="modalStats" class="row g-2 mb-3">
+                        <div class="col-4">
+                            <div class="p-2 border rounded text-center bg-light">
+                                <small class="text-muted d-block" style="font-size: 0.7rem;">TOTAL PAGO</small>
+                                <span class="fw-bold text-danger" id="statValorTotal">R$ 0,00</span>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="p-2 border rounded text-center bg-light">
+                                <small class="text-muted d-block" style="font-size: 0.7rem;">FATURADO</small>
+                                <span class="fw-bold text-success" id="statReceita">R$ 0,00</span>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="p-2 border rounded text-center bg-light">
+                                <small class="text-muted d-block" style="font-size: 0.7rem;">MARGEM</small>
+                                <span class="fw-bold" id="statMargem">R$ 0,00</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Technician Info -->
+                    <div class="alert alert-light border d-flex justify-content-between align-items-center mb-4">
+                        <div>
+                            <h5 id="modalTechName" class="mb-1 fw-bold">Nome do Técnico</h5>
+                            <div class="text-muted small">
+                                <i class="bi bi-bank"></i> <span id="modalTechBank">Chave Pix: -</span>
+                            </div>
+                        </div>
+                        <div class="text-end">
+                            <small class="text-muted d-block uppercase">Valor Total</small>
+                            <span id="modalTotalValue" class="fs-4 fw-bold text-success">R$ 0,00</span>
+                        </div>
+                    </div>
+
+                    <!-- Services List -->
+                    <h6 class="mb-3 text-secondary">Chamados Inclusos</h6>
+                    <div class="table-responsive mb-3" style="max-height: 300px; overflow-y: auto;">
+                        <table class="table table-sm table-bordered">
+                            <thead>
+                                <tr>
+                                    <th>Data</th>
+                                    <th>Cód. Chamado</th>
+                                    <th>Tipo</th>
+                                    <th>Endereço</th>
+                                    <th class="text-end">Valor</th>
+                                </tr>
+                            </thead>
+                            <tbody id="modalServicesList">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Proof of Payment -->
+                    <div id="modalProof" class="mb-3 d-none text-end">
+                        <a href="#" target="_blank" id="btnViewProof" class="btn btn-sm btn-outline-info">
+                            <i class="bi bi-file-earmark-text"></i> Ver Comprovante
+                        </a>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Payment Modal Logic
+    let modalPS = null;
+
+    function initModal() {
+        const el = document.getElementById('paymentModal');
+        if (el) modalPS = new bootstrap.Modal(el);
+    }
+    document.addEventListener('DOMContentLoaded', initModal);
+
+    function openHistoryDetails(pagamentoId) {
+        if (!modalPS) initModal();
+        modalPS.show();
+
+        const modalLoading = document.getElementById('modalLoading');
+        const modalContent = document.getElementById('modalContent');
+        const modalProof = document.getElementById('modalProof');
+
+        modalLoading.style.display = 'block';
+        modalContent.style.display = 'none';
+
+        // Fetch History
+        fetch(`/api/pagamentos/${pagamentoId}`)
+            .then(res => res.json())
+            .then(data => {
+                // Populate Header
+                document.getElementById('modalTechName').textContent = data.tecnico.nome;
+                document.getElementById('modalTechBank').textContent = data.tecnico.chave_pagamento || '-';
+                document.getElementById('modalTotalValue').textContent = `R$ ${data.financeiro.valor_total.toFixed(2)}`;
+
+                // Populate Stats
+                document.getElementById('statValorTotal').textContent = `R$ ${data.financeiro.valor_total.toFixed(2)}`;
+                document.getElementById('statReceita').textContent = `R$ ${data.financeiro.receita_estimada.toFixed(2)}`;
+                document.getElementById('statMargem').textContent = `R$ ${data.financeiro.lucro_bruto.toFixed(2)}`;
+                document.getElementById('statMargem').className = `fw-bold ${data.financeiro.lucro_bruto >= 0 ? 'text-success' : 'text-danger'}`;
+
+                // Populate Table
+                const tbody = document.getElementById('modalServicesList');
+                tbody.innerHTML = '';
+                data.chamados.forEach(c => {
+                    let displayCode = c.codigo;
+                    if (c.fsa_codes) displayCode += `<br><small class="text-muted">${c.fsa_codes}</small>`;
+
+                    const row = `
+                        <tr>
+                            <td>${c.data}</td>
+                            <td>${displayCode}</td>
+                            <td>${c.tipo}</td>
+                            <td class="small text-muted text-truncate" style="max-width: 200px;">${c.endereco}</td>
+                            <td class="text-end">R$ ${c.valor || c.valor_pago}</td> 
+                        </tr>
+                    `;
+                    tbody.innerHTML += row;
+                });
+
+                // Proof
+                if (data.info.comprovante_url) {
+                    modalProof.classList.remove('d-none');
+                    document.getElementById('btnViewProof').href = data.info.comprovante_url;
+                } else {
+                    modalProof.classList.add('d-none');
+                }
+
+                modalLoading.style.display = 'none';
+                modalContent.style.display = 'block';
+            })
+            .catch(err => {
+                console.error(err);
+                alert('Erro ao carregar detalhes.');
+                modalPS.hide();
+            });
     }
 </script>
 {% endblock %}

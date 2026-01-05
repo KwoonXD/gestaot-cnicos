@@ -197,7 +197,7 @@
                             {% for pagamento in pagamentos %}
                             <tr>
                                 <td>
-                                    <a href="{{ url_for('financeiro.pagamento_detalhes', id=pagamento.id) }}">
+                                    <a href="#" onclick="openHistoryDetails({{ pagamento.id }}); return false;">
                                         <code>{{ pagamento.id_pagamento }}</code>
                                     </a>
                                 </td>
@@ -222,10 +222,10 @@
                                 <td>{{ pagamento.data_pagamento.strftime('%d/%m/%Y') if pagamento.data_pagamento else
                                     '-' }}</td>
                                 <td class="action-buttons">
-                                    <a href="{{ url_for('financeiro.pagamento_detalhes', id=pagamento.id) }}"
-                                        class="btn btn-sm btn-outline-primary btn-action" title="Ver Detalhes">
+                                    <button class="btn btn-sm btn-outline-primary btn-action" title="Ver Detalhes"
+                                        onclick="openHistoryDetails({{ pagamento.id }})">
                                         <i class="bi bi-eye"></i>
-                                    </a>
+                                    </button>
                                     {% if pagamento.status_pagamento == 'Pendente' %}
                                     <button type="button" class="btn btn-sm btn-outline-success btn-action"
                                         data-bs-toggle="modal" data-bs-target="#pagarModal{{ pagamento.id }}"
@@ -293,7 +293,7 @@
 </div>
 </div>
 
-<!-- Modal for New Payment Generation (from Tab 1) -->
+<!-- Modal for Payment Details (Unified) -->
 <div class="modal fade" id="paymentModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
@@ -311,6 +311,29 @@
 
                 <!-- Content State -->
                 <div id="modalContent" style="display: none;">
+
+                    <!-- Financial Stats (History Mode Only) -->
+                    <div id="modalStats" class="row g-2 mb-3 d-none">
+                        <div class="col-4">
+                            <div class="p-2 border rounded text-center bg-light">
+                                <small class="text-muted d-block" style="font-size: 0.7rem;">TOTAL PAGO</small>
+                                <span class="fw-bold text-danger" id="statValorTotal">R$ 0,00</span>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="p-2 border rounded text-center bg-light">
+                                <small class="text-muted d-block" style="font-size: 0.7rem;">FATURADO</small>
+                                <span class="fw-bold text-success" id="statReceita">R$ 0,00</span>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="p-2 border rounded text-center bg-light">
+                                <small class="text-muted d-block" style="font-size: 0.7rem;">MARGEM</small>
+                                <span class="fw-bold" id="statMargem">R$ 0,00</span>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Technician Info & Bank -->
                     <div class="alert alert-light border d-flex justify-content-between align-items-center mb-4">
                         <div>
@@ -320,10 +343,11 @@
                             </div>
                         </div>
                         <div class="text-end">
-                            <small class="text-muted d-block uppercase">Valor Total a Pagar</small>
+                            <small class="text-muted d-block uppercase">Valor Total</small>
                             <span id="modalTotalValue" class="fs-4 fw-bold text-success">R$ 0,00</span>
                         </div>
                     </div>
+
                     <!-- Services List -->
                     <h6 class="mb-3 text-secondary">Chamados Inclusos</h6>
                     <div class="table-responsive mb-3" style="max-height: 300px; overflow-y: auto;">
@@ -342,21 +366,30 @@
                             </tbody>
                         </table>
                     </div>
-                    <!-- Form for Submission -->
-                    <!-- Changed action to point to existing route, defaulting to POST -->
-                    <form method="POST" action="{{ url_for('financeiro.gerar_pagamento') }}" id="paymentForm">
-                        <input type="hidden" name="tecnico_id" id="formTecnicoId">
-                        <input type="hidden" name="periodo_inicio" id="formPeriodoInicio">
-                        <input type="hidden" name="periodo_fim" id="formPeriodoFim">
 
-                        <div class="d-flex justify-content-end gap-2">
-                            <button type="button" class="btn btn-outline-secondary"
-                                data-bs-dismiss="modal">Cancelar</button>
-                            <button type="submit" class="btn btn-success">
-                                <i class="bi bi-check-lg"></i> Confirmar Pagamento
-                            </button>
-                        </div>
-                    </form>
+                    <!-- Proof of Payment (History Mode w/ Upload present) -->
+                    <div id="modalProof" class="mb-3 d-none text-end">
+                        <a href="#" target="_blank" id="btnViewProof" class="btn btn-sm btn-outline-info">
+                            <i class="bi bi-file-earmark-text"></i> Ver Comprovante
+                        </a>
+                    </div>
+
+                    <!-- Form for Submission (Pending Mode Only) -->
+                    <div id="modalActionForm">
+                        <form method="POST" action="{{ url_for('financeiro.gerar_pagamento') }}" id="paymentForm">
+                            <input type="hidden" name="tecnico_id" id="formTecnicoId">
+                            <input type="hidden" name="periodo_inicio" id="formPeriodoInicio">
+                            <input type="hidden" name="periodo_fim" id="formPeriodoFim">
+
+                            <div class="d-flex justify-content-end gap-2">
+                                <button type="button" class="btn btn-outline-secondary"
+                                    data-bs-dismiss="modal">Fechar</button>
+                                <button type="submit" class="btn btn-success" id="btnConfirmPay">
+                                    <i class="bi bi-check-lg"></i> Confirmar Pagamento
+                                </button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
             </div>
         </div>
@@ -366,80 +399,142 @@
 
 {% block scripts %}
 <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const modal = document.getElementById('paymentModal');
-        const modalLoading = document.getElementById('modalLoading');
-        const modalContent = document.getElementById('modalContent');
+    const modalEl = document.getElementById('paymentModal');
+    const modalBS = new bootstrap.Modal(modalEl);
+    const modalLoading = document.getElementById('modalLoading');
+    const modalContent = document.getElementById('modalContent');
+    const modalStats = document.getElementById('modalStats');
+    const modalActionForm = document.getElementById('modalActionForm');
+    const modalProof = document.getElementById('modalProof');
+    const btnConfirmPay = document.getElementById('btnConfirmPay');
 
-        modal.addEventListener('show.bs.modal', function (event) {
-            const button = event.relatedTarget;
-            const tecnicoId = button.getAttribute('data-id');
-
-            // Reset state
-            modalLoading.style.display = 'block';
-            modalContent.style.display = 'none';
-
-            // Fetch Details
-            fetch(`/api/tecnicos/${tecnicoId}/pendencias?t=${new Date().getTime()}`)
-                .then(response => response.json())
-                .then(data => {
-                    // Populate Header
-                    document.getElementById('modalTechName').textContent = data.tecnico.nome;
-                    const bankInfo = data.tecnico.chave_pagamento
-                        ? `${data.tecnico.forma_pagamento || 'Pix'}: ${data.tecnico.chave_pagamento}`
-                        : 'Dados bancários não cadastrados';
-                    document.getElementById('modalTechBank').textContent = bankInfo;
-                    document.getElementById('modalTotalValue').textContent = `R$ ${data.total_pendente.toFixed(2)}`;
-
-                    // Populate Table
-                    const tbody = document.getElementById('modalServicesList');
-                    tbody.innerHTML = '';
-
-                    let dates = [];
-
-                    data.chamados.forEach(c => {
-                        // Parse date DD/MM/YYYY
-                        const [day, month, year] = c.data.split('/');
-                        dates.push(new Date(`${year}-${month}-${day}`));
-
-                        // Combine main code and extras
-                        let displayCode = c.codigo;
-                        if (c.fsa_codes) {
-                            displayCode += `<br><small class="text-muted">${c.fsa_codes}</small>`;
-                        }
-
-                        const row = `
-                            <tr>
-                                <td>${c.data}</td>
-                                <td>${displayCode}</td>
-                                <td>${c.tipo}</td>
-                                <td class="small text-muted text-truncate" style="max-width: 200px;">${c.endereco}</td>
-                                <td class="text-end">R$ ${c.valor.toFixed(2)}</td>
-                            </tr>
-                        `;
-                        tbody.innerHTML += row;
-                    });
-
-                    // Set Hidden Form Values
-                    document.getElementById('formTecnicoId').value = data.tecnico.id;
-
-                    if (dates.length > 0) {
-                        const minDate = new Date(Math.min.apply(null, dates));
-                        const maxDate = new Date(Math.max.apply(null, dates));
-
-                        document.getElementById('formPeriodoInicio').value = minDate.toISOString().split('T')[0];
-                        document.getElementById('formPeriodoFim').value = maxDate.toISOString().split('T')[0];
-                    }
-
-                    // Show Content
-                    modalLoading.style.display = 'none';
-                    modalContent.style.display = 'block';
-                })
-                .catch(err => {
-                    console.error('Error fetching details:', err);
-                    modal.querySelector('.modal-body').innerHTML = '<div class="alert alert-danger">Erro ao carregar dados. Tente novamente.</div>';
-                });
-        });
+    // triggered by clicking "Visualizar e Pagar" (Pending)
+    modalEl.addEventListener('show.bs.modal', function (event) {
+        if (!event.relatedTarget) return; // called programmatically via generic function
+        const button = event.relatedTarget;
+        const tecnicoId = button.getAttribute('data-id');
+        if (tecnicoId) loadPendingData(tecnicoId);
     });
+
+    function openHistoryDetails(pagamentoId) {
+        modalBS.show();
+        // Reset UI for History Mode
+        modalLoading.style.display = 'block';
+        modalContent.style.display = 'none';
+        modalStats.classList.remove('d-none');
+        modalActionForm.classList.add('d-none'); // Hide form
+        btnConfirmPay.parentElement.style.display = 'none'; // Hide buttons container of form if using pure view
+
+        // Fetch History
+        fetch(`/api/pagamentos/${pagamentoId}`)
+            .then(res => res.json())
+            .then(data => {
+                // Populate Header
+                document.getElementById('modalTechName').textContent = data.tecnico.nome;
+                document.getElementById('modalTechBank').textContent = data.tecnico.chave_pagamento || '-';
+                document.getElementById('modalTotalValue').textContent = `R$ ${data.financeiro.valor_total.toFixed(2)}`;
+
+                // Populate Stats
+                document.getElementById('statValorTotal').textContent = `R$ ${data.financeiro.valor_total.toFixed(2)}`;
+                document.getElementById('statReceita').textContent = `R$ ${data.financeiro.receita_estimada.toFixed(2)}`;
+                document.getElementById('statMargem').textContent = `R$ ${data.financeiro.lucro_bruto.toFixed(2)}`;
+                document.getElementById('statMargem').className = `fw-bold ${data.financeiro.lucro_bruto >= 0 ? 'text-success' : 'text-danger'}`;
+
+                // Populate Table
+                renderTable(data.chamados);
+
+                // Proof
+                if (data.info.comprovante_url) {
+                    modalProof.classList.remove('d-none');
+                    document.getElementById('btnViewProof').href = data.info.comprovante_url;
+                } else {
+                    modalProof.classList.add('d-none');
+                }
+
+                // Show generic close button since form is hidden
+                // We reuse the cancel button from form?? No, we hid the form specific container.
+                // Let's add a generic footer for "View Mode"? 
+                // Currently I hid the whole #modalActionForm which contains the buttons.
+                // I should add a simple Close button for history mode.
+                if (!document.getElementById('btnCloseHistory')) {
+                    const footerDiv = document.createElement('div');
+                    footerDiv.id = 'btnCloseHistory';
+                    footerDiv.className = 'd-flex justify-content-end mt-3';
+                    footerDiv.innerHTML = '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>';
+                    modalContent.appendChild(footerDiv);
+                } else {
+                    document.getElementById('btnCloseHistory').style.display = 'flex';
+                }
+
+                modalLoading.style.display = 'none';
+                modalContent.style.display = 'block';
+            })
+            .catch(console.error);
+    }
+
+    function loadPendingData(tecnicoId) {
+        // Reset UI for Pending Mode
+        modalLoading.style.display = 'block';
+        modalContent.style.display = 'none';
+        modalStats.classList.add('d-none'); // Hide stats
+        modalActionForm.classList.remove('d-none'); // Show form
+        modalProof.classList.add('d-none');
+        if (document.getElementById('btnCloseHistory')) document.getElementById('btnCloseHistory').style.display = 'none';
+
+        fetch(`/api/tecnicos/${tecnicoId}/pendencias?t=${new Date().getTime()}`)
+            .then(response => response.json())
+            .then(data => {
+                // Populate Header
+                document.getElementById('modalTechName').textContent = data.tecnico.nome;
+                const bankInfo = data.tecnico.chave_pagamento
+                    ? `${data.tecnico.forma_pagamento || 'Pix'}: ${data.tecnico.chave_pagamento}`
+                    : 'Dados bancários não cadastrados';
+                document.getElementById('modalTechBank').textContent = bankInfo;
+                document.getElementById('modalTotalValue').textContent = `R$ ${data.total_pendente.toFixed(2)}`;
+
+                // Populate Table
+                renderTable(data.chamados);
+
+                // Set Form Values
+                document.getElementById('formTecnicoId').value = data.tecnico.id;
+
+                // Calc Dates
+                const dates = data.chamados.map(c => {
+                    const [d, m, y] = c.data.split('/');
+                    return new Date(`${y}-${m}-${d}`);
+                });
+
+                if (dates.length > 0) {
+                    const minDate = new Date(Math.min.apply(null, dates));
+                    const maxDate = new Date(Math.max.apply(null, dates));
+                    document.getElementById('formPeriodoInicio').value = minDate.toISOString().split('T')[0];
+                    document.getElementById('formPeriodoFim').value = maxDate.toISOString().split('T')[0];
+                }
+
+                modalLoading.style.display = 'none';
+                modalContent.style.display = 'block';
+            })
+            .catch(console.error);
+    }
+
+    function renderTable(chamados) {
+        const tbody = document.getElementById('modalServicesList');
+        tbody.innerHTML = '';
+        chamados.forEach(c => {
+            let displayCode = c.codigo;
+            if (c.fsa_codes) displayCode += `<br><small class="text-muted">${c.fsa_codes}</small>`;
+
+            const row = `
+                <tr>
+                    <td>${c.data}</td>
+                    <td>${displayCode}</td>
+                    <td>${c.tipo}</td>
+                    <td class="small text-muted text-truncate" style="max-width: 200px;">${c.endereco}</td>
+                    <td class="text-end">R$ ${c.valor || c.valor_pago}</td> 
+                </tr>
+            `;
+            tbody.innerHTML += row;
+        });
+    }
 </script>
 {% endblock %}

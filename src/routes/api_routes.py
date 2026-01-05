@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request
 from flask_login import login_required
 from ..services.chamado_service import ChamadoService
-from ..models import Cliente, Chamado, Tecnico, db, TecnicoStock, ItemLPU
+from ..models import Cliente, Chamado, Tecnico, db, TecnicoStock, ItemLPU, Pagamento
 from sqlalchemy import func
 from datetime import datetime
 
@@ -183,5 +183,59 @@ def get_estoque_tecnico(id):
         # Retorna dicionário { item_id: qtd } para lookup rápido no JS
         saldo = {item.item_lpu_id: item.quantidade for item in stock_items}
         return jsonify(saldo)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/pagamentos/<int:id>')
+@login_required
+def get_pagamento_detalhes(id):
+    """
+    Retorna detalhes completos de um pagamento histórico.
+    Substitui a antiga página pagamento_detalhes.html.
+    """
+    try:
+        pagamento = Pagamento.query.get_or_404(id)
+        
+        # Calcular totais para cards de rentabilidade
+        chamados = pagamento.chamados_incluidos.all()
+        receita_estimada = sum(float(c.valor_receita_total or 0) for c in chamados)
+        lucro_bruto = receita_estimada - float(pagamento.valor_total)
+        
+        chamados_data = []
+        for c in chamados:
+            chamados_data.append({
+                'data': c.data_atendimento.strftime('%d/%m/%Y'),
+                'codigo': c.codigo_chamado or f"ID: {c.id}",
+                'fsa_codes': c.fsa_codes or '',
+                'tipo': c.tipo_servico,
+                'endereco': f"{c.cidade or ''}",
+                'valor_pago': float(c.custo_atribuido or c.valor),
+                'status': c.status_chamado
+            })
+            
+        return jsonify({
+            'id': pagamento.id,
+            'id_pagamento': pagamento.id_pagamento,
+            'tecnico': {
+                'id': pagamento.tecnico.id,
+                'nome': pagamento.tecnico.nome,
+                'id_tecnico': pagamento.tecnico.id_tecnico
+            },
+            'financeiro': {
+                'valor_total': float(pagamento.valor_total),
+                'receita_estimada': receita_estimada,
+                'lucro_bruto': lucro_bruto,
+                'margem_percentual': (lucro_bruto / receita_estimada * 100) if receita_estimada > 0 else 0
+            },
+            'info': {
+                'data_pagamento': pagamento.data_pagamento.strftime('%d/%m/%Y') if pagamento.data_pagamento else None,
+                'periodo': f"{pagamento.periodo_inicio.strftime('%d/%m/%Y')} - {pagamento.periodo_fim.strftime('%d/%m/%Y')}",
+                'status': pagamento.status_pagamento,
+                'observacoes': pagamento.observacoes,
+                'comprovante_url': url_for('static', filename=pagamento.comprovante_path) if pagamento.comprovante_path else None
+            },
+            'chamados': chamados_data
+        })
     except Exception as e:
         return jsonify({'error': str(e)}), 500

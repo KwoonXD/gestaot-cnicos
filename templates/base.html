@@ -195,19 +195,7 @@
             };
         }
 
-        // Theme Toggle Logic
-        const toggleBtn = document.getElementById('themeToggle');
-        const updateIcon = () => { /* Lógica opcional de ícone */ };
 
-        toggleBtn.addEventListener('click', () => {
-            const current = document.documentElement.getAttribute('data-bs-theme');
-            const next = current === 'dark' ? 'light' : 'dark';
-            document.documentElement.setAttribute('data-bs-theme', next);
-            localStorage.setItem('theme', next);
-
-            // Critical: Dispatch event for charts to update
-            window.dispatchEvent(new CustomEvent('theme-changed', { detail: { theme: next } }));
-        });
 
         // Auto-hide Toasts
         document.querySelectorAll('.toast').forEach(t => setTimeout(() => new bootstrap.Toast(t).hide(), 5000));

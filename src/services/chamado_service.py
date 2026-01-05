@@ -188,6 +188,9 @@ class ChamadoService:
             
             # Capturar criador
             created_by = getattr(current_user, 'id', None) if current_user and current_user.is_authenticated else None
+
+            # ADICIONADO: Extrair observação
+            observacoes_geral = dados_logistica.get('observacoes', '') 
             
             # --- 1. Calcular Horas Totais do Lote ---
             # Assume-se que o horário é compartilhado ou pega do primeiro
@@ -214,6 +217,7 @@ class ChamadoService:
                 # --- Cabeçalho ---
                 chamado.tecnico_id = tecnico.id
                 chamado.cidade = cidade
+                chamado.observacoes = observacoes_geral
                 chamado.data_atendimento = data_atend
                 chamado.status_chamado = 'Concluído'
                 chamado.batch_id = batch_id
