@@ -536,8 +536,27 @@ main {
         background: transparent;
     }
 
+
     .btn-ghost-warning:hover {
         background: rgba(245, 158, 11, 0.1);
         color: #b45309;
     }
+}
+
+/* --- COMMAND PALETTE --- */
+#commandInput::placeholder {
+    color: rgba(255, 255, 255, 0.5) !important;
+}
+
+.command-item {
+    transition: background-color 0.1s;
+}
+
+.command-item:hover,
+.active-command {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.command-item i {
+    color: rgba(255, 255, 255, 0.8);
 }

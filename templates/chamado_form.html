@@ -37,10 +37,12 @@
                     <div class="col-md-3">
                         <label class="form-label fw-bold">Técnico Responsável *</label>
                         <select name="tecnico_id" id="tecnico_id" class="form-select" required
-                            placeholder="Digite para buscar...">
+                            placeholder="Busque por Nome, Estado (ex: SP) ou Cidade...">
                             <option value="">Selecione...</option>
                             {% for doc in tecnicos %}
-                            <option value="{{ doc.id }}">{{ doc.nome }} ({{ doc.id_tecnico }})</option>
+                            <option value="{{ doc.id }}">
+                                {{ doc.nome }} | {{ doc.estado }} - {{ doc.cidade }}
+                            </option>
                             {% endfor %}
                         </select>
                         <div class="form-text text-muted small" id="stock-feedback">

@@ -27,79 +27,117 @@
 <div class="tab-content" id="paymentTabsContent">
     <!-- Tab 1: Pending Payments (Technicians) -->
     <div class="tab-pane fade show active" id="pendentes" role="tabpanel">
-        <div class="card border-top-0 rounded-0 rounded-bottom">
+        <div class="card border-top-0 rounded-0 rounded-bottom position-relative">
             <div class="card-body">
-                <div class="d-flex justify-content-end mb-3">
-                    <form method="GET" action="{{ url_for('financeiro.pagamentos') }}"
-                        class="d-flex gap-2 align-items-center">
-                        <!-- Keep filters if they exist (optional) but for now just sort -->
-                        <label class="text-muted small">Ordenar por:</label>
-                        <select name="sort_by" class="form-select form-select-sm" style="width: 200px;"
-                            onchange="this.form.submit()">
-                            <option value="nome_asc" {% if current_sort=='nome_asc' %}selected{% endif %}>Nome (A-Z)
-                            </option>
-                            <option value="valor_desc" {% if current_sort=='valor_desc' %}selected{% endif %}>Valor
-                                Pendente (Maior)</option>
-                            <option value="antiguidade" {% if current_sort=='antiguidade' %}selected{% endif %}>
-                                Atendimento (+ Antigo)</option>
-                            <option value="recente" {% if current_sort=='recente' %}selected{% endif %}>Atendimento (+
-                                Recente)</option>
-                            <option value="upload_antigo" {% if current_sort=='upload_antigo' %}selected{% endif %}>
-                                Upload (+ Antigo)</option>
-                            <option value="upload_recente" {% if current_sort=='upload_recente' %}selected{% endif %}>
-                                Upload (+ Recente)</option>
-                        </select>
-                    </form>
-                </div>
+                <form action="{{ url_for('financeiro.exportar_pix_lote') }}" method="POST" id="batchForm">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div class="d-flex align-items-center gap-2">
+                            <button type="submit" class="btn btn-outline-success">
+                                <i class="bi bi-file-text"></i> Gerar Batch Pix
+                            </button>
+                            <span class="text-muted small" id="selectionCount">0 selecionados</span>
+                        </div>
 
-                {% if tecnicos_com_pendente %}
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0">
-                        <thead>
-                            <tr>
-                                <th>Técnico</th>
-                                <th>Localização</th>
-                                <th class="text-center">Qtd. Chamados</th>
-                                <th class="text-end">Valor Pendente</th>
-                                <th class="text-end pe-4">Ação</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for t in tecnicos_com_pendente %}
-                            <tr>
-                                <td>
-                                    <div class="fw-bold">{{ t.nome }}</div>
-                                    <small class="text-muted">{{ t.id_tecnico }}</small>
-                                    {% if t.pending_fsas %}
-                                    <div class="mt-1" style="font-size: 0.75rem;">
-                                        {% for fsa in t.pending_fsas %}
-                                        <span class="badge bg-light text-dark border me-1 mb-1">{{ fsa }}</span>
-                                        {% endfor %}
-                                    </div>
-                                    {% endif %}
-                                </td>
-                                <td>{{ t.localizacao }}</td>
-                                <td class="text-center"><span class="badge bg-secondary">{{
-                                        t.total_atendimentos_nao_pagos }}</span></td>
-                                <td class="text-end text-danger fw-bold">R$ {{ "%.2f"|format(t.total_a_pagar) }}</td>
-                                <td class="text-end pe-4">
-                                    <button class="btn btn-primary btn-sm btn-pagar" data-id="{{ t.id }}"
-                                        data-bs-toggle="modal" data-bs-target="#paymentModal">
-                                        <i class="bi bi-wallet2"></i> Visualizar e Pagar
-                                    </button>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                {% else %}
-                <div class="empty-state text-center py-5">
-                    <i class="bi bi-check-circle display-1 text-success opacity-50"></i>
-                    <h4 class="mt-4 text-muted fw-bold">Tudo em dia!</h4>
-                    <p class="text-muted">Não há técnicos com valores pendentes de pagamento no momento.</p>
-                </div>
-                {% endif %}
+
+                    </div>
+
+                    {% if tecnicos_com_pendente %}
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th style="width: 40px;">
+                                        <input type="checkbox" class="form-check-input" id="checkAll">
+                                    </th>
+                                    <th>Técnico</th>
+                                    <th>Localização</th>
+                                    <th class="text-center">Qtd. Chamados</th>
+                                    <th class="text-end">Valor Pendente</th>
+                                    <th class="text-end pe-4">Ação</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for t in tecnicos_com_pendente %}
+                                <tr>
+                                    <td>
+                                        <input type="checkbox" class="form-check-input batch-check" name="tecnicos_ids"
+                                            value="{{ t.id }}">
+                                    </td>
+                                    <td>
+                                        <div class="fw-bold">{{ t.nome }}</div>
+                                        <small class="text-muted">{{ t.id_tecnico }}</small>
+                                        {% if t.pending_fsas %}
+                                        <div class="mt-1" style="font-size: 0.75rem;">
+                                            {% for fsa in t.pending_fsas %}
+                                            <span class="badge bg-light text-dark border me-1 mb-1">{{ fsa }}</span>
+                                            {% endfor %}
+                                        </div>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ t.localizacao }}</td>
+                                    <td class="text-center"><span class="badge bg-secondary">{{
+                                            t.total_atendimentos_nao_pagos }}</span></td>
+                                    <td class="text-end text-danger fw-bold">R$ {{ "%.2f"|format(t.total_a_pagar) }}
+                                    </td>
+                                    <td class="text-end pe-4">
+                                        <!-- Prevent form submit on this button -->
+                                        <button type="button" class="btn btn-primary btn-sm btn-pagar"
+                                            data-id="{{ t.id }}" data-bs-toggle="modal" data-bs-target="#paymentModal">
+                                            <i class="bi bi-wallet2"></i> Visualizar e Pagar
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="empty-state text-center py-5">
+                        <i class="bi bi-check-circle display-1 text-success opacity-50"></i>
+                        <h4 class="mt-4 text-muted fw-bold">Tudo em dia!</h4>
+                        <p class="text-muted">Não há técnicos com valores pendentes de pagamento no momento.</p>
+                    </div>
+                    {% endif %}
+                </form>
+            </div>
+
+            <!-- Move Sort Form Outside -->
+            <div class="position-absolute top-0 end-0 mt-3 me-3" style="z-index: 5;">
+                <form method="GET" action="{{ url_for('financeiro.pagamentos') }}"
+                    class="d-flex gap-2 align-items-center">
+                    <label class="text-muted small">Ordenar por:</label>
+                    <select name="sort_by" class="form-select form-select-sm" style="width: 200px;"
+                        onchange="this.form.submit()">
+                        <option value="nome_asc" {% if current_sort=='nome_asc' %}selected{% endif %}>Nome (A-Z)
+                        </option>
+                        <option value="valor_desc" {% if current_sort=='valor_desc' %}selected{% endif %}>Valor Pendente
+                            (Maior)</option>
+                        <option value="antiguidade" {% if current_sort=='antiguidade' %}selected{% endif %}>Atendimento
+                            (+ Antigo)</option>
+                        <option value="recente" {% if current_sort=='recente' %}selected{% endif %}>Atendimento (+
+                            Recente)</option>
+                        <option value="upload_antigo" {% if current_sort=='upload_antigo' %}selected{% endif %}>Upload
+                            (+ Antigo)</option>
+                        <option value="upload_recente" {% if current_sort=='upload_recente' %}selected{% endif %}>Upload
+                            (+ Recente)</option>
+                    </select>
+                </form>
+
+                <script>
+                    document.getElementById('checkAll')?.addEventListener('change', function () {
+                        document.querySelectorAll('.batch-check').forEach(c => c.checked = this.checked);
+                        updateCount();
+                    });
+
+                    document.querySelectorAll('.batch-check').forEach(c => {
+                        c.addEventListener('change', updateCount);
+                    });
+
+                    function updateCount() {
+                        const count = document.querySelectorAll('.batch-check:checked').length;
+                        document.getElementById('selectionCount').textContent = `${count} selecionados`;
+                    }
+                </script>
             </div>
         </div>
     </div>

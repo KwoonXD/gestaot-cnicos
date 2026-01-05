@@ -1,9 +1,9 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, Response
 from flask_login import login_required
 from datetime import datetime
 from ..services.financeiro_service import FinanceiroService
 from ..services.tecnico_service import TecnicoService
-from ..models import ESTADOS_BRASIL, Chamado, Lancamento
+from ..models import ESTADOS_BRASIL, Chamado, Lancamento, Tecnico
 from werkzeug.utils import secure_filename
 import os
 
@@ -59,6 +59,61 @@ def pagamentos():
         current_sort=sort_by
     )
 
+@financeiro_bp.route('/pagamentos/exportar-pix-lote', methods=['POST'])
+@login_required
+def exportar_pix_lote():
+    """Gera arquivo TXT com dados de pagamento para lote"""
+    try:
+        tecnicos_ids = request.form.getlist('tecnicos_ids')
+        if not tecnicos_ids:
+            flash('Nenhum técnico selecionado.', 'warning')
+            return redirect(url_for('financeiro.pagamentos'))
+            
+        # Use Service to get enriched objects (with total_a_pagar)
+        all_tecnicos = TecnicoService.get_all(page=None)
+        
+        # Filter only selected IDs
+        # Convert IDs to string for comparison since form list is strings
+        tecnicos_ids_str = set(tecnicos_ids)
+        tecnicos = [t for t in all_tecnicos if str(t.id) in tecnicos_ids_str]
+        
+        output_lines = []
+        total_geral = 0.0
+        
+        output_lines.append(f"LOTE DE PAGAMENTOS - GERADO EM {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+        output_lines.append("="*50 + "\n")
+        
+        for t in tecnicos:
+            if t.total_a_pagar <= 0:
+                continue
+                
+            valor = t.total_a_pagar
+            chave_pix = t.chave_pagamento if t.chave_pagamento else "CHAVE NÃO CADASTRADA"
+            doc = t.documento if t.documento else "CPF NÃO CADASTRADO"
+            
+            total_geral += valor
+            
+            output_lines.append(f"NOME: {t.nome.upper()}")
+            output_lines.append(f"CPF/CNPJ: {doc}")
+            output_lines.append(f"VALOR: R$ {valor:.2f}")
+            output_lines.append(f"PIX: {chave_pix}")
+            output_lines.append("-" * 40 + "\n")
+            
+        output_lines.append("="*50)
+        output_lines.append(f"TOTAL DO LOTE: R$ {total_geral:.2f}")
+        
+        content = "\n".join(output_lines)
+        
+        return Response(
+            content,
+            mimetype="text/plain",
+            headers={"Content-disposition": f"attachment; filename=pix_lote_{datetime.now().strftime('%Y%m%d')}.txt"}
+        )
+        
+    except Exception as e:
+        flash(f'Erro ao gerar lote: {str(e)}', 'danger')
+        return redirect(url_for('financeiro.pagamentos'))
+
 @financeiro_bp.route('/pagamentos/gerar', methods=['GET', 'POST'])
 @login_required
 def gerar_pagamento():
@@ -66,37 +121,17 @@ def gerar_pagamento():
         pagamento, error = FinanceiroService.gerar_pagamento(request.form)
         if error:
             # Em caso de erro, recarregamos a lista filtrada
-            todos_tecnicos = TecnicoService.get_all() # Assuming get_all returns list, if pagination, need .items or unpaginated
-            # Actually TecnicoService.get_all() returns pagination object if no args? No, looking at service:
-            # get_all(filters=None, page=1, per_page=20) returns pagination.
-            # But the existing code was: tecnicos = [t for t in TecnicoService.get_all() if t.total_a_pagar > 0]
-            # This implies get_all might return a query object or list depending on implementation?
-            # Checking service: it returns query.order_by().paginate(). 
-            # Wait, the previous code was: tecnicos = [t for t in TecnicoService.get_all({'status': 'Ativo'}) if t.total_a_pagar > 0]
-            # If get_all returns pagination, iteration works on .items usually?
-            # Let's fix this to be safe. We need a list of all active technicians.
-            # Better to use Tecnico.query directly or a specific service method "get_all_list"
-            # However, looking at previous code, it seems it was iterating the result of get_all(). 
-            # Let's assume for now we need to fetch all active without pagination.
-            # TecnicoService.get_all(filters={'status':'Ativo'}, page=1, per_page=1000).items
-            
-            # Using Service to ensure enrichment
             todos_tecnicos = TecnicoService.get_all({'status': 'Ativo'}, page=None)
-            
             tecnicos_display = [t for t in todos_tecnicos if t.tecnico_principal_id is None and getattr(t, 'total_agregado', 0) > 0]
             return render_template('pagamento_gerar.html', tecnicos=tecnicos_display, error=error)
         return redirect(url_for('financeiro.pagamentos'))
     
     # GET: Listar apenas CHEFES que têm valores a receber (próprio ou de subs)
     todos_tecnicos = TecnicoService.get_all({'status': 'Ativo'}, page=None)
-    
     tecnicos_display = []
     for t in todos_tecnicos:
-        # Regra 1: Se tem chefe, não aparece na lista (o pagamento vai pro chefe)
         if t.tecnico_principal_id is not None:
             continue
-            
-        # Regra 2: Mostra se tiver algo a receber no total (Agregado)
         if getattr(t, 'total_agregado', 0) > 0:
             tecnicos_display.append(t)
             
@@ -120,41 +155,17 @@ def marcar_como_pago(id):
     pagamento = FinanceiroService.get_by_id(id)
     observacoes = request.form.get('observacoes', '')
     
-    # Handle File Upload
     if 'comprovante' in request.files:
         file = request.files['comprovante']
         if file and file.filename != '':
             filename = secure_filename(f"comprovante_{pagamento.id}_{datetime.now().strftime('%Y%m%d%H%M%S')}_{file.filename}")
             upload_folder = os.path.join(current_app.static_folder, 'uploads', 'comprovantes')
-            
-            # Ensure folder exists
             os.makedirs(upload_folder, exist_ok=True)
-            
             file_path = os.path.join(upload_folder, filename)
             file.save(file_path)
-            
-            # Save relative path for DB
             pagamento.comprovante_path = f"uploads/comprovantes/{filename}"
     
-    FinanceiroService.marcar_como_pago(id, observacoes) # Service might overwrite observacoes, verify first.
-    # Actually Service.marcar_como_pago updates observacoes and status.
-    # Looking at Service code (I can't see it but I assume). 
-    # Better to set observacoes here if Service method takes it?
-    # The current call is FinanceiroService.marcar_como_pago(id, request.form.get('observacoes', ''))
-    # So I should keep calling it, but update pag.comprovante_path BEFORE calling it, so commit in service saves it?
-    # Or call DB commit here?
-    # Let's assume service commits. So I need to set prop on 'pagamento' object which is attached to session? 
-    # 'pagamento' came from FinanceiroService.get_by_id(id) which usually returns attached object.
-    # However, create_multiplo used distinct session handling. 
-    # Let's check FinanceiroService.marcar_como_pago implementation later? 
-    # No, I see the route code previously.
-    # def marcar_como_pago(id):
-    #     FinanceiroService.marcar_como_pago(id, request.form.get('observacoes', ''))
-    #     return redirect...
-    
-    # So I will inject the saving logic before calling service.
-    # If service commits, it saves my change to comprovante_path too.
-    
+    FinanceiroService.marcar_como_pago(id, observacoes)
     return redirect(url_for('financeiro.pagamentos'))
 
 @financeiro_bp.route('/fechamento', methods=['GET', 'POST'])
@@ -175,36 +186,17 @@ def fechamento_lote():
             'periodo_fim': periodo_fim
         }
         
-        # Chama o serviço (que agora é assíncrono)
         FinanceiroService.gerar_pagamento_lote(dados_lote)
-        
-        # Feedback adaptado
         flash(f'O processamento de {len(tecnicos_ids)} técnicos foi iniciado em segundo plano. Atualize a página em instantes.', 'info')
-                
         return redirect(url_for('financeiro.pagamentos'))
 
-    # GET
     periodo_inicio = request.args.get('inicio', '')
     periodo_fim = request.args.get('fim', '')
-    
-    # Logic to show technicians with pending amounts in the period?
-    # Or just show all active technicians and let user select?
-    # Requirement: "No topo, filtros de data (Início/Fim) e um botão 'Filtrar'."
-    # "A Tabela: ... Técnico, Qtd Chamados, Total Previsto (R$)."
-    
     tecnicos_display = []
     
-    # Only calculate if we have dates, otherwise show empty or all?
-    # Let's show all active if no date, or empty. Usually filtering is needed first.
     if periodo_inicio and periodo_fim:
-        # We need a way to get "preview" of payment for each tecnico
-        # optimize this query in real app
         tecnicos_ativos = TecnicoService.get_all({'status': 'Ativo'})
         for t in tecnicos_ativos:
-            # We can reuse logic or create a lightweight service method for preview
-            # For now, let's just query chamados count/sum for this period per tecnico
-            # This is N+1 but acceptable for <100 techs.
-            # TODO: Add Service method for Preview Batch
             chamados_periodo = t.chamados.filter(
                 Chamado.status_chamado == 'Concluído',
                 Chamado.pago == False,
@@ -247,35 +239,29 @@ def novo_lancamento():
         flash('Lançamento adicionado com sucesso!', 'success')
     except Exception as e:
         flash(f'Erro ao adicionar lançamento: {str(e)}', 'danger')
-        
-    # Redirect back to tecnico details
     return redirect(url_for('operacional.tecnico_detalhes', id=request.form['tecnico_id']))
 
 @financeiro_bp.route('/fechamento-cliente')
 @login_required
 def fechamento_cliente():
-    """Relatório de Fechamento por Cliente (Faturamento)"""
     from ..models import Cliente, Chamado, CatalogoServico, db
     from sqlalchemy.orm import joinedload
     import io
     import csv
     from flask import Response
     
-    # Filters
     cliente_id = request.args.get('cliente_id', type=int)
     mes = request.args.get('mes', type=int, default=datetime.now().month)
     ano = request.args.get('ano', type=int, default=datetime.now().year)
     export_csv = request.args.get('export') == 'true'
     
     clientes = Cliente.query.filter_by(ativo=True).all()
-    
     chamados = []
     total_receita = 0.0
     cliente_selecionado = None
     
     if cliente_id:
         cliente_selecionado = Cliente.query.get(cliente_id)
-        
         query = Chamado.query.join(CatalogoServico).filter(
             CatalogoServico.cliente_id == cliente_id,
             db.extract('month', Chamado.data_atendimento) == mes,
@@ -289,10 +275,7 @@ def fechamento_cliente():
         if export_csv:
             output = io.StringIO()
             writer = csv.writer(output, delimiter=';')
-            
-            # Header
             writer.writerow(['Data', 'Loja/Cidade', 'Técnico', 'FSA / Código', 'Serviço', 'Peça', 'Receita (R$)'])
-            
             for c in chamados:
                 writer.writerow([
                     c.data_atendimento.strftime('%d/%m/%Y'),
@@ -303,7 +286,6 @@ def fechamento_cliente():
                     c.peca_usada or '-',
                     f"{float(c.valor_receita_total or 0):.2f}".replace('.', ',')
                 ])
-                
             return Response(
                 output.getvalue().encode('utf-8-sig'),
                 mimetype="text/csv",
@@ -323,16 +305,8 @@ def fechamento_cliente():
 @financeiro_bp.route('/ledger')
 @login_required
 def ledger():
-    """Visão Geral da Conta Corrente dos Técnicos"""
     from ..models import Tecnico, Lancamento, db
-    
-    # Busca tecnicos ativos
     tecnicos = Tecnico.query.filter_by(status='Ativo').order_by(Tecnico.nome).all()
-    
-    # Calcular totais (opcional, pode ser pesado se tiver muitos lançamentos)
-    # Para MVP, vamos iterar ou fazer uma query agrupada.
-    # Query agrupada é melhor.
-    
     stats = db.session.query(
         Lancamento.tecnico_id,
         db.func.sum(db.case((Lancamento.tipo.in_(['CREDITO_SERVICO', 'BONUS', 'REEMBOLSO']), Lancamento.valor), else_=0)).label('total_creditos'),
@@ -340,7 +314,6 @@ def ledger():
     ).group_by(Lancamento.tecnico_id).all()
     
     stats_map = {s.tecnico_id: {'creditos': s.total_creditos or 0, 'debitos': s.total_debitos or 0} for s in stats}
-    
     dados = []
     for t in tecnicos:
         s = stats_map.get(t.id, {'creditos': 0, 'debitos': 0})
@@ -348,40 +321,30 @@ def ledger():
             'tecnico': t,
             'total_creditos': s['creditos'],
             'total_debitos': s['debitos'],
-            'saldo_atual': t.saldo_atual # Confia no saldo persistido
+            'saldo_atual': t.saldo_atual
         })
-        
     return render_template('financeiro_ledger.html', dados=dados, today=datetime.now().date())
 
 @financeiro_bp.route('/extrato/<int:tecnico_id>')
 @login_required
 def extrato(tecnico_id):
-    """Extrato detalhado de um técnico"""
     from ..models import Tecnico, Lancamento
-    
     tecnico = Tecnico.query.get_or_404(tecnico_id)
     lancamentos = Lancamento.query.filter_by(tecnico_id=tecnico.id).order_by(Lancamento.data.desc(), Lancamento.id.desc()).all()
-    
     return render_template('financeiro_extrato.html', tecnico=tecnico, lancamentos=lancamentos)
 
 @financeiro_bp.route('/dashboard/geografico')
 @login_required
 def dashboard_geo():
-    """Matriz de Rentabilidade por Geografia"""
     from ..services.report_service import ReportService
     from ..models import Cliente
-    
-    # Filtros
     inicio_str = request.args.get('inicio', datetime.now().replace(day=1).strftime('%Y-%m-%d'))
     fim_str = request.args.get('fim', datetime.now().strftime('%Y-%m-%d'))
     cliente_id = request.args.get('cliente_id')
-    
     inicio = datetime.strptime(inicio_str, '%Y-%m-%d').date()
     fim = datetime.strptime(fim_str, '%Y-%m-%d').date()
-    
     dados = ReportService.rentabilidade_geografica(inicio, fim, cliente_id=int(cliente_id) if cliente_id else None)
     clientes = Cliente.query.filter_by(ativo=True).all()
-    
     return render_template('dashboard_geo.html', 
         dados=dados, 
         inicio=inicio_str, 

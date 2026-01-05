@@ -1,54 +1,82 @@
 from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify
 from flask_login import login_required, current_user
+from ..models import db, ItemLPU, Tecnico, TecnicoStock, StockMovement
 from ..services.stock_service import StockService
-from ..services.tecnico_service import TecnicoService
-from ..models import ItemLPU, TecnicoStock, Tecnico
 from ..decorators import admin_required
 
 stock_bp = Blueprint('stock', __name__)
 
-@stock_bp.route('/painel')
+@stock_bp.route('/controle')
 @login_required
 @admin_required
 def controle_estoque():
-    """Painel Geral de Estoque"""
-    tecnicos = TecnicoService.get_all()
-    # Para o dropdown de peças
-    itens_lpu = ItemLPU.query.order_by(ItemLPU.nome).all()
+    # 1. Carrega dados para a UI
+    itens = ItemLPU.query.filter_by(cliente_id=None).order_by(ItemLPU.nome).all() 
+    # Fallback se não usar a convenção de cliente_id=None para itens gerais
+    if not itens:
+        itens = ItemLPU.query.order_by(ItemLPU.nome).all()
+        
+    tecnicos = TecnicoService.get_all() # Reusing helper to get sorted tecnicos with attributes if needed
     
-    # Overview de estoque (opcional: mostrar tabela grande)
-    # Por enquanto, mostramos apenas o formulário e talvez uma lista consolidada via AJAX ou na view
-    
-    return render_template('stock_control.html', tecnicos=tecnicos, itens=itens_lpu)
+    # 2. Matriz de Estoque: { tecnico_id: { item_id: qtd } }
+    stock_data = TecnicoStock.query.all()
+    matrix = {}
+    for s in stock_data:
+        if s.tecnico_id not in matrix:
+            matrix[s.tecnico_id] = {}
+        matrix[s.tecnico_id][s.item_lpu_id] = s.quantidade
 
-@stock_bp.route('/transferir', methods=['POST'])
+    return render_template('stock_control.html', 
+        itens=itens, 
+        tecnicos=tecnicos,
+        matrix=matrix
+    )
+
+@stock_bp.route('/movimentar', methods=['POST'])
 @login_required
 @admin_required
-def transferir():
+def movimentar_estoque():
+    """
+    Processa movimentações rápidas:
+    - ENVIO: Sede -> Técnico (Aumenta saldo técnico)
+    - DEVOLUCAO: Técnico -> Sede (Diminui saldo técnico)
+    - AJUSTE: Correção manual (Define saldo exato)
+    """
     try:
+        tipo = request.form.get('tipo_movimento') # 'ENVIO', 'DEVOLUCAO', 'AJUSTE'
         tecnico_id = request.form.get('tecnico_id')
         item_id = request.form.get('item_id')
-        quantidade = int(request.form.get('quantidade', 0))
-        observacao = request.form.get('observacao')
-        
-        StockService.transferir_para_tecnico(item_id, tecnico_id, quantidade, current_user.id, observacao)
-        flash('Transferência realizada com sucesso!', 'success')
-    except Exception as e:
-        flash(f'Erro na transferência: {str(e)}', 'danger')
-        
-    return redirect(url_for('stock.painel'))
+        qtd = int(request.form.get('quantidade', 0))
+        obs = request.form.get('observacao')
 
+        if not all([tipo, tecnico_id, item_id, qtd]):
+            flash('Dados incompletos.', 'warning')
+            return redirect(url_for('stock.controle_estoque'))
+
+        if tipo == 'ENVIO':
+            StockService.transferir_sede_para_tecnico(tecnico_id, item_id, qtd, current_user.id, obs)
+            flash(f'✅ Enviado {qtd}un para o técnico.', 'success')
+            
+        elif tipo == 'DEVOLUCAO':
+            StockService.devolver_tecnico_para_sede(tecnico_id, item_id, qtd, current_user.id, obs)
+            flash(f'✅ Recebido {qtd}un do técnico.', 'info')
+            
+        elif tipo == 'AJUSTE':
+            StockService.ajustar_saldo(tecnico_id, item_id, qtd, current_user.id, obs)
+            flash(f'⚠️ Saldo ajustado para {qtd}un.', 'warning')
+
+    except Exception as e:
+        flash(f'Erro na movimentação: {str(e)}', 'danger')
+
+    return redirect(url_for('stock.controle_estoque'))
+
+# Keep this for compatibility if frontend uses it (it shouldn't, but safe to keep)
 @stock_bp.route('/tecnico/<int:tecnico_id>/api')
 @login_required
 def get_tecnico_stock_api(tecnico_id):
-    """API para retornar estoque JSON do técnico"""
     estoque = StockService.get_stock_by_tecnico(tecnico_id)
     payload = [e.to_dict() for e in estoque if e.quantidade > 0]
     return jsonify(payload)
 
-@stock_bp.route('/devolver', methods=['POST'])
-@login_required
-def devolver_peca():
-    """Rota para técnico ou admin registrar devolução"""
-    # ... Implementation if needed
-    pass
+# Helper import inside to avoid circular deps if needed, or top level
+from ..services.tecnico_service import TecnicoService

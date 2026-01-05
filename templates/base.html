@@ -220,6 +220,39 @@
             });
         }
     </script>
+    <!-- Command Palette Modal -->
+    <div class="modal fade" id="commandPalette" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content border-0 text-white"
+                style="background-color: rgba(30, 41, 59, 0.95); backdrop-filter: blur(10px);">
+                <div class="modal-body p-0">
+                    <div class="input-group border-bottom border-secondary">
+                        <span class="input-group-text bg-transparent border-0 text-white ps-4">
+                            <i class="bi bi-search fs-5"></i>
+                        </span>
+                        <input type="text" id="commandInput"
+                            class="form-control bg-transparent border-0 text-white py-4 fs-5 shadow-none"
+                            placeholder="Digite um comando ou busque..." autocomplete="off">
+                        <span class="input-group-text bg-transparent border-0 text-white pe-4">
+                            <small class="border border-secondary rounded px-2 py-1 text-muted"
+                                style="font-size: 0.7rem;">ESC</small>
+                        </span>
+                    </div>
+                    <ul class="list-group list-group-flush bg-transparent" id="commandResults"
+                        style="max-height: 400px; overflow-y: auto;">
+                        <!-- Results injected by JS -->
+                    </ul>
+                    <div class="p-3 bg-white bg-opacity-10 text-end">
+                        <small class="text-white-50">
+                            <span class="fw-bold">↑↓</span> para navegar, <span class="fw-bold">Enter</span> para
+                            selecionar
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     {% block scripts %}{% endblock %}
 </body>
 
