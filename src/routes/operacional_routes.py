@@ -4,7 +4,7 @@ import csv
 import io
 from sqlalchemy import func
 # CORREÇÃO AQUI: Importamos Chamado, Pagamento e Tecnico explicitamente
-from ..models import ESTADOS_BRASIL, FORMAS_PAGAMENTO, Chamado, Pagamento, Tecnico, Tag, Cliente, db
+from ..models import ESTADOS_BRASIL, FORMAS_PAGAMENTO, Chamado, Pagamento, Tecnico, Tag, Cliente, db, TecnicoStock, ItemLPU
 from ..services.tecnico_service import TecnicoService
 from ..services.chamado_service import ChamadoService
 from ..services.financeiro_service import FinanceiroService
@@ -58,16 +58,36 @@ def dashboard():
     financeiro_stats = FinanceiroService.get_pendentes_stats()
     projecao_stats = FinanceiroService.calcular_projecao_mensal()
     lucro_stats = FinanceiroService.get_lucro_real_mensal()
+    # --- Feature C: Dados de Estoque para Dashboard ---
+    # 1. Estoque Baixo Global (Alerta)
+    estoque_baixo_limit = 10
+    alertas_estoque = db.session.query(
+        ItemLPU.nome, 
+        func.sum(TecnicoStock.quantidade).label('total')
+    ).join(TecnicoStock).group_by(ItemLPU.id)\
+    .having(func.sum(TecnicoStock.quantidade) < estoque_baixo_limit).all()
+
+    # 2. Inventário em Posse de Terceiros (Top 10 itens com mais volume na rua)
+    # Mostra quem tem o que
+    inventario_rua = db.session.query(
+        Tecnico.nome,
+        ItemLPU.nome,
+        TecnicoStock.quantidade
+    ).select_from(Tecnico).join(TecnicoStock).join(ItemLPU)\
+    .filter(TecnicoStock.quantidade > 0)\
+    .order_by(Tecnico.nome).all()
     
     return render_template('dashboard.html',
         total_tecnicos_ativos=tecnico_stats['ativos'],
         chamados_mes=chamado_stats['chamados_mes'],
         valor_total_pendente=tecnico_stats['total_pendente'],
         pagamentos_pendentes=financeiro_stats,
-        chamados_por_status=chamado_stats['chamados_por_status'],
+        # chamados_por_status REMOVIDO
         ultimos_chamados=chamado_stats['ultimos'],
         projecao_financeira=projecao_stats,
-        lucro_stats=lucro_stats
+        lucro_stats=lucro_stats,
+        alertas_estoque=alertas_estoque,
+        inventario_rua=inventario_rua
     )
 
 @operacional_bp.route('/tecnicos')

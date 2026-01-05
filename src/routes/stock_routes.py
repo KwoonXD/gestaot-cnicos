@@ -10,7 +10,7 @@ stock_bp = Blueprint('stock', __name__)
 @stock_bp.route('/painel')
 @login_required
 @admin_required
-def painel():
+def controle_estoque():
     """Painel Geral de Estoque"""
     tecnicos = TecnicoService.get_all()
     # Para o dropdown de peças

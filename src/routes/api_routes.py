@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request
 from flask_login import login_required
 from ..services.chamado_service import ChamadoService
-from ..models import Cliente, Chamado, Tecnico, db
+from ..models import Cliente, Chamado, Tecnico, db, TecnicoStock, ItemLPU
 from sqlalchemy import func
 from datetime import datetime
 
@@ -169,3 +169,19 @@ def analisar_importacao():
         
     result = ImportService.analisar_arquivo(file)
     return jsonify(result)
+
+# --- Feature B: Endpoint de Estoque ---
+@api_bp.route('/estoque/tecnico/<int:id>', methods=['GET'])
+@login_required
+def get_estoque_tecnico(id):
+    """
+    Retorna o saldo de peças que está com o técnico.
+    Retorno: { 'id_item_lpu': quantidade, ... }
+    """
+    try:
+        stock_items = TecnicoStock.query.filter_by(tecnico_id=id).all()
+        # Retorna dicionário { item_id: qtd } para lookup rápido no JS
+        saldo = {item.item_lpu_id: item.quantidade for item in stock_items}
+        return jsonify(saldo)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
