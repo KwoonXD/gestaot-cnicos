@@ -4,7 +4,13 @@ from .audit_service import AuditService
 import uuid
 import re
 from sqlalchemy.orm import joinedload
-from sqlalchemy import or_
+from sqlalchemy import or_, func
+
+# Constantes de Negócio
+HORAS_FRANQUIA_PADRAO = 2.0
+VALOR_HORA_EXTRA_DEFAULT = 30.00
+VALOR_ATENDIMENTO_BASE = 120.00
+VALOR_ADICIONAL_LOJA = 20.00
 
 class ChamadoService:
 
@@ -44,7 +50,7 @@ class ChamadoService:
         Tratamento: Se fim < início, assume virada de dia (+24h).
         """
         if not hora_inicio or not hora_fim:
-            return 2.0  # Default
+            return HORAS_FRANQUIA_PADRAO  # Default
         
         try:
             from datetime import timedelta
@@ -192,11 +198,11 @@ class ChamadoService:
             hora_fim_str = primeiro_fsa.get('hora_fim', '')
             
             horas_reais = ChamadoService.calculate_hours_worked(hora_inicio_str, hora_fim_str)
-            horas_franquia = 2.0
+            horas_franquia = HORAS_FRANQUIA_PADRAO
             
             # Cálculo HE
             horas_extras = max(0.0, horas_reais - horas_franquia)
-            valor_hora_adicional = float(tecnico.valor_hora_adicional or 30.0) # Default R$ 30 se nulo
+            valor_hora_adicional = float(tecnico.valor_hora_adicional or VALOR_HORA_EXTRA_DEFAULT)
             valor_pagar_he = horas_extras * valor_hora_adicional
             
             created_chamados = []
@@ -234,20 +240,8 @@ class ChamadoService:
                 # --- Lógica de Retorno/SPARE (Smart Billing) ---
                 rec_servico = float(catalogo.valor_receita) if catalogo else 0.0
                 
-                is_retorno = False
-                if servico_nome:
-                    nome_lower = servico_nome.lower()
-                    if 'retorno' in nome_lower or 'spare' in nome_lower:
-                        is_retorno = True
-                
-                # Default peca vars
-                rec_peca = 0.0
-                peca_nome = fsa.get('peca_usada', '') or ''
-                # fornecedor_peca is retrieved later but needed for logic
-                fornecedor_peca_input = fsa.get('fornecedor_peca', 'Empresa') 
-                
-                if is_retorno:
-                    # Se for retorno, SÓ cobra se a peça for do Cliente
+                if catalogo and catalogo.is_retorno:
+                    # Se for retorno (marcado no catalogo), SÓ cobra se a peça for do Cliente
                     if fornecedor_peca_input == 'Cliente':
                          # Cobra valor cheio (mantém rec_servico)
                          pass
@@ -827,10 +821,26 @@ class ChamadoService:
             db.extract('year', Chamado.data_atendimento) == current_year
         ).count()
         
-        chamados_por_status = {}
-        for status in ['Pendente', 'Em Andamento', 'Concluído', 'Cancelado']:
-             chamados_por_status[status] = Chamado.query.filter_by(status_chamado=status).count()
-             
+        # Query otimizada para contar status em uma única ida ao banco
+        results = db.session.query(Chamado.status_chamado, func.count(Chamado.id))\
+            .group_by(Chamado.status_chamado).all()
+            
+        # Inicializa com zero
+        chamados_por_status = {
+            'Pendente': 0,
+            'Em Andamento': 0,
+            'Concluído': 0,
+            'Cancelado': 0
+        }
+        
+        # Preenche com resultados reais
+        for status, count in results:
+            if status in chamados_por_status:
+                chamados_por_status[status] = count
+            else:
+                # Caso haja algum status fora do padrão, adiciona ou ignora
+                chamados_por_status[status] = count
+
         return {
             'chamados_mes': chamados_mes,
             'chamados_por_status': chamados_por_status,

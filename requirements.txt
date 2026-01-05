@@ -5,7 +5,5 @@ psycopg2-binary>=2.9.11
 flask-migrate>=4.0.7
 flask-login>=0.6.3
 flask-executor>=1.0.0
-pandas>=2.1.0
 openpyxl>=3.1.2
-xhtml2pdf>=0.2.14
 marshmallow>=3.20.1

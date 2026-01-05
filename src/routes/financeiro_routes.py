@@ -30,7 +30,7 @@ def pagamentos():
     sort_by = request.args.get('sort_by', 'nome_asc')
     
     pagamentos_list = FinanceiroService.get_all(filters)
-    tecnicos_list = TecnicoService.get_all()
+    tecnicos_list = TecnicoService.get_all(page=None)
     tecnicos_com_pendente = [t for t in tecnicos_list if t.total_a_pagar > 0]
     
     # Sorting Logic
@@ -80,17 +80,15 @@ def gerar_pagamento():
             # Let's assume for now we need to fetch all active without pagination.
             # TecnicoService.get_all(filters={'status':'Ativo'}, page=1, per_page=1000).items
             
-            # Using query directly for safety as per my knowledge of the service
-            from ..models import Tecnico
-            todos_tecnicos = Tecnico.query.filter_by(status='Ativo').all()
+            # Using Service to ensure enrichment
+            todos_tecnicos = TecnicoService.get_all({'status': 'Ativo'}, page=None)
             
-            tecnicos_display = [t for t in todos_tecnicos if t.tecnico_principal_id is None and t.total_agregado > 0]
+            tecnicos_display = [t for t in todos_tecnicos if t.tecnico_principal_id is None and getattr(t, 'total_agregado', 0) > 0]
             return render_template('pagamento_gerar.html', tecnicos=tecnicos_display, error=error)
         return redirect(url_for('financeiro.pagamentos'))
     
     # GET: Listar apenas CHEFES que têm valores a receber (próprio ou de subs)
-    from ..models import Tecnico
-    todos_tecnicos = Tecnico.query.filter_by(status='Ativo').all()
+    todos_tecnicos = TecnicoService.get_all({'status': 'Ativo'}, page=None)
     
     tecnicos_display = []
     for t in todos_tecnicos:
@@ -99,7 +97,7 @@ def gerar_pagamento():
             continue
             
         # Regra 2: Mostra se tiver algo a receber no total (Agregado)
-        if t.total_agregado > 0:
+        if getattr(t, 'total_agregado', 0) > 0:
             tecnicos_display.append(t)
             
     return render_template('pagamento_gerar.html', tecnicos=tecnicos_display, error=None)

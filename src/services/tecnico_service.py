@@ -75,7 +75,7 @@ class TecnicoService:
             if filters.get('tag'):
                 query = query.join(Tag).filter(Tag.nome == filters['tag'])
             
-            # Filter calculation logic
+        # Filter calculation logic
             total_calc = func.coalesce(sq_chamados.c.valor_pendente, 0) + func.coalesce(sq_agregado.c.valor_sub, 0)
 
             if filters.get('pagamento') == 'Pendente':
@@ -86,38 +86,59 @@ class TecnicoService:
                 # Filter tecnicos that have nothing to collect
                 query = query.filter(total_calc == 0)
 
-        # Order and Paginate
-        pagination = query.order_by(Tecnico.nome).paginate(page=page, per_page=per_page, error_out=False)
+        # Order
+        query = query.order_by(Tecnico.nome)
 
-        # 4. Map results to Objects with injected properties
-        new_items = []
-        for row in pagination.items:
-            # row is a tuple (Tecnico, own_qtd, own_val, sub_qtd, sub_val)
-            tecnico, o_q, o_v, s_q, s_v = row
+        if page is None:
+            # Retorna lista completa (para relatórios e selects)
+            items_raw = query.all()
+            final_items = []
+            for row in items_raw:
+                # row é uma tupla (Tecnico, own_qtd, own_val, sub_qtd, sub_val)
+                tecnico, o_q, o_v, s_q, s_v = row
+                
+                if tecnico.tecnico_principal_id:
+                    tecnico.total_atendimentos_nao_pagos = 0
+                    tecnico.total_a_pagar = 0.0
+                    tecnico.total_agregado = 0.0
+                else:
+                    tecnico.total_atendimentos_nao_pagos = int(o_q + s_q)
+                    tecnico.total_a_pagar = float(o_v + s_v)
+                    tecnico.total_agregado = float(o_v + s_v)
+                
+                final_items.append(tecnico)
+            return final_items
+        else:
+            # Retorna Objeto Pagination (para telas de listagem)
+            pagination = query.paginate(page=page, per_page=per_page, error_out=False)
             
-            # Logic: If I am a sub-technician (have a principal), I don't get paid directly.
-            if tecnico.tecnico_principal_id:
-                tecnico._total_atendimentos_nao_pagos = 0
-                tecnico._total_a_pagar = 0.0
-                tecnico._total_agregado = 0.0
-            else:
-                tecnico._total_atendimentos_nao_pagos = int(o_q + s_q)
-                tecnico._total_a_pagar = float(o_v + s_v)
-                tecnico._total_agregado = float(o_v + s_v)
-            
-            new_items.append(tecnico)
-            
-        pagination.items = new_items
-        return pagination
+            new_items = []
+            for row in pagination.items:
+                # row is a tuple (Tecnico, own_qtd, own_val, sub_qtd, sub_val)
+                tecnico, o_q, o_v, s_q, s_v = row
+                
+                if tecnico.tecnico_principal_id:
+                    tecnico.total_atendimentos_nao_pagos = 0
+                    tecnico.total_a_pagar = 0.0
+                    tecnico.total_agregado = 0.0
+                else:
+                    tecnico.total_atendimentos_nao_pagos = int(o_q + s_q)
+                    tecnico.total_a_pagar = float(o_v + s_v)
+                    tecnico.total_agregado = float(o_v + s_v)
+                
+                new_items.append(tecnico)
+                
+            pagination.items = new_items
+            return pagination
 
     @staticmethod
     def get_by_id(id):
         tecnico = Tecnico.query.options(joinedload(Tecnico.tags)).get_or_404(id)
         
         if tecnico.tecnico_principal_id:
-            tecnico._total_a_pagar = 0.0
-            tecnico._total_atendimentos_nao_pagos = 0
-            tecnico._total_agregado = 0.0
+            tecnico.total_a_pagar = 0.0
+            tecnico.total_atendimentos_nao_pagos = 0
+            tecnico.total_agregado = 0.0
         else:
             # Calculate manually using DB optimized queries
             # Own
@@ -147,9 +168,9 @@ class TecnicoService:
                      sub_val += (sp[0] or 0.0)
                      sub_cnt += (sp[1] or 0)
             
-            tecnico._total_a_pagar = float(own_val + sub_val)
-            tecnico._total_atendimentos_nao_pagos = int(own_cnt + sub_cnt)
-            tecnico._total_agregado = tecnico._total_a_pagar
+            tecnico.total_a_pagar = float(own_val + sub_val)
+            tecnico.total_atendimentos_nao_pagos = int(own_cnt + sub_cnt)
+            tecnico.total_agregado = tecnico.total_a_pagar
             
         return tecnico
 

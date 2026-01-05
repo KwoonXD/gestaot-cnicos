@@ -136,7 +136,7 @@ def tecnicos():
 @operacional_bp.route('/tecnicos/exportar')
 @login_required
 def exportar_tecnicos():
-    tecnicos = TecnicoService.get_all()
+    tecnicos = TecnicoService.get_all(page=None)
     
     output = io.StringIO()
     writer = csv.writer(output, delimiter=';')
@@ -307,7 +307,7 @@ def criar_chamado_multiplo_api():
 @login_required
 def criar_chamado():
     """Renders the new Master-Detail form for creating chamados"""
-    tecnicos = Tecnico.query.filter_by(status='Ativo').all()
+    tecnicos = TecnicoService.get_all({'status': 'Ativo'}, page=None)
     return render_template('chamado_form.html', tecnicos=tecnicos)
 
 @operacional_bp.route('/chamados/novo', methods=['GET', 'POST'])
@@ -321,47 +321,10 @@ def novo_chamado():
         except Exception as e:
             flash(f'Erro: {str(e)}', 'warning')
             
-            # Preserve form data for template
-            from datetime import datetime
-            import types
-            
-            form_data = request.form
-            chamado_mock = types.SimpleNamespace()
-            
-            # Safe parsing
-            def parse_date(d):
-                try: return datetime.strptime(d, '%Y-%m-%d')
-                except: return None
-            def parse_time(t):
-                try: return datetime.strptime(t, '%H:%M')
-                except: return None
-                
-            chamado_mock.tecnico_id = form_data.get('tecnico_id')
-            chamado_mock.codigo_chamado = form_data.get('codigo_chamado')
-            chamado_mock.data_atendimento = parse_date(form_data.get('data_atendimento'))
-            chamado_mock.tipo_servico = form_data.get('tipo_servico')
-            chamado_mock.status_chamado = form_data.get('status_chamado')
-            chamado_mock.horario_inicio = parse_time(form_data.get('horario_inicio'))
-            chamado_mock.horario_saida = parse_time(form_data.get('horario_saida'))
-            chamado_mock.fsa_codes = form_data.get('fsa_codes')
-            try:
-                chamado_mock.valor = float(form_data.get('valor', 0))
-            except:
-                chamado_mock.valor = 0.0
-            chamado_mock.endereco = form_data.get('endereco')
-            chamado_mock.observacoes = form_data.get('observacoes')
-            
-            if chamado_mock.tecnico_id:
-                try:
-                    chamado_mock.tecnico = TecnicoService.get_by_id(chamado_mock.tecnico_id)
-                except:
-                    chamado_mock.tecnico = None
-            else:
-                 chamado_mock.tecnico = None
-            
+            # Repopulate form data for template
             tecnicos = TecnicoService.get_all({'status': 'Ativo'})
             return render_template('chamado_form.html',
-                chamado=chamado_mock,
+                chamado=request.form, # Pass dictionary/ImmutableMultiDict directly
                 tecnicos=tecnicos,
                 tipos_servico=get_tipos_servico(),
                 status_options=STATUS_CHAMADO
@@ -471,57 +434,7 @@ def deletar_tecnico(id):
         return redirect(url_for('operacional.tecnicos'))
 
 
-# =============================================================================
-# FILA DE VALIDAÇÃO (LEGADO - 02/01/2026)
-# Substituído pela "Fila de Validação por Lote" (/atendimentos)
-# =============================================================================
 
-# @operacional_bp.route('/validacao')
-# @login_required
-# def validacao_fila():
-#     """Lista chamados pendentes de validação"""
-#     chamados = ChamadoService.get_pendentes_validacao()
-#     
-#     # Contagem para badge
-#     pendentes_count = len(chamados)
-#     
-#     return render_template('validacao_fila.html', 
-#         chamados=chamados,
-#         pendentes_count=pendentes_count
-#     )
-# 
-# 
-# @operacional_bp.route('/validar', methods=['POST'])
-# @login_required
-# def validar_chamados():
-#     """Processa aprovação ou rejeição de chamados"""
-#     try:
-#         ids = request.form.getlist('chamado_ids')
-#         acao = request.form.get('acao')
-#         motivo = request.form.get('motivo', '').strip()
-#         
-#         if not ids:
-#             flash('Nenhum chamado selecionado.', 'warning')
-#             return redirect(url_for('operacional.validacao_fila'))
-#         
-#         ids_int = [int(i) for i in ids]
-#         
-#         if acao == 'aprovar':
-#             count = ChamadoService.aprovar_chamados(ids_int, current_user.id)
-#             flash(f'{count} chamado(s) aprovado(s) com sucesso!', 'success')
-#         elif acao == 'rejeitar':
-#             if not motivo:
-#                 flash('O motivo da rejeição é obrigatório.', 'danger')
-#                 return redirect(url_for('operacional.validacao_fila'))
-#             count = ChamadoService.rejeitar_chamados(ids_int, current_user.id, motivo)
-#             flash(f'{count} chamado(s) rejeitado(s) e excluídos permanentemente.', 'warning')
-#         else:
-#             flash('Ação inválida.', 'danger')
-#             
-#     except Exception as e:
-#         flash(f'Erro ao processar validação: {str(e)}', 'danger')
-#     
-#     return redirect(url_for('operacional.validacao_fila'))
 
 
 # =============================================================================

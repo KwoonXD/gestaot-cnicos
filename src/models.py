@@ -79,27 +79,7 @@ class Tecnico(db.Model):
     def total_atendimentos_concluidos(self):
         return self.chamados.filter(Chamado.status_chamado.in_(['Concluído', 'SPARE'])).count()
     
-    @property
-    def total_atendimentos_nao_pagos(self):
-        # Lógica movida para TecnicoService.get_all (otimização N+1)
-        # Mantendo retorno zerado/dummy para evitar quebra imediata de templates
-        return getattr(self, '_total_atendimentos_nao_pagos', 0)
-    
-    def get_total_a_pagar(self):
-        # Lógica movida para TecnicoService.get_all (otimização N+1)
-        return float(getattr(self, '_total_a_pagar', 0.0))
 
-    @property
-    def total_a_pagar(self):
-        return self.get_total_a_pagar()
-    
-    @property
-    def total_agregado(self):
-        """
-        Soma o valor pendente do próprio técnico + valor pendente de todos os seus sub-técnicos.
-        Calculado de forma otimizada no Service.
-        """
-        return float(getattr(self, '_total_agregado', 0.0))
 
     @property
     def pending_chamados_list(self):
@@ -231,8 +211,6 @@ class Chamado(db.Model):
     endereco = db.Column(db.Text, nullable=True)
     observacoes = db.Column(db.Text, nullable=True)
     fsa_codes = db.Column(db.Text, nullable=True)
-    horario_inicio = db.Column(db.Time, nullable=True)  # Legado
-    horario_saida = db.Column(db.Time, nullable=True)   # Legado
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Agrupamento por Lote/Atendimento
@@ -444,6 +422,7 @@ class CatalogoServico(db.Model):
     exige_peca = db.Column(db.Boolean, default=False)     # Se True, mostra seleção de LPU
     paga_tecnico = db.Column(db.Boolean, default=True)    # Se False (ex: Falha), técnico recebe 0
     pagamento_integral = db.Column(db.Boolean, default=False) # Se True (ex: Retorno SPARE), não aplica regra de lote (sempre valor cheio)
+    is_retorno = db.Column(db.Boolean, default=False)     # Novo campo para identificar retornos
     horas_franquia = db.Column(db.Integer, default=2)     # Até quantas horas o valor base cobre
     
     # Status

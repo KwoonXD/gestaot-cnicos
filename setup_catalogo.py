@@ -54,6 +54,14 @@ CATALOGO_AMERICANAS = [
     }
 ]
 
+# Adicionar is_retorno flag para o script preencher
+for item in CATALOGO_AMERICANAS:
+    if 'Retorno' in item['nome'] or 'SPARE' in item['nome']:
+        item['is_retorno'] = True
+    else:
+        item['is_retorno'] = False
+
+
 # Itens LPU Migrados (Ex-Hardcoded)
 LPU_ITEMS = [
     {'nome': 'Scanner', 'valor': 180.0},
@@ -101,6 +109,7 @@ with app.app_context():
         cliente_id INTEGER NOT NULL REFERENCES clientes(id),
         exige_peca BOOLEAN DEFAULT 0,
         paga_tecnico BOOLEAN DEFAULT 1,
+        is_retorno BOOLEAN DEFAULT 0,
         horas_franquia INTEGER DEFAULT 2,
         ativo BOOLEAN DEFAULT 1
     )
@@ -143,6 +152,17 @@ with app.app_context():
                 print(f"SKIP: Coluna {col} já existe")
             else:
                 print(f"Column: {e}")
+
+    # 2.1 Adicionar is_retorno ao catalogo
+    try:
+        conn.execute(text('ALTER TABLE catalogo_servicos ADD COLUMN is_retorno BOOLEAN DEFAULT 0'))
+        conn.commit()
+        print("OK: Adicionada coluna is_retorno ao Catalogo")
+    except Exception as e:
+        if 'duplicate' in str(e).lower():
+            print("SKIP: Coluna is_retorno já existe")
+        else:
+            print(f"Column is_retorno error: {e}")
     
     # 3. Adicionar valor_hora_adicional ao tecnicos
     try:
@@ -178,6 +198,7 @@ with app.app_context():
             existing.exige_peca = item['exige_peca']
             existing.paga_tecnico = item['paga_tecnico']
             existing.horas_franquia = item['horas_franquia']
+            existing.is_retorno = item['is_retorno']
             print(f"UPDATE SERVICO: {item['nome']}")
         else:
             # Criar
@@ -187,7 +208,8 @@ with app.app_context():
                 cliente_id=americanas.id,
                 exige_peca=item['exige_peca'],
                 paga_tecnico=item['paga_tecnico'],
-                horas_franquia=item['horas_franquia']
+                horas_franquia=item['horas_franquia'],
+                is_retorno=item['is_retorno']
             )
             db.session.add(servico)
             print(f"CREATE SERVICO: {item['nome']}")
