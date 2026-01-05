@@ -1,72 +1,166 @@
 from ..models import db, Tecnico, Chamado, Tag
 from datetime import datetime
 from sqlalchemy.orm import joinedload
+from sqlalchemy import func, case, and_
+from marshmallow import Schema, fields, validate, ValidationError
+
+# Validation Schema
+class TecnicoSchema(Schema):
+    nome = fields.Str(required=True, validate=validate.Length(min=3))
+    documento = fields.Str(allow_none=True)
+    contato = fields.Str(required=True)
+    cidade = fields.Str(required=True)
+    estado = fields.Str(required=True, validate=validate.Length(equal=2))
+    status = fields.Str(load_default='Ativo')
+    valor_por_atendimento = fields.Float(load_default=120.00)
+    valor_adicional_loja = fields.Float(load_default=20.00)
+    valor_hora_adicional = fields.Float(load_default=30.00)
+    forma_pagamento = fields.Str(allow_none=True)
+    chave_pagamento = fields.Str(allow_none=True)
+    tecnico_principal_id = fields.Int(allow_none=True)
+    data_inicio = fields.Date(required=True, format='%Y-%m-%d')
+
+tecnico_schema = TecnicoSchema()
 
 class TecnicoService:
     @staticmethod
     def get_all(filters=None, page=1, per_page=20):
-        # Eager load Tags by default to prevent N+1
-        query = Tecnico.query.options(joinedload(Tecnico.tags))
+        # 1. Subquery for OWN pending totals
+        sq_chamados = db.session.query(
+            Chamado.tecnico_id,
+            func.count(Chamado.id).label('qtd_pendente'),
+            func.sum(Chamado.valor).label('valor_pendente')
+        ).filter(
+            Chamado.status_chamado.in_(['Concluído', 'SPARE']),
+            Chamado.status_validacao == 'Aprovado',
+            Chamado.pago == False,
+            Chamado.pagamento_id == None
+        ).group_by(Chamado.tecnico_id).subquery()
+
+        # 2. Subquery for AGGREGATED (Sub-technicians) totals
+        # We join sq_chamados with Tecnico to sum values of tecnicos that have 'me' as principal
+        sq_agregado = db.session.query(
+            Tecnico.tecnico_principal_id,
+            func.sum(sq_chamados.c.qtd_pendente).label('qtd_sub'),
+            func.sum(sq_chamados.c.valor_pendente).label('valor_sub')
+        ).join(
+            sq_chamados, Tecnico.id == sq_chamados.c.tecnico_id
+        ).filter(
+            Tecnico.tecnico_principal_id.isnot(None)
+        ).group_by(Tecnico.tecnico_principal_id).subquery()
+
+        # 3. Main Query
+        query = db.session.query(
+            Tecnico,
+            func.coalesce(sq_chamados.c.qtd_pendente, 0).label('own_qtd'),
+            func.coalesce(sq_chamados.c.valor_pendente, 0.0).label('own_val'),
+            func.coalesce(sq_agregado.c.qtd_sub, 0).label('sub_qtd'),
+            func.coalesce(sq_agregado.c.valor_sub, 0.0).label('sub_val')
+        ).outerjoin(
+            sq_chamados, Tecnico.id == sq_chamados.c.tecnico_id
+        ).outerjoin(
+            sq_agregado, Tecnico.id == sq_agregado.c.tecnico_principal_id
+        ).options(joinedload(Tecnico.tags))
         
+        # Filters
         if filters:
-            # Filtros Simples
             if filters.get('estado'):
-                query = query.filter_by(estado=filters['estado'])
+                query = query.filter(Tecnico.estado == filters['estado'])
             if filters.get('cidade'):
                 query = query.filter(Tecnico.cidade.ilike(f"%{filters['cidade']}%"))
             if filters.get('status'):
-                query = query.filter_by(status=filters['status'])
+                query = query.filter(Tecnico.status == filters['status'])
             if filters.get('search'):
                 query = query.filter(Tecnico.nome.ilike(f"%{filters['search']}%"))
-            
             if filters.get('tag'):
-                # Filtro por Tag (nome exato)
-                # Note: joinedload might conflict with explicit join if not careful, but usually ok.
-                # Here we filter by EXISTENCE of a tag.
                 query = query.join(Tag).filter(Tag.nome == filters['tag'])
             
-            # Filtro Avançado: Pagamento (Recuperado via SQL)
+            # Filter calculation logic
+            total_calc = func.coalesce(sq_chamados.c.valor_pendente, 0) + func.coalesce(sq_agregado.c.valor_sub, 0)
+
             if filters.get('pagamento') == 'Pendente':
-                # Filtra técnicos que possuem pelo menos um chamado Concluído e Não Pago
-                query = query.join(Chamado).filter(
-                    Chamado.status_chamado == 'Concluído',
-                    Chamado.pago == False,
-                    Chamado.pagamento_id == None,
-                    Tecnico.tecnico_principal_id == None
-                ).group_by(Tecnico.id)
+                # Filter tecnicos that have > 0 to collect
+                query = query.filter(total_calc > 0)
             
             elif filters.get('pagamento') == 'Pago':
-                # Filtra técnicos que NÃO estão no grupo de pendentes (usando NOT IN ou LEFT JOIN null)
-                # Para performance simples neste estágio, vamos usar except_
-                pendentes_subquery = db.session.query(Tecnico.id).join(Chamado).filter(
-                    Chamado.status_chamado == 'Concluído',
-                    Chamado.pago == False,
-                    Chamado.pagamento_id == None,
-                    Tecnico.tecnico_principal_id == None
-                ).subquery()
-                query = query.filter(Tecnico.id.notin_(pendentes_subquery))
+                # Filter tecnicos that have nothing to collect
+                query = query.filter(total_calc == 0)
 
-        # Ordenação e Paginação
-        return query.order_by(Tecnico.nome).paginate(page=page, per_page=per_page, error_out=False)
+        # Order and Paginate
+        pagination = query.order_by(Tecnico.nome).paginate(page=page, per_page=per_page, error_out=False)
+
+        # 4. Map results to Objects with injected properties
+        new_items = []
+        for row in pagination.items:
+            # row is a tuple (Tecnico, own_qtd, own_val, sub_qtd, sub_val)
+            tecnico, o_q, o_v, s_q, s_v = row
+            
+            # Logic: If I am a sub-technician (have a principal), I don't get paid directly.
+            if tecnico.tecnico_principal_id:
+                tecnico._total_atendimentos_nao_pagos = 0
+                tecnico._total_a_pagar = 0.0
+                tecnico._total_agregado = 0.0
+            else:
+                tecnico._total_atendimentos_nao_pagos = int(o_q + s_q)
+                tecnico._total_a_pagar = float(o_v + s_v)
+                tecnico._total_agregado = float(o_v + s_v)
+            
+            new_items.append(tecnico)
+            
+        pagination.items = new_items
+        return pagination
 
     @staticmethod
     def get_by_id(id):
-        return Tecnico.query.options(joinedload(Tecnico.tags)).get_or_404(id)
+        tecnico = Tecnico.query.options(joinedload(Tecnico.tags)).get_or_404(id)
+        
+        if tecnico.tecnico_principal_id:
+            tecnico._total_a_pagar = 0.0
+            tecnico._total_atendimentos_nao_pagos = 0
+            tecnico._total_agregado = 0.0
+        else:
+            # Calculate manually using DB optimized queries
+            # Own
+            own_pending = Chamado.query.with_entities(func.sum(Chamado.valor), func.count(Chamado.id)).filter(
+                Chamado.tecnico_id == id,
+                Chamado.status_chamado.in_(['Concluído', 'SPARE']),
+                Chamado.status_validacao == 'Aprovado',
+                Chamado.pago == False,
+                Chamado.pagamento_id == None
+            ).first()
+            
+            own_val = own_pending[0] or 0.0
+            own_cnt = own_pending[1] or 0
+            
+            # Subs
+            sub_val = 0.0
+            sub_cnt = 0
+            if tecnico.sub_tecnicos:
+                for sub in tecnico.sub_tecnicos:
+                     sp = Chamado.query.with_entities(func.sum(Chamado.valor), func.count(Chamado.id)).filter(
+                        Chamado.tecnico_id == sub.id,
+                        Chamado.status_chamado.in_(['Concluído', 'SPARE']),
+                        Chamado.status_validacao == 'Aprovado',
+                        Chamado.pago == False,
+                        Chamado.pagamento_id == None
+                     ).first()
+                     sub_val += (sp[0] or 0.0)
+                     sub_cnt += (sp[1] or 0)
+            
+            tecnico._total_a_pagar = float(own_val + sub_val)
+            tecnico._total_atendimentos_nao_pagos = int(own_cnt + sub_cnt)
+            tecnico._total_agregado = tecnico._total_a_pagar
+            
+        return tecnico
 
     @staticmethod
     def create(data):
-        tecnico = Tecnico(
-            nome=data['nome'],
-            contato=data['contato'],
-            cidade=data['cidade'],
-            estado=data['estado'],
-            status=data.get('status', 'Ativo'),
-            valor_por_atendimento=float(data.get('valor_por_atendimento', 150.00)),
-            forma_pagamento=data.get('forma_pagamento', ''),
-            chave_pagamento=data.get('chave_pagamento', ''),
-            tecnico_principal_id=data.get('tecnico_principal_id'),
-            data_inicio=datetime.strptime(data['data_inicio'], '%Y-%m-%d').date()
-        )
+        try:
+            val_data = tecnico_schema.load(data)
+        except ValidationError as err:
+            raise ValueError(f"Erro de validação: {err.messages}")
+
+        tecnico = Tecnico(**val_data)
         db.session.add(tecnico)
         db.session.commit()
         return tecnico
@@ -74,16 +168,15 @@ class TecnicoService:
     @staticmethod
     def update(id, data):
         tecnico = TecnicoService.get_by_id(id)
-        tecnico.nome = data['nome']
-        tecnico.contato = data['contato']
-        tecnico.cidade = data['cidade']
-        tecnico.estado = data['estado']
-        tecnico.status = data.get('status', 'Ativo')
-        tecnico.valor_por_atendimento = float(data.get('valor_por_atendimento', 150.00))
-        tecnico.forma_pagamento = data.get('forma_pagamento', '')
-        tecnico.chave_pagamento = data.get('chave_pagamento', '')
-        tecnico.tecnico_principal_id = data.get('tecnico_principal_id')
-        tecnico.data_inicio = datetime.strptime(data['data_inicio'], '%Y-%m-%d').date()
+        
+        try:
+            val_data = tecnico_schema.load(data, partial=True)
+        except ValidationError as err:
+            raise ValueError(f"Erro de validação: {err.messages}")
+
+        for key, value in val_data.items():
+            setattr(tecnico, key, value)
+            
         db.session.commit()
         return tecnico
 
@@ -114,7 +207,12 @@ class TecnicoService:
     def get_stats():
         return {
             'ativos': Tecnico.query.filter_by(status='Ativo').count(),
-            'total_pendente': sum(t.total_a_pagar for t in Tecnico.query.all())
+            'total_pendente': db.session.query(func.sum(Chamado.valor)).filter(
+                Chamado.status_chamado.in_(['Concluído', 'SPARE']),
+                Chamado.status_validacao == 'Aprovado',
+                Chamado.pago == False,
+                Chamado.pagamento_id == None
+            ).scalar() or 0.0
         }
 
     @staticmethod
@@ -125,7 +223,8 @@ class TecnicoService:
         chamados_proprios = Chamado.query.filter(
             Chamado.tecnico_id == id,
             Chamado.pago == False,
-            Chamado.status_chamado == 'Concluído',
+            Chamado.status_chamado.in_(['Concluído', 'SPARE']),
+            Chamado.status_validacao == 'Aprovado',
             Chamado.pagamento_id == None
         ).order_by(Chamado.data_atendimento.desc()).all()
         
@@ -133,7 +232,8 @@ class TecnicoService:
         chamados_sub = []
         for sub in tecnico.sub_tecnicos:
             chamados_sub.extend(sub.chamados.filter(
-                Chamado.status_chamado == 'Concluído',
+                Chamado.status_chamado.in_(['Concluído', 'SPARE']),
+                Chamado.status_validacao == 'Aprovado',
                 Chamado.pago == False,
                 Chamado.pagamento_id == None
             ).order_by(Chamado.data_atendimento.desc()).all())

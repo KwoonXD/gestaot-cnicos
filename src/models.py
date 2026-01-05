@@ -81,34 +81,13 @@ class Tecnico(db.Model):
     
     @property
     def total_atendimentos_nao_pagos(self):
-        # If I am a sub-technician (have a principal), my debts are handled by him.
-        if self.tecnico_principal_id:
-            return 0
-        
-        # Start with my own count
-        count = self.chamados.filter(Chamado.status_chamado.in_(['Concluído', 'SPARE']), Chamado.status_validacao == 'Aprovado', Chamado.pago == False, Chamado.pagamento_id == None).count()
-        
-        # Add counts from sub-technicians
-        for sub in self.sub_tecnicos:
-            count += sub.chamados.filter(Chamado.status_chamado.in_(['Concluído', 'SPARE']), Chamado.status_validacao == 'Aprovado', Chamado.pago == False, Chamado.pagamento_id == None).count()
-            
-        return count
+        # Lógica movida para TecnicoService.get_all (otimização N+1)
+        # Mantendo retorno zerado/dummy para evitar quebra imediata de templates
+        return getattr(self, '_total_atendimentos_nao_pagos', 0)
     
     def get_total_a_pagar(self):
-        # If I am a sub-technician (have a principal), my debts are handled by him.
-        if self.tecnico_principal_id:
-            return 0.0
-            
-        # Start with my own debt
-        chamados_pendentes = self.chamados.filter(Chamado.status_chamado.in_(['Concluído', 'SPARE']), Chamado.status_validacao == 'Aprovado', Chamado.pago == False, Chamado.pagamento_id == None).all()
-        total = sum(c.valor for c in chamados_pendentes)
-        
-        # Add debt from sub-technicians
-        for sub in self.sub_tecnicos:
-            sub_pendentes = sub.chamados.filter(Chamado.status_chamado.in_(['Concluído', 'SPARE']), Chamado.status_validacao == 'Aprovado', Chamado.pago == False, Chamado.pagamento_id == None).all()
-            total += sum(c.valor for c in sub_pendentes)
-            
-        return float(total)
+        # Lógica movida para TecnicoService.get_all (otimização N+1)
+        return float(getattr(self, '_total_a_pagar', 0.0))
 
     @property
     def total_a_pagar(self):
@@ -118,16 +97,9 @@ class Tecnico(db.Model):
     def total_agregado(self):
         """
         Soma o valor pendente do próprio técnico + valor pendente de todos os seus sub-técnicos.
-        Usado para mostrar ao Chefe quanto ele vai receber no total.
+        Calculado de forma otimizada no Service.
         """
-        # Valor próprio
-        total = self.total_a_pagar
-        
-        # Valor dos filhos (recursão de 1 nível ou loop)
-        for sub in self.sub_tecnicos:
-            total += sub.total_a_pagar
-            
-        return total
+        return float(getattr(self, '_total_agregado', 0.0))
 
     @property
     def pending_chamados_list(self):
@@ -471,6 +443,7 @@ class CatalogoServico(db.Model):
     # Regras de Negócio
     exige_peca = db.Column(db.Boolean, default=False)     # Se True, mostra seleção de LPU
     paga_tecnico = db.Column(db.Boolean, default=True)    # Se False (ex: Falha), técnico recebe 0
+    pagamento_integral = db.Column(db.Boolean, default=False) # Se True (ex: Retorno SPARE), não aplica regra de lote (sempre valor cheio)
     horas_franquia = db.Column(db.Integer, default=2)     # Até quantas horas o valor base cobre
     
     # Status
@@ -483,6 +456,7 @@ class CatalogoServico(db.Model):
             'valor': self.valor_receita,
             'exige_peca': self.exige_peca,
             'paga_tecnico': self.paga_tecnico,
+            'pagamento_integral': self.pagamento_integral,
             'horas_franquia': self.horas_franquia
         }
 

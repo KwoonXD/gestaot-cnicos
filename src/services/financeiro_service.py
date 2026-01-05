@@ -34,14 +34,17 @@ def processar_custos_chamados(chamados, tecnico):
         
         for c in lista:
             valor_a_pagar = 0.0
-            tipo = getattr(c, 'tipo_resolucao', None) or ''
+            # --- Refatorado: Uso de Flags do CatalogoServico ---
+            catalogo = c.catalogo_servico
+            # Default values if no catalog (maintain legacy behavior or default)
+            paga_tecnico = catalogo.paga_tecnico if catalogo else True
+            pagamento_integral = catalogo.pagamento_integral if catalogo else False
             
-            # --- Regras de Exceção ---
-            if 'Falha' in tipo:
-                valor_a_pagar = 0.0
-            elif 'Retorno SPARE' in tipo:
-                # Exceção: Paga cheio sempre (técnico se deslocou)
-                valor_a_pagar = float(tecnico.valor_por_atendimento)
+            if not paga_tecnico:
+                 valor_a_pagar = 0.0
+            elif pagamento_integral:
+                 # Paga cheio sempre (ignora regra de lote)
+                 valor_a_pagar = float(tecnico.valor_por_atendimento)
             else:
                 # Regra Padrão (Principal vs Adicional)
                 if not ja_pagou_principal:
