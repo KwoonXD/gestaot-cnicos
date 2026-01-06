@@ -155,8 +155,7 @@
                                 <div class="d-flex gap-1 mt-1">
                                     {% if tecnico.tags %}
                                     {% for tag in tecnico.tags %}
-                                    <span class="badge rounded-pill"
-                                        style="font-size: 0.6rem; background-color: {{ tag.cor }}; opacity: 0.8;">
+                                    <span class="badge rounded-pill badge-tecnico-tag" style="--tag-bg: {{ tag.cor }};">
                                         {{ tag.nome }}
                                     </span>
                                     {% endfor %}
@@ -200,48 +199,14 @@
                                     <i class="bi bi-pencil"></i>
                                 </a>
                                 {% if current_user.role == 'Admin' %}
-                                <button type="button" class="btn btn-icon btn-ghost-danger" title="Excluir"
-                                    data-bs-toggle="modal" data-bs-target="#deleteTecnicoModal{{ tecnico.id }}">
+                                <button class="btn btn-icon btn-ghost-danger" title="Excluir" data-bs-toggle="modal"
+                                    data-bs-target="#deleteModal" data-id="{{ tecnico.id }}"
+                                    data-nome="{{ tecnico.nome }}" onclick="prepararExclusao(this)">
                                     <i class="bi bi-trash"></i>
                                 </button>
                                 {% endif %}
                             </div>
-                            <!-- Modal -->
-                            <div class="modal fade" id="deleteTecnicoModal{{ tecnico.id }}" tabindex="-1"
-                                aria-hidden="true" onclick="event.stopPropagation()">
-                                <div class="modal-dialog">
-                                    <div class="modal-content">
-                                        <div class="modal-header">
-                                            <h5 class="modal-title text-danger">Excluir Técnico</h5>
-                                            <button type="button" class="btn-close" data-bs-dismiss="modal"
-                                                aria-label="Close"></button>
-                                        </div>
-                                        <div class="modal-body text-start user-select-auto">
-                                            <p>Tem certeza que deseja excluir <strong>{{ tecnico.nome }}</strong>?
-                                            </p>
-                                            <div class="alert alert-warning">
-                                                <i class="bi bi-exclamation-triangle"></i> Atenção:
-                                                <ul class="mb-0 small">
-                                                    <li>Esta ação removerá o técnico permanentemente.</li>
-                                                    <li>Se ele já trabalhou, considere apenas
-                                                        <strong>Inativar</strong>.
-                                                    </li>
-                                                    <li>Não será possível excluir se houver pagamentos ou chamados
-                                                        vinculados.</li>
-                                                </ul>
-                                            </div>
-                                        </div>
-                                        <div class="modal-footer">
-                                            <button type="button" class="btn btn-secondary"
-                                                data-bs-dismiss="modal">Cancelar</button>
-                                            <form action="{{ url_for('operacional.deletar_tecnico', id=tecnico.id) }}"
-                                                method="POST">
-                                                <button type="submit" class="btn btn-danger">Excluir</button>
-                                            </form>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+
 
                             {% if tecnico.total_a_pagar > 0 %}
                             <a href="{{ url_for('financeiro.gerar_pagamento') }}?tecnico={{ tecnico.id }}"
@@ -299,7 +264,48 @@
     </div>
 </div>
 
+<!-- Generic Delete Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title text-danger">Excluir Técnico</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Tem certeza que deseja excluir <strong id="modalTecnicoNome"></strong>?</p>
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i> Atenção:
+                    <ul class="mb-0 small">
+                        <li>Esta ação removerá o técnico permanentemente.</li>
+                        <li>Se ele já trabalhou, considere apenas <strong>Inativar</strong>.
+                        </li>
+                        <li>Não será possível excluir se houver pagamentos ou chamados
+                            vinculados.</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <form id="deleteForm" method="POST">
+                    <button type="submit" class="btn btn-danger">Excluir</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
+    function prepararExclusao(btn) {
+        const id = btn.dataset.id;
+        const nome = btn.dataset.nome;
+        const form = document.getElementById('deleteForm');
+
+        document.getElementById('modalTecnicoNome').textContent = nome;
+        // Construct the URL dynamically to avoid rendering millions of url_fors
+        form.action = '/operacional/tecnicos/' + id + '/delete';
+    }
+
     async function saveCurrentView() {
         const name = prompt("Nome para esta visualização de filtro:");
         if (!name) return;

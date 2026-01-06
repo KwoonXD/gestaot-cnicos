@@ -18,8 +18,10 @@
             <p class="text-muted small mb-0">Cadastro de deslocamento e ordens de serviço (Alpine.js Refactor).</p>
         </div>
         <!-- Smart Paste Button (Clipboard API) -->
-        <button type="button" class="btn btn-outline-primary" @click="pasteData()">
-            <i class="bi bi-clipboard-check me-2"></i>Colar Dados (Magic)
+        <button type="button" class="btn"
+            :class="pasteStatus === 'Colado!' ? 'btn-success text-white' : 'btn-outline-primary'" @click="pasteData()">
+            <i class="bi" :class="pasteStatus === 'Colado!' ? 'bi-check-lg' : 'bi-clipboard-check'"></i>
+            <span class="ms-2" x-text="pasteStatus"></span>
         </button>
     </div>
 
@@ -226,6 +228,7 @@
             stockFeedback: 'Selecione um técnico.',
             stockStatusClass: 'text-muted',
             stockIcon: 'bi bi-info-circle',
+            pasteStatus: 'Colar Dados (Magic)',
 
             // Computed Helpers (Simulated in Alpine methods)
             get availableServices() {
@@ -241,7 +244,15 @@
             },
 
             async init() {
-                await this.loadContratos();
+                // Tenta carregar contratos, mas não trava se falhar
+                try {
+                    await this.loadContratos();
+                } catch (e) {
+                    console.error("Erro crítico ao carregar API:", e);
+                    alert("Erro ao carregar lista de clientes. Verifique a conexão.");
+                }
+
+                // Garante que a linha FSA seja criada mesmo sem clientes
                 this.addFsaRow();
             },
 
@@ -333,10 +344,8 @@
                     }
 
                     // Magical Feedback
-                    const btn = document.querySelector('button[@click="pasteData()"]'); // Simple feedback
-                    const originalHtml = btn.innerHTML;
-                    btn.innerHTML = '<i class="bi bi-check-lg"></i> Colado!';
-                    setTimeout(() => btn.innerHTML = originalHtml, 2000);
+                    this.pasteStatus = 'Colado!';
+                    setTimeout(() => this.pasteStatus = 'Colar Dados (Magic)', 2000);
 
                 } catch (err) {
                     alert('Permissão de colar negada ou erro ao ler clipboard.');

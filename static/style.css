@@ -557,6 +557,22 @@ main {
     background-color: rgba(255, 255, 255, 0.1) !important;
 }
 
-.command-item i {
-    color: rgba(255, 255, 255, 0.8);
+
+/* --- NEW LAYOUT UTILITIES (2025 Refactor) --- */
+
+/* Dashboard Stats Grid - Replaces Bootstrap Columns */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1.5rem;
+}
+
+/* Technician Tags */
+.badge-tecnico-tag {
+    font-size: 0.6rem;
+    opacity: 0.8;
+    background-color: var(--tag-bg);
+    color: #fff;
+    /* Ensure readability on colored backgrounds */
+    border: 1px solid rgba(255, 255, 255, 0.2);
 }

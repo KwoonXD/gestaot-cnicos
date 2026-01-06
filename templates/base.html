@@ -19,6 +19,13 @@
 
     <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    {% macro nav_item(endpoint, icon, label, match_token=None) %}
+    <a href="{{ url_for(endpoint) }}"
+        class="list-group-item list-group-item-action {{ 'active' if (match_token and match_token in request.endpoint) or (not match_token and (request.endpoint == endpoint or (endpoint.split('.')[1] in request.endpoint and endpoint != 'operacional.dashboard'))) }}">
+        <i class="bi {{ icon }} me-2"></i> {{ label }}
+    </a>
+    {% endmacro %}
 </head>
 
 <body>
@@ -38,26 +45,10 @@
                 <small class="text-uppercase text-muted fw-bold px-3 mb-2 mt-2"
                     style="font-size: 0.7rem;">Operacional</small>
 
-                <a href="{{ url_for('operacional.dashboard') }}"
-                    class="list-group-item list-group-item-action {{ 'active' if request.endpoint == 'operacional.dashboard' }}">
-                    <i class="bi bi-speedometer2 me-2"></i> Dashboard
-                </a>
-
-                <a href="{{ url_for('operacional.tecnicos') }}"
-                    class="list-group-item list-group-item-action {{ 'active' if request.endpoint == 'operacional.tecnicos' }}">
-                    <i class="bi bi-people me-2"></i> Técnicos
-                </a>
-
-
-                <a href="{{ url_for('operacional.chamados') }}"
-                    class="list-group-item list-group-item-action {{ 'active' if request.endpoint == 'operacional.chamados' }}">
-                    <i class="bi bi-clipboard-check me-2"></i> Chamados
-                </a>
-
-                <a href="{{ url_for('operacional.atendimentos') }}"
-                    class="list-group-item list-group-item-action {{ 'active' if request.endpoint == 'operacional.atendimentos' }}">
-                    <i class="bi bi-check-circle me-2"></i> Fila de Validação
-                </a>
+                {{ nav_item('operacional.dashboard', 'bi-speedometer2', 'Dashboard') }}
+                {{ nav_item('operacional.tecnicos', 'bi-people', 'Técnicos') }}
+                {{ nav_item('operacional.chamados', 'bi-clipboard-check', 'Chamados') }}
+                {{ nav_item('operacional.atendimentos', 'bi-check-circle', 'Fila de Validação') }}
 
 
 
@@ -65,45 +56,15 @@
                 <div class="my-3 border-top"></div>
                 <small class="text-uppercase text-muted fw-bold px-3 mb-2" style="font-size: 0.7rem;">Gestão</small>
 
-                <a href="{{ url_for('financeiro.ledger') }}"
-                    class="list-group-item list-group-item-action {{ 'active' if 'ledger' in request.endpoint }}">
-                    <i class="bi bi-wallet-fill me-2"></i> Conta Corrente
-                </a>
-
-                <a href="{{ url_for('financeiro.pagamentos') }}"
-                    class="list-group-item list-group-item-action {{ 'active' if request.endpoint == 'financeiro.pagamentos' }}">
-                    <i class="bi bi-cash-stack me-2"></i> Pagamentos (Lote)
-                </a>
-
-                <a href="{{ url_for('operacional.relatorio_fechamento') }}"
-                    class="list-group-item list-group-item-action {{ 'active' if 'relatorios' in request.endpoint }}">
-                    <i class="bi bi-file-earmark-bar-graph me-2"></i> Relatório Fechamento
-                </a>
-
-                <a href="{{ url_for('financeiro.dashboard_geo') }}"
-                    class="list-group-item list-group-item-action {{ 'active' if 'dashboard_geo' in request.endpoint }}">
-                    <i class="bi bi-geo-alt me-2"></i> Rentabilidade Geo
-                </a>
-
-                <a href="{{ url_for('stock.controle_estoque') }}"
-                    class="list-group-item list-group-item-action {{ 'active' if 'stock' in request.endpoint }}">
-                    <i class="bi bi-box-seam me-2"></i> Almoxarifado
-                </a>
-
-                <a href="{{ url_for('admin.users_list') }}"
-                    class="list-group-item list-group-item-action {{ 'active' if 'users' in request.endpoint }}">
-                    <i class="bi bi-person-gear me-2"></i> Usuários
-                </a>
-
-                <a href="{{ url_for('admin.auditoria') }}"
-                    class="list-group-item list-group-item-action {{ 'active' if 'audit' in request.endpoint }}">
-                    <i class="bi bi-shield-check me-2"></i> Auditoria
-                </a>
-
-                <a href="{{ url_for('admin.contratos') }}"
-                    class="list-group-item list-group-item-action {{ 'active' if 'contratos' in request.endpoint }}">
-                    <i class="bi bi-file-earmark-text me-2"></i> Contratos
-                </a>
+                {{ nav_item('financeiro.ledger', 'bi-wallet-fill', 'Conta Corrente') }}
+                {{ nav_item('financeiro.pagamentos', 'bi-cash-stack', 'Pagamentos (Lote)') }}
+                {{ nav_item('operacional.relatorio_fechamento', 'bi-file-earmark-bar-graph', 'Relatório Fechamento',
+                'relatorios') }}
+                {{ nav_item('financeiro.dashboard_geo', 'bi-geo-alt', 'Rentabilidade Geo') }}
+                {{ nav_item('stock.controle_estoque', 'bi-box-seam', 'Almoxarifado', 'stock') }}
+                {{ nav_item('admin.users_list', 'bi-person-gear', 'Usuários', 'users') }}
+                {{ nav_item('admin.auditoria', 'bi-shield-check', 'Auditoria', 'audit') }}
+                {{ nav_item('admin.contratos', 'bi-file-earmark-text', 'Contratos', 'contratos') }}
                 {% endif %}
             </div>
 
