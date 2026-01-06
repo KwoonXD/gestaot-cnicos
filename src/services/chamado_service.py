@@ -1,5 +1,7 @@
-from ..models import db, Chamado, Tecnico, CatalogoServico, ItemLPU, Cliente
+
+from ..models import db, Chamado, Tecnico, CatalogoServico, ItemLPU, Cliente, TecnicoStock
 from datetime import datetime
+from flask_login import current_user
 from .audit_service import AuditService
 import uuid
 import re
@@ -158,186 +160,73 @@ class ChamadoService:
         }
 
     @staticmethod
-    def create_multiplo(dados_logistica, lista_fsas):
+    def create_multiplo(logistica, fsas):
         """
-        Cria múltiplos chamados com cálculo de RECEITA (por FSA) e CUSTO (Lote).
-        
-        Regras de Custo (Técnico):
-        - Index 0 (Principal): Recebe Base + Horas Extras.
-        - Index > 0 (Adicional): Recebe valor adicional fixo.
-        - Horas Extras: (Total Horas - 2) * Valor Hora Adicional.
+        Cria chamados em lote e baixa estoque automaticamente.
         """
-        from datetime import datetime as dt
-        from flask_login import current_user
+        criados = []
+        batch_id = str(uuid.uuid4())  # Gera ID único para o lote
         
         try:
-            tecnico_id = int(dados_logistica['tecnico_id'])
+            # Converte string de data '2025-01-01' para objeto date
+            data_atendimento = datetime.strptime(logistica['data_atendimento'], '%Y-%m-%d').date()
+        except ValueError:
+            data_atendimento = datetime.now().date()
+        
+        for fsa in fsas:
+            # Lógica de Estoque (Baixa automática)
+            peca_nome = ""
+            custo_peca = 0.0
             
-            # Buscar Técnico para pegar valores de contrato
-            tecnico = Tecnico.query.get(tecnico_id)
-            if not tecnico:
-                raise ValueError(f"Técnico ID {tecnico_id} não encontrado.")
-                
-            cidade = dados_logistica.get('cidade', 'Indefinido')
-            cliente_nome = dados_logistica.get('cliente_nome', '')
-            data_str = dados_logistica['data_atendimento']
-            data_atend = dt.strptime(data_str, '%Y-%m-%d').date()
-            
-            # Gerar UUID único para este lote
-            batch_id = str(uuid.uuid4())
-            
-            # Capturar criador
-            created_by = getattr(current_user, 'id', None) if current_user and current_user.is_authenticated else None
+            # Se selecionou uma peça
+            if fsa.get('peca_id'):
+                item = ItemLPU.query.get(fsa['peca_id'])
+                if item:
+                    peca_nome = item.nome
+                    
+                    # Se quem forneceu foi a EMPRESA, desconta do estoque do técnico
+                    if fsa.get('fornecedor_peca') == 'Empresa':
+                        estoque = TecnicoStock.query.filter_by(
+                            tecnico_id=logistica['tecnico_id'], 
+                            item_lpu_id=item.id
+                        ).first()
+                        
+                        if estoque and estoque.quantidade > 0:
+                            estoque.quantidade -= 1
+                            db.session.add(estoque)
+                    
+                    # Se quem forneceu foi o TÉCNICO, registra o custo para reembolso
+                    elif fsa.get('fornecedor_peca') == 'Tecnico':
+                        custo_peca = float(fsa.get('custo_peca', 0))
 
-            # ADICIONADO: Extrair observação
-            observacoes_geral = dados_logistica.get('observacoes', '') 
-            
-            # --- 1. Calcular Horas Totais do Lote ---
-            # Assume-se que o horário é compartilhado ou pega do primeiro
-            # O front-end geralmente manda o horário em todos, ou no cabeçalho.
-            # Vamos pegar do primeiro item da lista para referência do lote.
-            primeiro_fsa = lista_fsas[0] if lista_fsas else {}
-            hora_inicio_str = primeiro_fsa.get('hora_inicio', '')
-            hora_fim_str = primeiro_fsa.get('hora_fim', '')
-            
-            horas_reais = ChamadoService.calculate_hours_worked(hora_inicio_str, hora_fim_str)
-            horas_franquia = HORAS_FRANQUIA_PADRAO
-            
-            # Cálculo HE
-            horas_extras = max(0.0, horas_reais - horas_franquia)
-            valor_hora_adicional = float(tecnico.valor_hora_adicional or VALOR_HORA_EXTRA_DEFAULT)
-            valor_pagar_he = horas_extras * valor_hora_adicional
-            
-            created_chamados = []
-            
-            for index, fsa in enumerate(lista_fsas):
-                chamado = Chamado()
-                is_principal = (index == 0)
+            # Cria o Chamado
+            novo_chamado = Chamado(
+                tecnico_id=logistica['tecnico_id'],
+                cidade=logistica['cidade'],
+                data_atendimento=data_atendimento,
+                observacoes=logistica.get('observacoes'),
                 
-                # --- Cabeçalho ---
-                chamado.tecnico_id = tecnico.id
-                chamado.cidade = cidade
-                chamado.observacoes = observacoes_geral
-                chamado.data_atendimento = data_atend
-                chamado.status_chamado = 'Concluído'
-                chamado.batch_id = batch_id
-                chamado.status_validacao = 'Pendente'
-                chamado.created_by_id = created_by
+                # Dados FSA
+                codigo_chamado=fsa['codigo_chamado'],
+                catalogo_servico_id=fsa['catalogo_servico_id'],
+                hora_inicio=fsa['hora_inicio'],
+                hora_fim=fsa['hora_fim'],
                 
-                # --- Item / FSA ---
-                raw_code = fsa.get('codigo_chamado', '')
-                chamado.codigo_chamado = ChamadoService.extract_fsa_code(raw_code)
-                chamado.is_adicional = not is_principal
+                # Peças
+                peca_usada=peca_nome,
+                custo_peca=custo_peca,
+                fornecedor_peca=fsa.get('fornecedor_peca', 'Empresa'),
                 
-                # --- Horários ---
-                chamado.hora_inicio = hora_inicio_str
-                chamado.hora_fim = hora_fim_str
-                chamado.horas_trabalhadas = horas_reais
-                
-                # --- RECEITA (Valor que a empresa ganha) ---
-                # Busca Serviço no Banco
-                catalogo_id = fsa.get('catalogo_servico_id')
-                catalogo = CatalogoServico.query.get(catalogo_id) if catalogo_id else None
-                
-                servico_nome = catalogo.nome if catalogo else 'Serviço Avulso'
-                
-                # --- Lógica de Retorno/SPARE (Smart Billing) ---
-                rec_servico = float(catalogo.valor_receita) if catalogo else 0.0
-                
-                if catalogo and catalogo.is_retorno:
-                    # Se for retorno (marcado no catalogo), SÓ cobra se a peça for do Cliente
-                    if fornecedor_peca_input == 'Cliente':
-                         # Cobra valor cheio (mantém rec_servico)
-                         pass
-                    else:
-                         # Isenção de cobrança
-                         rec_servico = 0.0
-                
-                chamado.catalogo_servico_id = catalogo.id if catalogo else None
-                chamado.tipo_servico = servico_nome
-                chamado.tipo_resolucao = f"{servico_nome} ({cliente_nome})" if cliente_nome else servico_nome
-                
-                # Busca Peça no Banco ou Fallback
-                rec_peca = 0.0
-                peca_nome = fsa.get('peca_usada', '') or ''
-                peca_id = fsa.get('peca_id')
-                
-                if peca_id:
-                    item_lpu = ItemLPU.query.get(peca_id)
-                    if item_lpu:
-                        peca_nome = item_lpu.nome
-                        rec_peca = float(item_lpu.valor_receita or 0)
-                elif peca_nome.strip():
-                    # Fallback por nome
-                    item_lpu = ItemLPU.query.filter(ItemLPU.nome.ilike(f"%{peca_nome.strip()}%")).first()
-                    if item_lpu:
-                         rec_peca = float(item_lpu.valor_receita or 0)
-                         peca_nome = item_lpu.nome
-
-                chamado.valor_receita_servico = rec_servico
-                chamado.valor_receita_peca = rec_peca
-                chamado.valor_receita_total = rec_servico + rec_peca
-                chamado.peca_usada = peca_nome.strip() if peca_nome.strip() else None
-                chamado.valor = chamado.valor_receita_total # Compatibilidade legado
-                
-                # --- CUSTO (Quanto paga ao técnico) ---
-                custo_atribuido = 0.0
-                
-                if is_principal:
-                    # Principal: Base + HE
-                    base = float(tecnico.valor_por_atendimento or 120.0)
-                    custo_atribuido = base + valor_pagar_he
-                    chamado.valor_horas_extras = valor_pagar_he # Registra quanto foi HE
-                else:
-                    # Adicional: Valor fixo extra (loja ou ativo)
-                    custo_atribuido = float(tecnico.valor_adicional_loja or 20.0)
-                    chamado.valor_horas_extras = 0.0
-                
-                chamado.custo_atribuido = custo_atribuido
-                
-                # Custo Peça (Se comprada pelo técnico)
-                chamado.fornecedor_peca = fsa.get('fornecedor_peca', 'Empresa')
-                chamado.custo_peca = float(fsa.get('custo_peca', 0.0)) if chamado.fornecedor_peca == 'Tecnico' else 0.0
-                
-                # --- STOCK VALIDATION HOOK ---
-                # Se a peça é da Empresa, assume-se que saiu do estoque do técnico (Almoxarifado Virtual)
-                # A menos que seja um item que não controla estoque (ex: cabos menores? Para MVP, todos Itens LPU controlam).
-                if chamado.fornecedor_peca == 'Empresa' and 'item_lpu' in locals() and item_lpu:
-                     from .stock_service import StockService
-                     # Consome 1 unidade. Se falhar, faz raise e rollback em tudo.
-                     # Passamos None no chamado_id pois ainda não tem ID. Opcional: Atualizar obs depois?
-                     # Ou apenas logar "Uso no Batch {batch_id}"
-                     try:
-                        StockService.consumir_peca(
-                            tecnico_id=tecnico.id, 
-                            item_id=item_lpu.id, 
-                            quantidade=1, 
-                            user_id=created_by,
-                            chamado_id=None # Será vinculado via Batch/Data
-                        )
-                     except ValueError as ve:
-                        # Repassa erro de estoque amigavel
-                        raise ValueError(f"Estoque Insuficiente para o item '{item_lpu.nome}': {str(ve)}")
-
-                db.session.add(chamado)
-                created_chamados.append(chamado)
-                
-            db.session.commit()
-            
-            msg_audit = f"Batch {batch_id}: {len(created_chamados)} FSAs. Tech: {tecnico.nome}. Total Time: {horas_reais}h. HE: R$ {valor_pagar_he:.2f}"
-            AuditService.log_change(
-                model_name='Chamado',
-                object_id=batch_id,
-                action='CREATE_MULTI_V2',
-                changes=msg_audit
+                created_by_id=current_user.id,
+                status_chamado='Concluído', 
+                status_validacao='Pendente',
+                batch_id=batch_id  # VINCULA AO PROCESSO DE VALIDAÇÃO
             )
-                
-            return created_chamados
-            
-        except Exception as e:
-            db.session.rollback()
-            print(f"Erro critical em create_multiplo: {e}")
-            raise e
+            db.session.add(novo_chamado)
+            criados.append(novo_chamado)
+
+        db.session.commit()
+        return criados
 
     @staticmethod
     def aprovar_chamados(ids_lista, user_id):

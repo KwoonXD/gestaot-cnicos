@@ -225,7 +225,6 @@ def adicionar_servico(id):
     servico = TipoServico(
         nome=nome,
         valor_receita=valor,
-        cobra_visita=cobra_visita,
         cliente_id=cliente.id
     )
     db.session.add(servico)

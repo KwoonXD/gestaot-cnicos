@@ -467,7 +467,7 @@ class ItemLPU(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(100), nullable=False)
     valor_receita = db.Column(db.Float, default=0.0)
-    cliente_id = db.Column(db.Integer, db.ForeignKey('clientes.id'), nullable=False)
+    cliente_id = db.Column(db.Integer, db.ForeignKey('clientes.id'), nullable=True)
     
     def to_dict(self):
         return {

@@ -1,10 +1,9 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 
 {% block title %}Controle de Estoque | WT{% endblock %}
 
 {% block head %}
 <link href="https://cdn.jsdelivr.net/npm/tom-select/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
-<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 <style>
     .cursor-pointer {
         cursor: pointer;
@@ -60,7 +59,7 @@
     <div class="card shadow-sm border-0 overflow-hidden">
         <div class="table-responsive" style="max-height: 70vh;">
             <table class="table table-bordered align-middle mb-0 text-nowrap" style="font-size: 0.85rem;">
-                <thead class="bg-light text-secondary text-uppercase small fw-bold text-center sticky-col-header">
+                <thead class="text-secondary text-uppercase small fw-bold text-center sticky-col-header">
                     <tr>
                         <th class="text-start ps-3 sticky-col-first shadow-sm" style="min-width: 200px; z-index: 30;">
                             Técnico</th>
@@ -83,17 +82,19 @@
 
                         {% for item in itens %}
                         {% set qtd = matrix.get(tec.id, {}).get(item.id, 0) %}
+                        {% if qtd > 0 %}
                         <td class="text-center cursor-pointer hover-bg transition-colors"
                             @click="openModal('{{ tec.id }}', '{{ item.id }}', {{ qtd }})" title="Clique para ajustar">
-
-                            {% if qtd > 0 %}
                             <span class="badge bg-primary bg-opacity-10 text-primary fw-bold px-3 py-2 rounded-pill">
                                 {{ qtd }}
                             </span>
-                            {% else %}
-                            <span class="text-muted opacity-25 px-3 py-2">-</span>
-                            {% endif %}
                         </td>
+                        {% else %}
+                        <td class="text-center cursor-pointer hover-bg transition-colors"
+                            @click="openModal('{{ tec.id }}', '{{ item.id }}', 0)" title="Clique para ajustar">
+                            <span class="text-muted opacity-25 px-3 py-2">-</span>
+                        </td>
+                        {% endif %}
                         {% else %}
                         <td class="text-center text-muted bg-light">Cadastre itens no catálogo</td>
                         {% endfor %}
@@ -112,6 +113,7 @@
         </div>
     </div>
 
+    <!-- Modal Movimentacao -->
     <div class="modal fade" id="movimentacaoModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content border-0 shadow-lg">
@@ -193,6 +195,7 @@
         </div>
     </div>
 
+    <!-- Modal Catalogo -->
     <div class="modal fade" id="catalogoModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -233,7 +236,10 @@
     </div>
 
 </div>
+{% endblock %}
 
+{% block scripts %}
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tom-select/dist/js/tom-select.complete.min.js"></script>
 <script>
     function stockControl() {
@@ -246,57 +252,57 @@
             modalInstance: null,
             tomSelectInstance: null,
             currentStock: 0,
-            
-            // CORREÇÃO: Adicionadas as duas chaves fechando }}
-            matrixData: {{ matrix | tojson }},
+            {% set matrix_json = matrix | tojson | safe %}
+        matrixData: { { matrix_json } },
+    },
 
-            init() {
-                // Inicializa Modal
-                const modalEl = document.getElementById('movimentacaoModal');
-                if (modalEl) this.modalInstance = new bootstrap.Modal(modalEl);
+    init() {
+        // Inicializa Modal
+        const modalEl = document.getElementById('movimentacaoModal');
+        if (modalEl) this.modalInstance = new bootstrap.Modal(modalEl);
 
-                // Inicializa TomSelect
-                const selectEl = document.getElementById('tecnicoSelect');
-                if (selectEl) {
-                    this.tomSelectInstance = new TomSelect(selectEl, {
-                        create: false,
-                        sortField: { field: "text", direction: "asc" },
-                        onChange: (value) => {
-                            this.tecnicoId = value;
-                            this.updateCurrentStock();
-                        }
-                    });
+        // Inicializa TomSelect
+        const selectEl = document.getElementById('tecnicoSelect');
+        if (selectEl) {
+            this.tomSelectInstance = new TomSelect(selectEl, {
+                create: false,
+                sortField: { field: "text", direction: "asc" },
+                onChange: (value) => {
+                    this.tecnicoId = value;
+                    this.updateCurrentStock();
                 }
-                
-                this.$watch('itemId', () => this.updateCurrentStock());
-            },
+            });
+        }
 
-            openModal(tecId = '', itemId = '', currentQty = 0) {
-                this.tecnicoId = tecId;
-                if (this.tomSelectInstance) this.tomSelectInstance.setValue(tecId, true);
-                
-                this.itemId = itemId;
-                this.currentStock = currentQty;
-                this.tipo = 'ENVIO'; 
-                this.qty = 1;
-                this.modalInstance?.show();
-            },
+        this.$watch('itemId', () => this.updateCurrentStock());
+    },
 
-            updateCurrentStock() {
-                if (this.tecnicoId && this.itemId) {
-                    try {
-                        const tId = parseInt(this.tecnicoId);
-                        const iId = parseInt(this.itemId);
-                        this.currentStock = (this.matrixData[tId] && this.matrixData[tId][iId]) || 0;
-                    } catch (e) { this.currentStock = 0; }
-                }
-            },
+    openModal(tecId = '', itemId = '', currentQty = 0) {
+        this.tecnicoId = tecId;
+        if (this.tomSelectInstance) this.tomSelectInstance.setValue(tecId, true);
+
+        this.itemId = itemId;
+        this.currentStock = currentQty;
+        this.tipo = 'ENVIO';
+        this.qty = 1;
+        this.modalInstance?.show();
+    },
+
+    updateCurrentStock() {
+        if (this.tecnicoId && this.itemId) {
+            try {
+                const tId = parseInt(this.tecnicoId);
+                const iId = parseInt(this.itemId);
+                this.currentStock = (this.matrixData[tId] && this.matrixData[tId][iId]) || 0;
+            } catch (e) { this.currentStock = 0; }
+        }
+    },
             
             get modalTitle() {
-                if (this.tipo === 'ENVIO') return 'Enviar para Técnico';
-                if (this.tipo === 'DEVOLUCAO') return 'Devolução de Material';
-                return 'Ajuste de Inventário';
-            }
+        if (this.tipo === 'ENVIO') return 'Enviar para Técnico';
+        if (this.tipo === 'DEVOLUCAO') return 'Devolução de Material';
+        return 'Ajuste de Inventário';
+    }
         }
     }
 </script>

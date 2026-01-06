@@ -4,8 +4,6 @@
 
 {% block head %}
 <link href="https://cdn.jsdelivr.net/npm/tom-select/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
-<!-- Alpine.js -->
-<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 {% endblock %}
 
 {% block content %}
@@ -204,9 +202,11 @@
         </div>
     </form>
 </div>
+{% endblock %}
 
+{% block scripts %}
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tom-select/dist/js/tom-select.complete.min.js"></script>
-
 <script>
     function chamadoForm() {
         return {
@@ -413,7 +413,7 @@
                     const data = await res.json();
 
                     if (res.ok) {
-                        window.location.href = '/operacional/atendimentos';
+                        window.location.href = '/atendimentos';
                     } else {
                         alert('Erro: ' + (data.error || 'Desconhecido'));
                     }
