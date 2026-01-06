@@ -211,17 +211,49 @@ def novo_tecnico():
 @operacional_bp.route('/tecnicos/<int:id>')
 @login_required
 def tecnico_detalhes(id):
+    from sqlalchemy import case # Import localmente para evitar erro
     tecnico = TecnicoService.get_by_id(id)
     
-    # CORREÇÃO AQUI: Uso direto da classe Chamado importada
-    chamados = tecnico.chamados.order_by(Chamado.data_atendimento.desc()).all()
-    pagamentos = tecnico.pagamentos.all()
+    # 1. Stats Calculation
+    val_term = func.coalesce(Chamado.custo_atribuido, Chamado.valor, 0)
+    stats = db.session.query(
+        func.count(Chamado.id).label('total'),
+        func.sum(case(
+            (
+                (Chamado.status_chamado.in_(['Concluído', 'SPARE'])) & 
+                (Chamado.pago == False) & 
+                (Chamado.pagamento_id == None), 
+                1
+            ), 
+            else_=0
+        )).label('pendentes_qtd'),
+        func.sum(case(
+            (
+                (Chamado.status_chamado.in_(['Concluído', 'SPARE'])) & 
+                (Chamado.pago == False) & 
+                (Chamado.pagamento_id == None), 
+                val_term
+            ), 
+            else_=0
+        )).label('valor_pendente')
+    ).filter_by(tecnico_id=id).first()
+
+    # 2. Pagination for History
+    page = request.args.get('page', 1, type=int)
+    pagination = tecnico.chamados.order_by(Chamado.data_atendimento.desc()).paginate(page=page, per_page=20)
+    
+    # 3. Payments
+    pagamentos = tecnico.pagamentos.order_by(Pagamento.data_criacao.desc()).all()
+    pagamentos_recentes = pagamentos[:5]
     sub_tecnicos = tecnico.sub_tecnicos
     
     return render_template('tecnico_detalhes.html',
         tecnico=tecnico,
-        chamados=chamados,
+        stats=stats,
+        pagination=pagination,
+        chamados=pagination.items, # For compatibility with parts of template that might use 'chamados'
         pagamentos=pagamentos,
+        pagamentos_recentes=pagamentos_recentes,
         sub_tecnicos=sub_tecnicos
     )
 

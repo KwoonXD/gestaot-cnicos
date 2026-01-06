@@ -178,10 +178,10 @@
                             </span>
                         </td>
                         <td>
-                            {% if tecnico.total_a_pagar_cache is defined %}
-                            R$ {{ "%.2f"|format(tecnico.total_a_pagar_cache) }}
+                            {% if tecnico.total_a_pagar_cache > 0 %}
+                            <span class="fw-bold text-danger">R$ {{ "%.2f"|format(tecnico.total_a_pagar_cache) }}</span>
                             {% else %}
-                            R$ 0.00
+                            <span class="text-muted">-</span>
                             {% endif %}
                         </td>
                         <td class="text-end pe-4">

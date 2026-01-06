@@ -1,782 +1,137 @@
 {% extends 'base.html' %}
 
-{% block title %}{{ tecnico.nome }} - Gestão de Técnicos{% endblock %}
+{% block title %}{{ tecnico.nome }} - Detalhes{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <nav aria-label="breadcrumb">
-        <ol class="breadcrumb mb-2">
-            <li class="breadcrumb-item"><a href="{{ url_for('operacional.dashboard') }}">Dashboard</a></li>
-            <li class="breadcrumb-item"><a href="{{ url_for('operacional.tecnicos') }}">Técnicos</a></li>
-            <li class="breadcrumb-item active">{{ tecnico.nome }}</li>
-        </ol>
-    </nav>
-    <div class="d-flex justify-content-between align-items-center">
-        <div>
-            <h1>{{ tecnico.nome }}</h1>
-            <div class="d-flex flex-wrap gap-2 mb-2 align-items-center">
-                {% for tag in tecnico.tags %}
-                <span class="badge" style="background-color: {{ tag.cor }};">
-                    {{ tag.nome }}
-                    <form action="{{ url_for('operacional.deletar_tag', id=tag.id) }}" method="POST"
-                        class="d-inline ms-1">
-                        <button type="submit" class="btn btn-link text-white p-0"
-                            style="font-size: 0.7em; text-decoration: none;">&times;</button>
-                    </form>
-                </span>
-                {% endfor %}
-                <button class="btn btn-sm btn-outline-secondary rounded-circle" type="button" data-bs-toggle="collapse"
-                    data-bs-target="#addTagForm" style="width: 24px; height: 24px; padding: 0;">
-                    <i class="bi bi-plus"></i>
-                </button>
-            </div>
-            <div class="collapse" id="addTagForm">
-                <form action="{{ url_for('operacional.criar_tag', id=tecnico.id) }}" method="POST"
-                    class="d-flex gap-2 align-items-center mt-2 no-loading">
-                    <input type="text" name="nome" class="form-control form-control-sm" placeholder="Nova Tag..."
-                        style="width: 150px;" required>
-                    <input type="color" name="cor" class="form-control form-control-color form-control-sm"
-                        value="#3B82F6" title="Cor da Tag">
-                    <button type="submit" class="btn btn-sm btn-primary">Adicionar</button>
-                </form>
-            </div>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h3 mb-1">{{ tecnico.nome }}</h1>
+        <div class="d-flex gap-2">
+            {% for tag in tecnico.tags %}
+            <span class="badge" style="background-color: {{ tag.cor }};">{{ tag.nome }}</span>
+            {% endfor %}
         </div>
-        <div>
-            <a href="{{ url_for('operacional.editar_tecnico', id=tecnico.id) }}" class="btn btn-outline-primary">
-                <i class="bi bi-pencil"></i> Editar
-            </a>
-            {% if current_user.role == 'Admin' %}
-            <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal"
-                data-bs-target="#deleteTecnicoModal">
-                <i class="bi bi-trash"></i> Excluir Cadastro
-            </button>
-            {% endif %}
-            {% if tecnico.total_a_pagar > 0 %}
-            <a href="{{ url_for('financeiro.gerar_pagamento') }}?tecnico={{ tecnico.id }}" class="btn btn-success">
-                <i class="bi bi-cash"></i> Gerar Pagamento
-            </a>
-            {% endif %}
-        </div>
+    </div>
+    <div class="btn-group">
+        <a href="{{ url_for('operacional.editar_tecnico', id=tecnico.id) }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-pencil"></i> Editar
+        </a>
+        {% if stats.valor_pendente > 0 %}
+        <a href="{{ url_for('financeiro.gerar_pagamento') }}?tecnico={{ tecnico.id }}" class="btn btn-success btn-sm">
+            <i class="bi bi-cash-stack"></i> Pagar R$ {{ "%.2f"|format(stats.valor_pendente) }}
+        </a>
+        {% endif %}
+    </div>
+</div>
 
-        <!-- Delete Modal -->
-        <div class="modal fade" id="deleteTecnicoModal" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title text-danger">Excluir Técnico</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                        <p>Tem certeza que deseja excluir <strong>{{ tecnico.nome }}</strong>?</p>
-                        <div class="alert alert-warning">
-                            <i class="bi bi-exclamation-triangle"></i> Atenção:
-                            <ul class="mb-0 small">
-                                <li>Esta ação removerá o técnico permanentemente.</li>
-                                <li>Se ele já trabalhou, considere apenas <strong>Inativar</strong>.</li>
-                                <li>Não será possível excluir se houver pagamentos ou chamados vinculados.</li>
-                            </ul>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                        <form action="{{ url_for('operacional.deletar_tecnico', id=tecnico.id) }}" method="POST">
-                            <button type="submit" class="btn btn-danger">Excluir Permanentemente</button>
-                        </form>
-                    </div>
-                </div>
-            </div>
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card p-3 border-0 shadow-sm bg-light">
+            <small class="text-muted text-uppercase">Total de Chamados</small>
+            <div class="fs-2 fw-bold">{{ stats.total }}</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card p-3 border-0 shadow-sm">
+            <small class="text-muted text-uppercase">Pendente de Pagamento</small>
+            <div class="fs-2 fw-bold text-primary">{{ stats.pendentes_qtd }} <small
+                    class="fs-6 text-muted">chamados</small></div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card p-3 border-0 shadow-sm bg-primary text-white">
+            <small class="text-uppercase opacity-75">Valor a Pagar</small>
+            <div class="fs-2 fw-bold">R$ {{ "%.2f"|format(stats.valor_pendente) }}</div>
         </div>
     </div>
 </div>
 
-<div class="row g-4 mb-4">
-    <div class="col-md-6 col-lg-3">
-        <div class="card metric-card blue h-100">
-            <div class="card-body text-center">
-                <div class="metric-value">{{ tecnico.total_atendimentos }}</div>
-                <div class="metric-label">Total Atendimentos</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-6 col-lg-3">
-        <div class="card metric-card green h-100">
-            <div class="card-body text-center">
-                <div class="metric-value">{{ tecnico.total_atendimentos_concluidos }}</div>
-                <div class="metric-label">Concluídos</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-6 col-lg-3">
-        <div class="card metric-card orange h-100">
-            <div class="card-body text-center">
-                <div class="metric-value">{{ tecnico.total_atendimentos_nao_pagos }}</div>
-                <div class="metric-label">Não Pagos</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-6 col-lg-3">
-        <div class="card metric-card {% if tecnico.total_a_pagar > 0 %}red{% else %}green{% endif %} h-100">
-            <div class="card-body text-center">
-                <div class="metric-value font-numeric">R$ {{ "%.2f"|format(tecnico.total_a_pagar) }}</div>
-                <div class="metric-label">A Pagar</div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="row g-4">
-    <div class="col-lg-4">
-        <div class="card mb-4">
-            <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-person"></i> Informações</h5>
-            </div>
-            <div class="card-body">
-                <div class="detail-item">
-                    <div class="label">ID do Técnico</div>
-                    <div class="value">
-                        <span class="badge-tecnico copy-text" title="Copiar ID" data-copy="{{ tecnico.id_tecnico }}">
-                            {{ tecnico.id_tecnico }}
-                        </span>
-                    </div>
-                </div>
-                <div class="detail-item">
-                    <div class="label">Contato</div>
-                    <div class="value">{{ tecnico.contato }}</div>
-                </div>
-                <div class="detail-item">
-                    <div class="label">Localização</div>
-                    <div class="value">{{ tecnico.cidade }}/{{ tecnico.estado }}</div>
-                </div>
-                <div class="detail-item">
-                    <div class="label">Status</div>
-                    <div class="value">
-                        <span class="badge badge-status badge-{{ tecnico.status|lower }}">{{ tecnico.status }}</span>
-                    </div>
-                </div>
-                <div class="detail-item">
-                    <div class="label">Valor por Atendimento</div>
-                    <div class="value font-numeric">R$ {{ "%.2f"|format(tecnico.valor_por_atendimento) }}</div>
-                </div>
-                <div class="detail-item">
-                    <div class="label">Data de Início</div>
-                    <div class="value">{{ tecnico.data_inicio.strftime('%d/%m/%Y') if tecnico.data_inicio else '-' }}
-                    </div>
-                </div>
-                <div class="detail-item">
-                    <div class="label">Status de Pagamento</div>
-                    <div class="value">
-                        <span class="badge badge-status badge-{{ tecnico.status_pagamento|lower }}">{{
-                            tecnico.status_pagamento }}</span>
-                    </div>
-                </div>
-                <div class="detail-item mt-3 p-2 bg-body-tertiary rounded border">
-                    <label class="small text-muted text-uppercase fw-bold mb-1">Link de Auto-Atendimento</label>
-                    <div class="input-group input-group-sm">
-                        <input type="text" class="form-control font-monospace text-muted"
-                            value="{{ url_for('public.extrato_tecnico', token=tecnico.token_acesso, _external=True) }}"
-                            readonly id="linkTecnico{{tecnico.id}}">
-                        <button class="btn btn-outline-secondary" type="button"
-                            onclick="copyToClipboard(document.getElementById('linkTecnico{{tecnico.id}}').value)">
-                            <i class="bi bi-clipboard"></i> Copiar
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-
-
-        <div class="card mb-4">
-            <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-cash"></i> Dados de Pagamento</h5>
-            </div>
-            <div class="card-body">
-                <div class="detail-item">
-                    <div class="label">Forma de Pagamento</div>
-                    <div class="value">{{ tecnico.forma_pagamento or '-' }}</div>
-                </div>
-                <div class="detail-item">
-                    <div class="label">Chave de Pagamento</div>
-                    <div class="value">
-                        <code class="copy-text" title="Copiar Chave" data-copy="{{ tecnico.chave_pagamento or '' }}">
-                            {{ tecnico.chave_pagamento or '-' }}
-                        </code>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        {% if tecnico.tecnico_principal %}
-        <div class="card mb-4">
-            <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-diagram-3"></i> Técnico Principal</h5>
-            </div>
-            <div class="card-body">
-                <a href="{{ url_for('operacional.tecnico_detalhes', id=tecnico.tecnico_principal.id) }}"
-                    class="text-decoration-none">
-                    <div class="d-flex align-items-center">
-                        <i class="bi bi-person-circle fs-3 me-2"></i>
-                        <div>
-                            <strong>{{ tecnico.tecnico_principal.nome }}</strong><br>
-                            <small class="text-muted">{{ tecnico.tecnico_principal.cidade }}/{{
-                                tecnico.tecnico_principal.estado }}</small>
-                        </div>
-                    </div>
-                </a>
-            </div>
-        </div>
-        {% endif %}
-
-        {% if sub_tecnicos %}
-        <div class="card">
-            <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-people"></i> Técnicos Vinculados</h5>
-            </div>
-            <div class="card-body">
-                {% for sub in sub_tecnicos %}
-                <a href="{{ url_for('operacional.tecnico_detalhes', id=sub.id) }}"
-                    class="text-decoration-none d-block mb-2">
-                    <div class="d-flex align-items-center">
-                        <i class="bi bi-person me-2"></i>
-                        <div>
-                            <strong>{{ sub.nome }}</strong><br>
-                            <small class="text-muted">{{ sub.cidade }}/{{ sub.estado }}</small>
-                        </div>
-                    </div>
-                </a>
-                {% endfor %}
-            </div>
-        </div>
-        {% endif %}
-        <!-- Pagamentos Recentes -->
-        <div class="card mb-4">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0">Histórico de Pagamentos</h5>
-                <a href="{{ url_for('financeiro.pagamentos', tecnico=tecnico.id) }}"
-                    class="btn btn-sm btn-outline-secondary">Ver Todos</a>
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0 card-title">Histórico de Chamados</h5>
             </div>
             <div class="table-responsive">
-                <table class="table table-hover mb-0 tabular-nums">
-                    <thead>
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
                         <tr>
                             <th>Data</th>
-                            <th>Período</th>
-                            <th>Valor</th>
+                            <th>Serviço</th>
                             <th>Status</th>
-                            <th>Detalhes</th>
+                            <th class="text-end">Valor</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {% for pg in pagamentos_recentes %}
+                        {% for chamado in pagination.items %}
                         <tr>
-                            <td>{{ pg.data_criacao.strftime('%d/%m/%Y') }}</td>
-                            <td>{{ pg.periodo_inicio.strftime('%d/%m/%Y') }} - {{ pg.periodo_fim.strftime('%d/%m/%Y') }}
-                            </td>
-                            <td>R$ {{ "%.2f"|format(pg.valor_total) }}</td>
+                            <td>{{ chamado.data_atendimento.strftime('%d/%m/%Y') }}</td>
                             <td>
-                                <span class="badge bg-{{ 'success' if pg.status_pagamento == 'Pago' else 'warning' }}">
-                                    {{ pg.status_pagamento }}
-                                </span>
+                                <div class="fw-medium">{{ chamado.catalogo_servico.nome if chamado.catalogo_servico else
+                                    'Serviço Removido' }}</div>
+                                <small class="text-muted">{{ chamado.codigo_chamado or '-' }}</small>
                             </td>
                             <td>
-                                <a href="#" onclick="openHistoryDetails({{ pg.id }}); return false;"
-                                    class="btn btn-sm btn-outline-info">
-                                    <i class="bi bi-eye"></i>
-                                </a>
+                                {% set status_color = 'success' if chamado.status_chamado == 'Concluído' else 'warning'
+                                %}
+                                <span class="badge bg-{{ status_color }}">{{ chamado.status_chamado }}</span>
+                                {% if chamado.pago %}
+                                <span class="badge border border-success text-success bg-white">Pago</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end font-monospace">
+                                R$ {{ "%.2f"|format(chamado.valor) }}
                             </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
-        </div>
-        <!-- Chamados Recentes -->
-        <div class="card mb-4">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0">Chamados Recentes</h5>
-                <a href="{{ url_for('operacional.chamados', tecnico=tecnico.id) }}"
-                    class="btn btn-sm btn-outline-secondary">Ver Todos</a>
+            {% if pagination.pages > 1 %}
+            <div class="card-footer bg-white">
+                <ul class="pagination justify-content-center mb-0">
+                    <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
+                        <a class="page-link"
+                            href="{{ url_for('operacional.tecnico_detalhes', id=tecnico.id, page=pagination.prev_num) }}">Anterior</a>
+                    </li>
+                    <li class="page-item {{ 'disabled' if not pagination.has_next }}">
+                        <a class="page-link"
+                            href="{{ url_for('operacional.tecnico_detalhes', id=tecnico.id, page=pagination.next_num) }}">Próximo</a>
+                    </li>
+                </ul>
             </div>
-            <div class="card-body">
-                {% if chamados %}
-                <div class="table-responsive">
-                    <table class="table table-sm table-hover tabular-nums">
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>Código</th>
-                                <th>Data</th>
-                                <th>Tipo</th>
-                                <th>Status</th>
-                                <th>Valor</th>
-                                <th>Pago?</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for chamado in chamados %}
-                            <tr>
-                                <td><code>{{ chamado.id_chamado }}</code></td>
-                                <td>{{ chamado.codigo_chamado or '-' }}</td>
-                                <td>{{ chamado.data_atendimento.strftime('%d/%m/%Y') }}</td>
-                                <td>{{ chamado.servico_nome }}</td>
-                                <td>
-                                    <span
-                                        class="badge badge-status badge-{{ chamado.status_chamado|lower|replace(' ', '-') }}">
-                                        {{ chamado.status_chamado }}
-                                    </span>
-                                </td>
-                                <td>R$ {{ "%.2f"|format(chamado.valor) }}</td>
-                                <td>
-                                    {% if chamado.pago %}
-                                    <span class="badge bg-success"><i class="bi bi-check"></i> Sim</span>
-                                    {% else %}
-                                    <span class="badge bg-secondary"><i class="bi bi-x"></i> Não</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                {% else %}
-                <div class="text-center text-muted py-4">
-                    <i class="bi bi-clipboard fs-1 opacity-50"></i>
-                    <p class="mt-2">Nenhum chamado registrado.</p>
-                </div>
-                {% endif %}
-            </div>
+            {% endif %}
         </div>
     </div>
 
-    <div class="col-lg-8">
-        <div class="card mb-4">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0"><i class="bi bi-clipboard-check"></i> Histórico de Chamados</h5>
-                <a href="{{ url_for('operacional.novo_chamado') }}?tecnico={{ tecnico.id }}"
-                    class="btn btn-sm btn-outline-primary">
-                    <i class="bi bi-plus"></i> Novo Chamado
-                </a>
-            </div>
+    <div class="col-lg-4">
+        <div class="card shadow-sm mb-4">
             <div class="card-body">
-                {% if chamados %}
-                <div class="table-responsive">
-                    <table class="table table-sm table-hover tabular-nums">
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>Código</th>
-                                <th>Data</th>
-                                <th>Tipo</th>
-                                <th>Status</th>
-                                <th>Valor</th>
-                                <th>Pago?</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for chamado in chamados %}
-                            <tr>
-                                <td><code>{{ chamado.id_chamado }}</code></td>
-                                <td>{{ chamado.codigo_chamado or '-' }}</td>
-                                <td>{{ chamado.data_atendimento.strftime('%d/%m/%Y') }}</td>
-                                <td>{{ chamado.servico_nome }}</td>
-                                <td>
-                                    <span
-                                        class="badge badge-status badge-{{ chamado.status_chamado|lower|replace(' ', '-') }}">
-                                        {{ chamado.status_chamado }}
-                                    </span>
-                                </td>
-                                <td>R$ {{ "%.2f"|format(chamado.valor) }}</td>
-                                <td>
-                                    {% if chamado.pago %}
-                                    <span class="badge bg-success"><i class="bi bi-check"></i> Sim</span>
-                                    {% else %}
-                                    <span class="badge bg-secondary"><i class="bi bi-x"></i> Não</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                {% else %}
-                <div class="text-center text-muted py-4">
-                    <i class="bi bi-clipboard fs-1 opacity-50"></i>
-                    <p class="mt-2">Nenhum chamado registrado.</p>
-                </div>
-                {% endif %}
-            </div>
-        </div>
+                <h6 class="fw-bold mb-3">Dados Cadastrais</h6>
+                <dl class="row mb-0 small">
+                    <dt class="col-4 text-muted">Pix/Banco</dt>
+                    <dd class="col-8 user-select-all">{{ tecnico.chave_pagamento or '-' }}</dd>
 
-        <!-- Adjustments Section -->
-        <div class="card mb-4">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0"><i class="bi bi-sliders"></i> Lançamentos e Ajustes</h5>
-                <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal"
-                    data-bs-target="#modalAjuste">
-                    <i class="bi bi-plus-circle"></i> Adicionar Ajuste
-                </button>
-            </div>
-            <div class="card-body">
-                {% if tecnico.lancamentos %}
-                <div class="table-responsive">
-                    <table class="table table-sm table-hover tabular-nums">
-                        <thead>
-                            <tr>
-                                <th>Data</th>
-                                <th>Tipo</th>
-                                <th>Descrição</th>
-                                <th>Valor</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for lancamento in tecnico.lancamentos %}
-                            <tr>
-                                <td>{{ lancamento.data.strftime('%d/%m/%Y') }}</td>
-                                <td>
-                                    {% if lancamento.tipo == 'Bônus' %}
-                                    <span class="badge bg-success">Bônus</span>
-                                    {% else %}
-                                    <span class="badge bg-danger">Desconto</span>
-                                    {% endif %}
-                                </td>
-                                <td>{{ lancamento.descricao }}</td>
-                                <td class="{{ 'text-success' if lancamento.tipo == 'Bônus' else 'text-danger' }}">
-                                    {{ '+' if lancamento.tipo == 'Bônus' else '-' }} R$ {{
-                                    "%.2f"|format(lancamento.valor) }}
-                                </td>
-                                <td>
-                                    {% if lancamento.pagamento_id %}
-                                    <span class="badge bg-secondary" title="Incluído em pagamento">Pago</span>
-                                    {% else %}
-                                    <span class="badge bg-warning text-dark">Pendente</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                {% else %}
-                <div class="text-center text-muted py-3">
-                    <small>Nenhum ajuste lançado.</small>
-                </div>
-                {% endif %}
-            </div>
-        </div>
+                    <dt class="col-4 text-muted">Contato</dt>
+                    <dd class="col-8">{{ tecnico.contato }}</dd>
 
-        <div class="card">
-            <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-cash-stack"></i> Histórico de Pagamentos</h5>
-            </div>
-            <div class="card-body">
-                {% if pagamentos %}
-                <div class="table-responsive">
-                    <table class="table table-sm table-hover tabular-nums">
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>Período</th>
-                                <th>Chamados</th>
-                                <th>Valor Total</th>
-                                <th>Status</th>
-                                <th>Data Pagamento</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for pagamento in pagamentos %}
-                            <tr>
-                                <td>
-                                    <a href="#" onclick="openHistoryDetails({{ pagamento.id }}); return false;">
-                                        <code>{{ pagamento.id_pagamento }}</code>
-                                    </a>
-                                </td>
-                                <td>{{ pagamento.periodo_inicio.strftime('%d/%m') }} - {{
-                                    pagamento.periodo_fim.strftime('%d/%m/%Y') }}</td>
-                                <td>{{ pagamento.numero_chamados }}</td>
-                                <td>R$ {{ "%.2f"|format(pagamento.valor_total) }}</td>
-                                <td>
-                                    <span class="badge badge-status badge-{{ pagamento.status_pagamento|lower }}">
-                                        {{ pagamento.status_pagamento }}
-                                    </span>
-                                </td>
-                                <td>{{ pagamento.data_pagamento.strftime('%d/%m/%Y') if pagamento.data_pagamento else
-                                    '-' }}</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+                    <dt class="col-4 text-muted">Cidade</dt>
+                    <dd class="col-8">{{ tecnico.cidade }}/{{ tecnico.estado }}</dd>
+                </dl>
+
+                <hr>
+
+                <label class="form-label small fw-bold text-muted">Link Extrato Público</label>
+                <div class="input-group input-group-sm">
+                    <input type="text" class="form-control" readonly
+                        value="{{ url_for('public.extrato_tecnico', token=tecnico.token_acesso, _external=True) }}">
+                    <button class="btn btn-outline-secondary"
+                        onclick="copyToClipboard(this.previousElementSibling.value)">
+                        <i class="bi bi-copy"></i>
+                    </button>
                 </div>
-                {% else %}
-                <div class="text-center text-muted py-4">
-                    <i class="bi bi-cash fs-1 opacity-50"></i>
-                    <p class="mt-2">Nenhum pagamento registrado.</p>
-                </div>
-                {% endif %}
             </div>
         </div>
     </div>
 </div>
-</div>
-
-<!-- Modal Ajuste -->
-<div class="modal fade" id="modalAjuste" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <form action="{{ url_for('financeiro.novo_lancamento') }}" method="POST">
-                <input type="hidden" name="tecnico_id" value="{{ tecnico.id }}">
-                <div class="modal-header">
-                    <h5 class="modal-title">Adicionar Ajuste</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label">Tipo de Lançamento</label>
-                        <select name="tipo" class="form-select" id="selectTipoAjuste" required>
-                            <option value="Bônus">Bônus (Crédito)</option>
-                            <option value="Desconto">Desconto (Débito)</option>
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Valor (R$)</label>
-                        <input type="number" step="0.01" name="valor" class="form-control" placeholder="0.00" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Data</label>
-                        <input type="date" name="data" class="form-control" id="inputDataAjuste" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Descrição</label>
-                        <textarea name="descricao" class="form-control" rows="2" required
-                            placeholder="Motivo do ajuste..."></textarea>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-success" id="btnSalvarAjuste">Salvar Bônus</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<script>
-    document.addEventListener('DOMContentLoaded', function () {
-        // Set default date to today
-        const dateInput = document.getElementById('inputDataAjuste');
-        if (dateInput) {
-            dateInput.valueAsDate = new Date();
-        }
-
-        // Toggle UI based on Type
-        const selectTipo = document.getElementById('selectTipoAjuste');
-        const btnSalvar = document.getElementById('btnSalvarAjuste');
-
-        if (selectTipo && btnSalvar) {
-            selectTipo.addEventListener('change', function () {
-                if (this.value === 'Desconto') {
-                    btnSalvar.classList.remove('btn-success');
-                    btnSalvar.classList.add('btn-danger');
-                    btnSalvar.textContent = 'Salvar Desconto';
-                } else {
-                    btnSalvar.classList.remove('btn-danger');
-                    btnSalvar.classList.add('btn-success');
-                    btnSalvar.textContent = 'Salvar Bônus';
-                }
-            });
-        }
-    });
-
-    async function copyLink(token) {
-        if (!token || token === 'None') {
-            alert('Erro: Técnico sem token de acesso.');
-            return;
-        }
-        const url = `${window.location.origin}/extrato/${token}`;
-        try {
-            await navigator.clipboard.writeText(url);
-            // Visual feedback on button if possible, or toast
-            const toast = document.createElement('div');
-            toast.className = 'position-fixed bottom-0 end-0 p-3';
-            toast.style.zIndex = '1100';
-            toast.innerHTML = `
-                <div class="toast show align-items-center text-white bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true">
-                    <div class="d-flex">
-                        <div class="toast-body">
-                            <i class="bi bi-clipboard-check"></i> Link copiado com sucesso!
-                        </div>
-                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-                    </div>
-                </div>
-            `;
-            document.body.appendChild(toast);
-            setTimeout(() => toast.remove(), 3000);
-        } catch (err) {
-            console.error(err);
-            alert('Erro ao copiar link.');
-        }
-    }
-</script>
-
-<!-- Modal for Payment Details (Copied from pagamentos.html) -->
-<div class="modal fade" id="paymentModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-cash-stack"></i> Detalhes do Pagamento</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <!-- Loading State -->
-                <div id="modalLoading" class="text-center py-5">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Carregando...</span>
-                    </div>
-                </div>
-
-                <!-- Content State -->
-                <div id="modalContent" style="display: none;">
-                    <!-- Financial Stats -->
-                    <div id="modalStats" class="row g-2 mb-3">
-                        <div class="col-4">
-                            <div class="p-2 border rounded text-center">
-                                <small class="text-muted d-block" style="font-size: 0.7rem;">TOTAL PAGO</small>
-                                <span class="fw-bold text-danger" id="statValorTotal">R$ 0,00</span>
-                            </div>
-                        </div>
-                        <div class="col-4">
-                            <div class="p-2 border rounded text-center">
-                                <small class="text-muted d-block" style="font-size: 0.7rem;">FATURADO</small>
-                                <span class="fw-bold text-success" id="statReceita">R$ 0,00</span>
-                            </div>
-                        </div>
-                        <div class="col-4">
-                            <div class="p-2 border rounded text-center">
-                                <small class="text-muted d-block" style="font-size: 0.7rem;">MARGEM</small>
-                                <span class="fw-bold" id="statMargem">R$ 0,00</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Technician Info -->
-                    <div class="alert alert-light border d-flex justify-content-between align-items-center mb-4">
-                        <div>
-                            <h5 id="modalTechName" class="mb-1 fw-bold">Nome do Técnico</h5>
-                            <div class="text-muted small">
-                                <i class="bi bi-bank"></i> <span id="modalTechBank">Chave Pix: -</span>
-                            </div>
-                        </div>
-                        <div class="text-end">
-                            <small class="text-muted d-block uppercase">Valor Total</small>
-                            <span id="modalTotalValue" class="fs-4 fw-bold text-success">R$ 0,00</span>
-                        </div>
-                    </div>
-
-                    <!-- Services List -->
-                    <h6 class="mb-3 text-secondary">Chamados Inclusos</h6>
-                    <div class="table-responsive mb-3" style="max-height: 300px; overflow-y: auto;">
-                        <table class="table table-sm table-bordered">
-                            <thead>
-                                <tr>
-                                    <th>Data</th>
-                                    <th>Cód. Chamado</th>
-                                    <th>Tipo</th>
-                                    <th>Endereço</th>
-                                    <th class="text-end">Valor</th>
-                                </tr>
-                            </thead>
-                            <tbody id="modalServicesList">
-                                <!-- Populated by JS -->
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <!-- Proof of Payment -->
-                    <div id="modalProof" class="mb-3 d-none text-end">
-                        <a href="#" target="_blank" id="btnViewProof" class="btn btn-sm btn-outline-info">
-                            <i class="bi bi-file-earmark-text"></i> Ver Comprovante
-                        </a>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<script>
-    // Payment Modal Logic
-    let modalPS = null;
-
-    function initModal() {
-        const el = document.getElementById('paymentModal');
-        if (el) modalPS = new bootstrap.Modal(el);
-    }
-    document.addEventListener('DOMContentLoaded', initModal);
-
-    function openHistoryDetails(pagamentoId) {
-        if (!modalPS) initModal();
-        modalPS.show();
-
-        const modalLoading = document.getElementById('modalLoading');
-        const modalContent = document.getElementById('modalContent');
-        const modalProof = document.getElementById('modalProof');
-
-        modalLoading.style.display = 'block';
-        modalContent.style.display = 'none';
-
-        // Fetch History
-        fetch(`/api/pagamentos/${pagamentoId}`)
-            .then(res => res.json())
-            .then(data => {
-                // Populate Header
-                document.getElementById('modalTechName').textContent = data.tecnico.nome;
-                document.getElementById('modalTechBank').textContent = data.tecnico.chave_pagamento || '-';
-                document.getElementById('modalTotalValue').textContent = `R$ ${data.financeiro.valor_total.toFixed(2)}`;
-
-                // Populate Stats
-                document.getElementById('statValorTotal').textContent = `R$ ${data.financeiro.valor_total.toFixed(2)}`;
-                document.getElementById('statReceita').textContent = `R$ ${data.financeiro.receita_estimada.toFixed(2)}`;
-                document.getElementById('statMargem').textContent = `R$ ${data.financeiro.lucro_bruto.toFixed(2)}`;
-                document.getElementById('statMargem').className = `fw-bold ${data.financeiro.lucro_bruto >= 0 ? 'text-success' : 'text-danger'}`;
-
-                // Populate Table
-                const tbody = document.getElementById('modalServicesList');
-                tbody.innerHTML = '';
-                data.chamados.forEach(c => {
-                    let displayCode = c.codigo;
-                    if (c.fsa_codes) displayCode += `<br><small class="text-muted">${c.fsa_codes}</small>`;
-
-                    const row = `
-                        <tr>
-                            <td>${c.data}</td>
-                            <td>${displayCode}</td>
-                            <td>${c.tipo}</td>
-                            <td class="small text-muted text-truncate" style="max-width: 200px;">${c.endereco}</td>
-                            <td class="text-end">R$ ${c.valor || c.valor_pago}</td> 
-                        </tr>
-                    `;
-                    tbody.innerHTML += row;
-                });
-
-                // Proof
-                if (data.info.comprovante_url) {
-                    modalProof.classList.remove('d-none');
-                    document.getElementById('btnViewProof').href = data.info.comprovante_url;
-                } else {
-                    modalProof.classList.add('d-none');
-                }
-
-                modalLoading.style.display = 'none';
-                modalContent.style.display = 'block';
-            })
-            .catch(err => {
-                console.error(err);
-                alert('Erro ao carregar detalhes.');
-                modalPS.hide();
-            });
-    }
-</script>
 {% endblock %}

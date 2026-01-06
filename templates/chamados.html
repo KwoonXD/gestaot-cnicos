@@ -147,8 +147,10 @@
                         <td>{{ chamado.cidade or chamado.loja or chamado.localizacao or '-' }}</td>
                         <td>
                             <div class="d-flex flex-column gap-1">
-                                <span class="badge bg-light text-dark border">{{ chamado.tipo_resolucao or 'N/A'
-                                    }}</span>
+                                <span class="badge bg-light text-dark border">
+                                    {{ chamado.catalogo_servico.nome if chamado.catalogo_servico else 'Serviço Removido'
+                                    }}
+                                </span>
                                 {% if chamado.status_chamado == 'Concluído' %}
                                 <span class="badge bg-success">Concluído</span>
                                 {% elif chamado.status_chamado == 'SPARE' %}
