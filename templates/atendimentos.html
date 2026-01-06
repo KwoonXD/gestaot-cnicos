@@ -24,7 +24,7 @@
     <!-- Cards Grid -->
     <div class="row g-4">
         {% for batch in batches %}
-        <div class="col-md-6 col-lg-4">
+        <div class="col-md-6 col-lg-4" id="batch-card-{{ batch.batch_id }}">
             <div class="card shadow-sm h-100 border-start border-4 border-warning">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-start mb-3">
@@ -179,13 +179,26 @@
                         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
                             Fechar
                         </button>
-                        <button type="button" class="btn btn-outline-danger" id="rejectBtn"
-                            onclick="toggleRejectMode()">
-                            <i class="bi bi-x-lg me-1"></i> Rejeitar Lote
-                        </button>
-                        <button type="button" class="btn btn-success" id="approveBtn" onclick="submitApproval()">
-                            <i class="bi bi-check-lg me-1"></i> Aprovar Lote
-                        </button>
+
+                        <!-- Initial State Buttons -->
+                        <div id="initialButtons" class="d-flex gap-2">
+                            <button type="button" class="btn btn-outline-danger" onclick="toggleRejectMode(true)">
+                                <i class="bi bi-x-lg me-1"></i> Rejeitar Lote
+                            </button>
+                            <button type="button" class="btn btn-success" onclick="submitApproval()">
+                                <i class="bi bi-check-lg me-1"></i> Aprovar Lote
+                            </button>
+                        </div>
+
+                        <!-- Reject Mode Buttons (Hidden by default) -->
+                        <div id="rejectButtons" class="d-flex gap-2" style="display: none;">
+                            <button type="button" class="btn btn-secondary" onclick="toggleRejectMode(false)">
+                                Cancelar
+                            </button>
+                            <button type="button" class="btn btn-danger" onclick="submitRejection()">
+                                <i class="bi bi-trash me-1"></i> Confirmar Exclusão
+                            </button>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -285,21 +298,7 @@
         document.getElementById('modalTotal').textContent = `R$ ${total.toFixed(2)}`;
 
         // 4. Resetar UI dos botões
-        const rejectSection = document.getElementById('rejectSection');
-        const rejectBtn = document.getElementById('rejectBtn');
-        const approveBtn = document.getElementById('approveBtn');
-        const motivoInput = document.getElementById('motivoInput');
-
-        if (rejectSection) rejectSection.style.display = 'none';
-        if (motivoInput) motivoInput.value = '';
-
-        if (rejectBtn) {
-            rejectBtn.innerHTML = '<i class="bi bi-x-lg me-1"></i> Rejeitar Lote';
-            rejectBtn.className = 'btn btn-outline-danger'; // Reset classes
-            rejectBtn.onclick = toggleRejectMode;
-        }
-
-        if (approveBtn) approveBtn.style.display = '';
+        toggleRejectMode(false);
 
         // 5. ABRIR MODAL DE FORMA SEGURA
         // Aqui está a correção principal: Instanciamos o modal apenas quando precisamos dele.
@@ -362,49 +361,105 @@
         }
     }
 
-    function toggleRejectMode() {
-        rejectMode = !rejectMode;
-        const section = document.getElementById('rejectSection');
-        const btn = document.getElementById('rejectBtn');
-        const approveBtn = document.getElementById('approveBtn');
+    function toggleRejectMode(enable) {
+        const rejectSection = document.getElementById('rejectSection');
+        const initialButtons = document.getElementById('initialButtons');
+        const rejectButtons = document.getElementById('rejectButtons');
         const motivoInput = document.getElementById('motivoInput');
 
-        if (rejectMode) {
-            section.style.display = 'block';
-            btn.className = 'btn btn-danger';
-            btn.innerHTML = '<i class="bi bi-trash me-1"></i> Confirmar Exclusão';
-            btn.onclick = submitRejection;
-            approveBtn.style.display = 'none';
+        if (enable) {
+            rejectSection.style.display = 'block';
+
+            initialButtons.classList.remove('d-flex');
+            initialButtons.classList.add('d-none');
+
+            rejectButtons.classList.remove('d-none');
+            rejectButtons.classList.add('d-flex');
+
             if (motivoInput) motivoInput.focus();
         } else {
-            section.style.display = 'none';
-            btn.className = 'btn btn-outline-danger';
-            btn.innerHTML = '<i class="bi bi-x-lg me-1"></i> Rejeitar Lote';
-            btn.onclick = toggleRejectMode;
-            approveBtn.style.display = '';
+            rejectSection.style.display = 'none';
+
+            initialButtons.classList.remove('d-none');
+            initialButtons.classList.add('d-flex');
+
+            rejectButtons.classList.remove('d-flex');
+            rejectButtons.classList.add('d-none');
+
+            if (motivoInput) motivoInput.value = ''; // Clean input
+        }
+    }
+
+    async function submitAction(acao) {
+        const form = document.getElementById('validationForm');
+        const batchId = document.getElementById('formBatchId').value;
+        const motivo = document.getElementById('motivoInput').value.trim();
+
+        // Validation for Rejection
+        if (acao === 'rejeitar' && motivo.length < 10) {
+            alert('O motivo deve ter no mínimo 10 caracteres.');
+            document.getElementById('motivoInput').focus();
+            return;
+        }
+
+        // Prepare Data
+        const formData = new FormData();
+        formData.append('batch_id', batchId);
+        formData.append('acao', acao);
+        formData.append('motivo', motivo);
+        formData.append('ajax', 'true');
+
+        // Disable buttons / Show Loading
+        const allBtns = document.querySelectorAll('.modal-footer button');
+        allBtns.forEach(b => b.disabled = true);
+
+        try {
+            const response = await fetch(form.action, {
+                method: 'POST',
+                body: formData
+            });
+            const data = await response.json();
+
+            if (data.success) {
+                // 1. Close Modal
+                const modalEl = document.getElementById('modalValidacao');
+                const modal = bootstrap.Modal.getInstance(modalEl);
+                if (modal) modal.hide();
+
+                // 2. Remove Card from DOM
+                const card = document.getElementById(`batch-card-${batchId}`);
+                if (card) {
+                    card.style.transition = 'all 0.5s ease';
+                    card.style.transform = 'scale(0)';
+                    setTimeout(() => card.remove(), 500);
+                } else {
+                    // Fallback if ID not found (should not happen after next step)
+                    window.location.reload();
+                    return;
+                }
+
+                // 3. Show Success Msg
+                // Reuse the toast mechanism or simple alert for now if toast is tied to "copied"
+                // Using a simple alert is risky if user wants speed.
+                // Let's rely on visual feedback (card removal).
+
+            } else {
+                alert('Erro: ' + data.message);
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Erro de conexão ao validar lote.');
+        } finally {
+            allBtns.forEach(b => b.disabled = false);
         }
     }
 
     function submitApproval() {
-        const form = document.getElementById('validationForm');
-        document.getElementById('formAcao').value = 'aprovar';
-        if (form) form.submit();
+        submitAction('aprovar');
     }
 
     function submitRejection() {
-        const motivoInput = document.getElementById('motivoInput');
-        const motivo = motivoInput.value.trim();
-
-        if (motivo.length < 10) {
-            alert('O motivo deve ter no mínimo 10 caracteres.');
-            motivoInput.focus();
-            return;
-        }
-
-        const form = document.getElementById('validationForm');
-        document.getElementById('formMotivo').value = motivo;
-        document.getElementById('formAcao').value = 'rejeitar';
-        if (form) form.submit();
+        submitAction('rejeitar');
     }
 </script>
 {% endblock %}

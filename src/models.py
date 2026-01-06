@@ -79,7 +79,14 @@ class Tecnico(db.Model):
     def total_atendimentos_concluidos(self):
         return self.chamados.filter(Chamado.status_chamado.in_(['Concluído', 'SPARE'])).count()
     
+    @property
+    def total_atendimentos_nao_pagos(self):
+        return self.chamados.filter(Chamado.status_chamado.in_(['Concluído', 'SPARE']), Chamado.pago == False).count()
 
+    @property
+    def total_a_pagar(self):
+        # Ledger-based balance
+        return max(0.0, float(self.saldo_atual or 0.0))
 
     @property
     def pending_chamados_list(self):
@@ -432,6 +439,8 @@ class CatalogoServico(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(100), nullable=False)  # Ex: "Zebra - 1ª Visita", "Retorno SPARE"
     valor_receita = db.Column(db.Float, default=0.0)  # Receita para a empresa (R$)
+    valor_custo_tecnico = db.Column(db.Float, default=0.0) # Custo (quanto paga ao técnico)
+    
     cliente_id = db.Column(db.Integer, db.ForeignKey('clientes.id'), nullable=False)
     
     # Regras de Negócio
@@ -441,6 +450,14 @@ class CatalogoServico(db.Model):
     is_retorno = db.Column(db.Boolean, default=False)     # Novo campo para identificar retornos
     horas_franquia = db.Column(db.Integer, default=2)     # Até quantas horas o valor base cobre
     
+    # Valores Adicionais (para chamados extras no mesmo lote)
+    valor_adicional_receita = db.Column(db.Float, default=0.0)
+    valor_adicional_custo = db.Column(db.Float, default=0.0)
+    
+    # Horas Extras
+    valor_hora_adicional_receita = db.Column(db.Float, default=0.0)
+    valor_hora_adicional_custo = db.Column(db.Float, default=0.0)
+    
     # Status
     ativo = db.Column(db.Boolean, default=True)
     
@@ -449,10 +466,16 @@ class CatalogoServico(db.Model):
             'id': self.id,
             'nome': self.nome,
             'valor': self.valor_receita,
+            'valor_custo_tecnico': self.valor_custo_tecnico,
             'exige_peca': self.exige_peca,
             'paga_tecnico': self.paga_tecnico,
             'pagamento_integral': self.pagamento_integral,
-            'horas_franquia': self.horas_franquia
+            'horas_franquia': self.horas_franquia,
+            'valor_adicional_receita': self.valor_adicional_receita,
+            'valor_adicional_custo': self.valor_adicional_custo,
+            'valor_hora_adicional_receita': self.valor_hora_adicional_receita,
+            'valor_hora_adicional_custo': self.valor_hora_adicional_custo,
+            'is_retorno': self.is_retorno
         }
 
 

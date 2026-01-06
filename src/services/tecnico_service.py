@@ -2,10 +2,13 @@ from ..models import db, Tecnico, Chamado, Tag
 from datetime import datetime
 from sqlalchemy.orm import joinedload
 from sqlalchemy import func, case, and_
-from marshmallow import Schema, fields, validate, ValidationError
+from marshmallow import Schema, fields, validate, ValidationError, pre_load, EXCLUDE
 
 # Validation Schema
 class TecnicoSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+
     nome = fields.Str(required=True, validate=validate.Length(min=3))
     documento = fields.Str(allow_none=True)
     contato = fields.Str(required=True)
@@ -19,6 +22,13 @@ class TecnicoSchema(Schema):
     chave_pagamento = fields.Str(allow_none=True)
     tecnico_principal_id = fields.Int(allow_none=True)
     data_inicio = fields.Date(required=True, format='%Y-%m-%d')
+
+    @pre_load
+    def process_input(self, data, **kwargs):
+        # Clean empty strings for Integer/Nullable fields
+        if 'tecnico_principal_id' in data and data['tecnico_principal_id'] == '':
+            data['tecnico_principal_id'] = None
+        return data
 
 tecnico_schema = TecnicoSchema()
 
@@ -98,12 +108,8 @@ class TecnicoService:
                 tecnico, o_q, o_v, s_q, s_v = row
                 
                 if tecnico.tecnico_principal_id:
-                    tecnico.total_atendimentos_nao_pagos = 0
-                    tecnico.total_a_pagar = 0.0
-                    tecnico.total_agregado = 0.0
+                     tecnico.total_agregado = 0.0
                 else:
-                    tecnico.total_atendimentos_nao_pagos = int(o_q + s_q)
-                    tecnico.total_a_pagar = float(o_v + s_v)
                     tecnico.total_agregado = float(o_v + s_v)
                 
                 final_items.append(tecnico)
@@ -118,12 +124,8 @@ class TecnicoService:
                 tecnico, o_q, o_v, s_q, s_v = row
                 
                 if tecnico.tecnico_principal_id:
-                    tecnico.total_atendimentos_nao_pagos = 0
-                    tecnico.total_a_pagar = 0.0
-                    tecnico.total_agregado = 0.0
+                     tecnico.total_agregado = 0.0
                 else:
-                    tecnico.total_atendimentos_nao_pagos = int(o_q + s_q)
-                    tecnico.total_a_pagar = float(o_v + s_v)
                     tecnico.total_agregado = float(o_v + s_v)
                 
                 new_items.append(tecnico)
@@ -136,9 +138,7 @@ class TecnicoService:
         tecnico = Tecnico.query.options(joinedload(Tecnico.tags)).get_or_404(id)
         
         if tecnico.tecnico_principal_id:
-            tecnico.total_a_pagar = 0.0
-            tecnico.total_atendimentos_nao_pagos = 0
-            tecnico.total_agregado = 0.0
+             tecnico.total_agregado = 0.0
         else:
             # Calculate manually using DB optimized queries
             # Own
@@ -168,9 +168,7 @@ class TecnicoService:
                      sub_val += (sp[0] or 0.0)
                      sub_cnt += (sp[1] or 0)
             
-            tecnico.total_a_pagar = float(own_val + sub_val)
-            tecnico.total_atendimentos_nao_pagos = int(own_cnt + sub_cnt)
-            tecnico.total_agregado = tecnico.total_a_pagar
+            tecnico.total_agregado = float(own_val + sub_val)
             
         return tecnico
 

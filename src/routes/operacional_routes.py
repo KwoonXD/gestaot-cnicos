@@ -232,7 +232,7 @@ def editar_tecnico(id):
     
     if request.method == 'POST':
         try:
-            TecnicoService.update(id, request.form)
+            TecnicoService.update(id, request.form.to_dict())
             flash('Dados do técnico atualizados com sucesso!', 'success')
             return redirect(url_for('operacional.tecnico_detalhes', id=id))
         except Exception as e:
@@ -518,29 +518,46 @@ def atendimentos():
 @login_required
 def validar_atendimento():
     """Aprova ou rejeita um lote inteiro de chamados"""
+    is_ajax = request.form.get('ajax') == 'true'
+    
     try:
         batch_id = request.form.get('batch_id')
         acao = request.form.get('acao')
         motivo = request.form.get('motivo', '').strip()
         
         if not batch_id:
-            flash('Lote não identificado.', 'danger')
+            msg = 'Lote não identificado.'
+            if is_ajax: return jsonify({'success': False, 'message': msg}), 400
+            flash(msg, 'danger')
             return redirect(url_for('operacional.atendimentos'))
         
         if acao == 'aprovar':
             count = ChamadoService.aprovar_batch(batch_id, current_user.id)
-            flash(f'✅ Lote aprovado! {count} chamado(s) liberados para o Financeiro.', 'success')
+            msg = f'✅ Lote aprovado! {count} chamado(s) liberados para o Financeiro.'
+            if is_ajax: return jsonify({'success': True, 'message': msg})
+            flash(msg, 'success')
+            
         elif acao == 'rejeitar':
             if not motivo or len(motivo) < 10:
-                flash('O motivo da rejeição deve ter no mínimo 10 caracteres.', 'danger')
+                msg = 'O motivo da rejeição deve ter no mínimo 10 caracteres.'
+                if is_ajax: return jsonify({'success': False, 'message': msg}), 400
+                flash(msg, 'danger')
                 return redirect(url_for('operacional.atendimentos'))
+                
             count = ChamadoService.rejeitar_batch(batch_id, current_user.id, motivo)
-            flash(f'❌ Lote rejeitado. {count} chamado(s) excluídos e criadores notificados.', 'warning')
+            msg = f'❌ Lote rejeitado. {count} chamado(s) excluídos e criadores notificados.'
+            if is_ajax: return jsonify({'success': True, 'message': msg})
+            flash(msg, 'warning')
+            
         else:
-            flash('Ação inválida.', 'danger')
+            msg = 'Ação inválida.'
+            if is_ajax: return jsonify({'success': False, 'message': msg}), 400
+            flash(msg, 'danger')
             
     except Exception as e:
-        flash(f'Erro ao processar validação: {str(e)}', 'danger')
+        msg = f'Erro ao processar validação: {str(e)}'
+        if is_ajax: return jsonify({'success': False, 'message': msg}), 500
+        flash(msg, 'danger')
     
     return redirect(url_for('operacional.atendimentos'))
 

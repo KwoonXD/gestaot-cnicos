@@ -123,11 +123,15 @@ def tecnicos_pendencias(id):
         ).order_by(Chamado.data_atendimento).all()
         
         chamados_data = []
-        total_pendente = 0.0
+        
+        # Use o Saldo do Ledger como fonte da verdade para o pagamento
+        # Isso garante que bônus, descontos ou ajustes manuais sejam incluídos
+        total_pendente = float(tecnico.total_a_pagar or 0.0)
         
         for c in chamados:
             valor = float(c.custo_atribuido or 0.0)
-            total_pendente += valor
+            # Não somamos mais manualmente para evitar desync com o Ledger
+            # total_pendente += valor 
             
             chamados_data.append({
                 'data': c.data_atendimento.strftime('%d/%m/%Y'),

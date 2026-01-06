@@ -34,24 +34,29 @@ def processar_custos_chamados(chamados, tecnico):
         
         for c in lista:
             valor_a_pagar = 0.0
-            # --- Refatorado: Uso de Flags do CatalogoServico ---
+            # --- Refatorado: Uso de Custos do Contrato (CatalogoServico) ---
             catalogo = c.catalogo_servico
-            # Default values if no catalog (maintain legacy behavior or default)
+            
+            # Default or Legacy values (Fallback to Tecnico default if no service defined)
             paga_tecnico = catalogo.paga_tecnico if catalogo else True
             pagamento_integral = catalogo.pagamento_integral if catalogo else False
             
+            # Determine values to use
+            val_base = float(catalogo.valor_custo_tecnico) if catalogo else float(tecnico.valor_por_atendimento)
+            val_adic = float(catalogo.valor_adicional_custo) if catalogo else float(tecnico.valor_adicional_loja)
+
             if not paga_tecnico:
                  valor_a_pagar = 0.0
             elif pagamento_integral:
                  # Paga cheio sempre (ignora regra de lote)
-                 valor_a_pagar = float(tecnico.valor_por_atendimento)
+                 valor_a_pagar = val_base
             else:
                 # Regra Padrão (Principal vs Adicional)
                 if not ja_pagou_principal:
-                    valor_a_pagar = float(tecnico.valor_por_atendimento)
+                    valor_a_pagar = val_base
                     ja_pagou_principal = True
                 else:
-                    valor_a_pagar = float(tecnico.valor_adicional_loja)
+                    valor_a_pagar = val_adic
 
             # Reembolso de Peça (Sempre paga se Tec comprou)
             if getattr(c, 'fornecedor_peca', None) == 'Tecnico':
@@ -323,6 +328,11 @@ class FinanceiroService:
         Deve ser chamado quando o chamado é APROVADO.
         """
         tecnico = chamado.tecnico
+        if not tecnico and chamado.tecnico_id:
+            tecnico = Tecnico.query.get(chamado.tecnico_id)
+            
+        if not tecnico:
+            return None
         
         # 1. Calcular Valor (Lógica Simplificada de Lote em Tempo Real)
         # Verifica se já existe outro chamado PAGAVEL (Aprovado/Concluido) no mesmo dia e cidade/loja
@@ -332,7 +342,7 @@ class FinanceiroService:
         city_key = chamado.cidade if chamado.cidade and chamado.cidade != 'Indefinido' else chamado.loja
         
         outros_chamados_dia = Chamado.query.filter(
-            Chamado.tecnico_id == tecnico.id,
+            Chamado.tecnico_id == chamado.tecnico_id,
             Chamado.data_atendimento == chamado.data_atendimento,
             Chamado.status_chamado == 'Concluído',
             Chamado.status_validacao == 'Aprovado',
@@ -350,22 +360,26 @@ class FinanceiroService:
         # Regras Específicas
         tipo_res = chamado.tipo_resolucao or ''
         
+        catalogo = chamado.catalogo_servico
+        val_base = float(catalogo.valor_custo_tecnico) if catalogo else float(tecnico.valor_por_atendimento)
+        val_adic = float(catalogo.valor_adicional_custo) if catalogo else float(tecnico.valor_adicional_loja)
+
         if 'Falha' in tipo_res:
              valor_base = 0.0
              descricao += " (Falha - R$ 0,00)"
-        elif 'Retorno SPARE' in tipo_res:
-             valor_base = float(tecnico.valor_por_atendimento)
-             descricao += " (Retorno SPARE - Valor Cheio)"
+        elif 'Retorno SPARE' in tipo_res or (catalogo and catalogo.pagamento_integral):
+             valor_base = val_base
+             descricao += " (Valor Cheio/Integral)"
         else:
             if is_primeiro:
-                valor_base = float(tecnico.valor_por_atendimento)
+                valor_base = val_base
                 descricao += " (Base)"
             else:
-                valor_base = float(tecnico.valor_adicional_loja) # R$ 20.00
+                valor_base = val_adic
                 descricao += " (Adicional)"
                 
         # Adicionar Custo Peça (Reembolso)
-        if chamado.fornecedor_peca == 'Tecnico and chamado.custo_peca':
+        if chamado.fornecedor_peca == 'Tecnico' and chamado.custo_peca:
              valor_base += float(chamado.custo_peca)
              descricao += f" + Peça (R$ {chamado.custo_peca})"
 

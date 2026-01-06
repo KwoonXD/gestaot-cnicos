@@ -162,7 +162,8 @@ class ChamadoService:
     @staticmethod
     def create_multiplo(logistica, fsas):
         """
-        Cria chamados em lote e baixa estoque automaticamente.
+        Cria chamados em lote, aplica regras de precificação (Primeiro vs Adicional)
+        e baixa estoque automaticamente.
         """
         criados = []
         batch_id = str(uuid.uuid4())  # Gera ID único para o lote
@@ -172,19 +173,43 @@ class ChamadoService:
             data_atendimento = datetime.strptime(logistica['data_atendimento'], '%Y-%m-%d').date()
         except ValueError:
             data_atendimento = datetime.now().date()
+            
+        # 1. Pre-fetch Serviços e Ordenação (Priorizar maior valor receita como Principal)
+        service_ids = []
+        for f in fsas:
+            try:
+                if f.get('catalogo_servico_id'):
+                    service_ids.append(int(f.get('catalogo_servico_id')))
+            except (ValueError, TypeError):
+                continue
+                
+        services_map = {s.id: s for s in CatalogoServico.query.filter(CatalogoServico.id.in_(service_ids)).all()}
+        
+        def get_service_value(fsa):
+            try:
+                sid = int(fsa.get('catalogo_servico_id') or 0)
+                if sid in services_map:
+                    return float(services_map[sid].valor_receita or 0)
+            except (ValueError, TypeError):
+                pass
+            return 0.0
+            
+        # Ordena FSAs por valor decrescente para garantir que o mais caro pague cheio
+        fsas.sort(key=get_service_value, reverse=True)
+        
+        is_first_slot_available = True
         
         for fsa in fsas:
-            # Lógica de Estoque (Baixa automática)
+            # --- Lógica de Estoque (Baixa automática) ---
             peca_nome = ""
             custo_peca = 0.0
             
-            # Se selecionou uma peça
             if fsa.get('peca_id'):
                 item = ItemLPU.query.get(fsa['peca_id'])
                 if item:
                     peca_nome = item.nome
                     
-                    # Se quem forneceu foi a EMPRESA, desconta do estoque do técnico
+                    # Se Fornecedor = Empresa -> Baixa Estoque Técnico
                     if fsa.get('fornecedor_peca') == 'Empresa':
                         estoque = TecnicoStock.query.filter_by(
                             tecnico_id=logistica['tecnico_id'], 
@@ -195,13 +220,62 @@ class ChamadoService:
                             estoque.quantidade -= 1
                             db.session.add(estoque)
                     
-                    # Se quem forneceu foi o TÉCNICO, registra o custo para reembolso
+                    # Se Fornecedor = Técnico -> Reembolso (Custo)
                     elif fsa.get('fornecedor_peca') == 'Tecnico':
                         custo_peca = float(fsa.get('custo_peca', 0))
 
+            # --- Lógica Financeira (Receita x Custo) ---
+            valor_receita_servico = 0.0
+            custo_tecnico_servico = 0.0
+            is_adicional = False
+            
+
+            try:
+                sid = int(fsa.get('catalogo_servico_id') or 0)
+                servico = services_map.get(sid)
+            except (ValueError, TypeError):
+                servico = None
+            
+            if servico:
+
+                # --- Cálculo de Horas e Extras ---
+                horas_trabalhadas = ChamadoService.calculate_hours_worked(fsa['hora_inicio'], fsa['hora_fim'])
+                horas_franquia = float(servico.horas_franquia or 2.0)
+                horas_extras = max(0.0, horas_trabalhadas - horas_franquia)
+                
+                he_receita = horas_extras * float(servico.valor_hora_adicional_receita or 0.0)
+                he_custo = horas_extras * float(servico.valor_hora_adicional_custo or 0.0)
+
+                if servico.pagamento_integral:
+                    valor_receita_servico = float(servico.valor_receita or 0.0)
+                    custo_tecnico_servico = float(servico.valor_custo_tecnico or 0.0)
+                else:
+                    if is_first_slot_available:
+                        # 1º Chamado do Lote (Full Price)
+                        valor_receita_servico = float(servico.valor_receita or 0.0)
+                        custo_tecnico_servico = float(servico.valor_custo_tecnico or 0.0)
+                        is_first_slot_available = False
+                    else:
+                        # Chamados Adicionais (Preço Reduzido/Adicional)
+                        valor_receita_servico = float(servico.valor_adicional_receita or 0.0)
+                        custo_tecnico_servico = float(servico.valor_adicional_custo or 0.0)
+                        is_adicional = True
+                
+                # Soma Extras ao final
+                valor_receita_servico += he_receita
+                custo_tecnico_servico += he_custo
+            else:
+                 horas_trabalhadas = 0.0
+                 horas_extras = 0.0
+            
+            # Totais
+            valor_receita_total = valor_receita_servico # + futuramente receita de peça
+            valor_legacy = valor_receita_total # Campo 'valor' mantém compatibilidade com Receita
+
             # Cria o Chamado
             novo_chamado = Chamado(
-                tecnico_id=logistica['tecnico_id'],
+                tecnico_id=int(logistica['tecnico_id']),
+                horas_trabalhadas=horas_trabalhadas,
                 cidade=logistica['cidade'],
                 data_atendimento=data_atendimento,
                 observacoes=logistica.get('observacoes'),
@@ -211,16 +285,25 @@ class ChamadoService:
                 catalogo_servico_id=fsa['catalogo_servico_id'],
                 hora_inicio=fsa['hora_inicio'],
                 hora_fim=fsa['hora_fim'],
+                is_adicional=is_adicional,
                 
                 # Peças
                 peca_usada=peca_nome,
                 custo_peca=custo_peca,
                 fornecedor_peca=fsa.get('fornecedor_peca', 'Empresa'),
                 
+                # Financeiro - RECEITA
+                valor_receita_servico=valor_receita_servico,
+                valor_receita_total=valor_receita_total,
+                valor=valor_legacy, # Legado
+                
+                # Financeiro - CUSTO (Novo)
+                custo_atribuido=custo_tecnico_servico,
+
                 created_by_id=current_user.id,
                 status_chamado='Concluído', 
                 status_validacao='Pendente',
-                batch_id=batch_id  # VINCULA AO PROCESSO DE VALIDAÇÃO
+                batch_id=batch_id
             )
             db.session.add(novo_chamado)
             criados.append(novo_chamado)
@@ -407,8 +490,9 @@ class ChamadoService:
             valor_total = 0.0
             
             for c in chamados_list:
-                valor = float(c.valor_receita_total or 0)
-                valor_total += valor
+                # User Request: Show Cost (Technician Payment) instead of Revenue
+                valor_custo = float(c.custo_atribuido or 0)
+                valor_total += valor_custo
                 
                 if c.codigo_chamado:
                     codigos_jira.append(c.codigo_chamado)
@@ -417,7 +501,7 @@ class ChamadoService:
                     'id': c.id,
                     'codigo': c.codigo_chamado or f'ID-{c.id}',
                     'tipo': c.tipo_servico or 'N/A',
-                    'valor': valor,
+                    'valor': valor_custo, # Agora reflete o custo técnico
                     'peca': c.peca_usada or '-'
                 })
             

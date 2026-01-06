@@ -80,8 +80,17 @@
                                         <thead class="bg-light">
                                             <tr>
                                                 <th>Nome</th>
-                                                <th class="text-end">Valor (R$)</th>
-                                                <th style="width: 80px;"></th>
+                                                <th class="text-end" title="Valor Pago pelo Cliente">Receita (R$)</th>
+                                                <th class="text-end" title="Valor Pago ao Técnico">Custo Téc. (R$)</th>
+                                                <th class="text-end" title="Receita para chamados extras no mesmo lote">
+                                                    Adic. Rec.</th>
+                                                <th class="text-end" title="Custo para chamados extras no mesmo lote">
+                                                    Adic. Custo</th>
+                                                <th class="text-end text-warning" title="Valor hora extra receita">H.E.
+                                                    Rec.</th>
+                                                <th class="text-end text-warning" title="Valor hora extra custo">H.E.
+                                                    Custo</th>
+                                                <th style="width: 50px;"></th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -95,11 +104,55 @@
                                                         title="Não cobra taxa de visita">S/ Visita</span>
                                                     {% endif %}
                                                 </td>
+                                                <!-- Valor Receita -->
                                                 <td class="align-middle text-end">
                                                     <input type="number" step="0.01"
                                                         class="form-control form-control-sm text-end editable-valor"
-                                                        style="width: 100px; display: inline-block;"
+                                                        style="width: 80px; display: inline-block;"
                                                         value="{{ servico.valor_receita }}" data-tipo="servico"
+                                                        data-field="valor_receita" data-id="{{ servico.id }}">
+                                                </td>
+                                                <!-- Custo Técnico -->
+                                                <td class="align-middle text-end">
+                                                    <input type="number" step="0.01"
+                                                        class="form-control form-control-sm text-end editable-valor"
+                                                        style="width: 80px; display: inline-block;"
+                                                        value="{{ servico.valor_custo_tecnico }}" data-tipo="servico"
+                                                        data-field="valor_custo_tecnico" data-id="{{ servico.id }}">
+                                                </td>
+                                                <!-- Adicional Receita -->
+                                                <td class="align-middle text-end">
+                                                    <input type="number" step="0.01"
+                                                        class="form-control form-control-sm text-end editable-valor bg-light"
+                                                        style="width: 70px; display: inline-block;"
+                                                        value="{{ servico.valor_adicional_receita }}"
+                                                        data-tipo="servico" data-field="valor_adicional_receita"
+                                                        data-id="{{ servico.id }}">
+                                                </td>
+                                                <!-- Adicional Custo -->
+                                                <td class="align-middle text-end">
+                                                    <input type="number" step="0.01"
+                                                        class="form-control form-control-sm text-end editable-valor bg-light"
+                                                        style="width: 70px; display: inline-block;"
+                                                        value="{{ servico.valor_adicional_custo }}" data-tipo="servico"
+                                                        data-field="valor_adicional_custo" data-id="{{ servico.id }}">
+                                                </td>
+                                                <!-- H.E. Receita -->
+                                                <td class="align-middle text-end">
+                                                    <input type="number" step="0.01"
+                                                        class="form-control form-control-sm text-end editable-valor bg-warning bg-opacity-10"
+                                                        style="width: 70px; display: inline-block;"
+                                                        value="{{ servico.valor_hora_adicional_receita }}"
+                                                        data-tipo="servico" data-field="valor_hora_adicional_receita"
+                                                        data-id="{{ servico.id }}">
+                                                </td>
+                                                <!-- H.E. Custo -->
+                                                <td class="align-middle text-end">
+                                                    <input type="number" step="0.01"
+                                                        class="form-control form-control-sm text-end editable-valor bg-warning bg-opacity-10"
+                                                        style="width: 70px; display: inline-block;"
+                                                        value="{{ servico.valor_hora_adicional_custo }}"
+                                                        data-tipo="servico" data-field="valor_hora_adicional_custo"
                                                         data-id="{{ servico.id }}">
                                                 </td>
                                                 <td class="align-middle text-center">
@@ -219,10 +272,47 @@
                                 <input type="text" name="nome" class="form-control"
                                     placeholder="Ex: Zebra, TI Geral, Manutenção Balança" required>
                             </div>
-                            <div class="mb-3">
-                                <label class="form-label">Valor Receita (R$) *</label>
-                                <input type="number" step="0.01" name="valor" class="form-control" placeholder="190.00"
-                                    required>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Valor Receita (R$) *</label>
+                                    <input type="number" step="0.01" name="valor" class="form-control"
+                                        placeholder="190.00" required>
+                                    <small class="text-muted">Cobrado do Cliente</small>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Custo Técnico (R$) *</label>
+                                    <input type="number" step="0.01" name="valor_custo_tecnico" class="form-control"
+                                        placeholder="120.00" value="0">
+                                    <small class="text-muted">Pago ao Técnico</small>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Adic. Receita (R$)</label>
+                                    <input type="number" step="0.01" name="valor_adicional_receita"
+                                        class="form-control bg-light" placeholder="0.00" value="0">
+                                    <small class="text-muted">Extra por chamado (Lote)</small>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Adic. Custo (R$)</label>
+                                    <input type="number" step="0.01" name="valor_adicional_custo"
+                                        class="form-control bg-light" placeholder="0.00" value="0">
+                                    <small class="text-muted">Extra por chamado (Lote)</small>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">H.E. Receita (R$)</label>
+                                    <input type="number" step="0.01" name="valor_hora_adicional_receita"
+                                        class="form-control bg-warning bg-opacity-10" placeholder="0.00" value="0">
+                                    <small class="text-muted">Valor por hora excedente</small>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">H.E. Custo (R$)</label>
+                                    <input type="number" step="0.01" name="valor_hora_adicional_custo"
+                                        class="form-control bg-warning bg-opacity-10" placeholder="0.00" value="0">
+                                    <small class="text-muted">Valor por hora excedente</small>
+                                </div>
                             </div>
                             <div class="form-check">
                                 <input type="checkbox" name="cobra_visita" class="form-check-input"
@@ -355,17 +445,21 @@
         input.addEventListener('change', async function () {
             const tipo = this.dataset.tipo;
             const id = this.dataset.id;
+            const field = this.dataset.field || 'valor'; // Default to 'valor' if not specified
             const valor = parseFloat(this.value) || 0;
 
             // Visual feedback
             this.classList.add('border-warning');
             this.disabled = true;
 
+            const payload = {};
+            payload[field] = valor;
+
             try {
                 const response = await fetch(`/admin/config/update/${tipo}/${id}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ valor })
+                    body: JSON.stringify(payload)
                 });
 
                 if (response.ok) {

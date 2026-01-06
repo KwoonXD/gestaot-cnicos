@@ -205,12 +205,18 @@ def novo_cliente():
 @admin_bp.route('/cliente/<int:id>/servicos', methods=['POST'])
 @login_required
 @admin_required
+
 def adicionar_servico(id):
     """Adicionar tipo de serviço a um cliente"""
     cliente = Cliente.query.get_or_404(id)
     
     nome = request.form.get('nome', '').strip()
-    valor = request.form.get('valor', 0)
+    valor_receita = request.form.get('valor', 0)
+    valor_custo_tecnico = request.form.get('valor_custo_tecnico', 0)
+    valor_adc_receita = request.form.get('valor_adicional_receita', 0)
+    valor_adc_custo = request.form.get('valor_adicional_custo', 0)
+    valor_he_receita = request.form.get('valor_hora_adicional_receita', 0)
+    valor_he_custo = request.form.get('valor_hora_adicional_custo', 0)
     cobra_visita = request.form.get('cobra_visita', 'on') == 'on'
     
     if not nome:
@@ -218,14 +224,30 @@ def adicionar_servico(id):
         return redirect(url_for('admin.contratos'))
     
     try:
-        valor = float(valor)
+        valor_receita = float(valor_receita)
+        valor_custo_tecnico = float(valor_custo_tecnico)
+        valor_adc_receita = float(valor_adc_receita)
+        valor_adc_custo = float(valor_adc_custo)
+        valor_he_receita = float(valor_he_receita)
+        valor_he_custo = float(valor_he_custo)
     except:
-        valor = 0.0
+        valor_receita = 0.0
+        valor_custo_tecnico = 0.0
+        valor_adc_receita = 0.0
+        valor_adc_custo = 0.0
+        valor_he_receita = 0.0
+        valor_he_custo = 0.0
     
     servico = TipoServico(
         nome=nome,
-        valor_receita=valor,
-        cliente_id=cliente.id
+        valor_receita=valor_receita,
+        valor_custo_tecnico=valor_custo_tecnico,
+        valor_adicional_receita=valor_adc_receita,
+        valor_adicional_custo=valor_adc_custo,
+        valor_hora_adicional_receita=valor_he_receita,
+        valor_hora_adicional_custo=valor_he_custo,
+        cliente_id=cliente.id,
+        exige_peca=cobra_visita
     )
     db.session.add(servico)
     db.session.commit()
@@ -310,13 +332,22 @@ def atualizar_config(tipo, id):
             return jsonify({'error': 'Tipo inválido'}), 400
             
         # Update fields if present
+        if 'nome' in data and data['nome'].strip():
+            item.nome = data['nome'].strip()
+            
+        # Legacy
         if 'valor' in data:
             item.valor_receita = float(data['valor'])
             
-        if 'nome' in data:
-            if not data['nome'].strip():
-                return jsonify({'error': 'Nome não pode ser vazio'}), 400
-            item.nome = data['nome'].strip()
+        # New Fields
+        numeric_fields = [
+            'valor_receita', 'valor_custo_tecnico', 
+            'valor_adicional_receita', 'valor_adicional_custo',
+            'valor_hora_adicional_receita', 'valor_hora_adicional_custo'
+        ]
+        for field in numeric_fields:
+            if field in data and hasattr(item, field):
+                setattr(item, field, float(data[field]))
         
         db.session.commit()
         return jsonify({'success': True})
