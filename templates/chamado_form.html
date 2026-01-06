@@ -4,407 +4,417 @@
 
 {% block head %}
 <link href="https://cdn.jsdelivr.net/npm/tom-select/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
+<!-- Alpine.js -->
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid py-4">
+<div class="container-fluid py-4" x-data="chamadoForm()">
 
+    <!-- Header -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h2 class="h4 fw-bold text-gray-800">Novo Atendimento</h2>
-            <p class="text-muted small mb-0">Cadastro de deslocamento e ordens de serviço.</p>
+            <p class="text-muted small mb-0">Cadastro de deslocamento e ordens de serviço (Alpine.js Refactor).</p>
         </div>
-        <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#smartPasteModal">
-            <i class="bi bi-magic me-2"></i>Colar Dados (WhatsApp/Email)
+        <!-- Smart Paste Button (Clipboard API) -->
+        <button type="button" class="btn btn-outline-primary" @click="pasteData()">
+            <i class="bi bi-clipboard-check me-2"></i>Colar Dados (Magic)
         </button>
     </div>
 
-    <form id="masterForm" onsubmit="submitMasterForm(event)">
+    <form @submit.prevent="submitForm">
 
-        <div class="card shadow-sm mb-4">
-            <div class="card-header bg-light py-3">
+        <!-- Logística Card -->
+        <div class="card shadow-sm mb-4 border-0">
+            <div class="card-header bg-transparent py-3 border-bottom">
                 <h6 class="m-0 fw-bold text-primary"><i class="bi bi-geo-alt me-2"></i>Logística</h6>
             </div>
             <div class="card-body">
                 <div class="row g-3">
 
+                    <!-- Técnico Select (TomSelect Integration) -->
                     <div class="col-md-5">
-                        <label for="tecnico_id" class="form-label fw-bold">Técnico Responsável *</label>
-                        <select name="tecnico_id" id="tecnico_id" required>
-                            <option value="">Selecione ou digite...</option>
-                            {% for doc in tecnicos %}
-                            <option value="{{ doc.id }}" data-estado="{{ doc.estado }}">
-                                {{ doc.nome }} | {{ doc.estado }} - {{ doc.cidade }}
-                            </option>
-                            {% endfor %}
-                        </select>
-                        <div class="form-text mt-1" id="stock-feedback">
-                            <i class="bi bi-info-circle"></i> Selecione para verificar estoque.
+                        <label class="form-label fw-bold">Técnico Responsável *</label>
+                        <div wire:ignore>
+                            <select id="tecnicoSelect" x-init="initTomSelect()" required>
+                                <option value="">Selecione ou digite...</option>
+                                {% for doc in tecnicos %}
+                                <option value="{{ doc.id }}">{{ doc.nome }} | {{ doc.estado }} - {{ doc.cidade }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- Stock Feedback -->
+                        <div class="form-text mt-2" :class="stockStatusClass">
+                            <i :class="stockIcon"></i> <span x-text="stockFeedback"></span>
                         </div>
                     </div>
 
                     <div class="col-md-3">
-                        <label for="data_atendimento" class="form-label fw-bold">Data Atendimento *</label>
-                        <input type="date" name="data_atendimento" id="data_atendimento" class="form-control" required>
+                        <label class="form-label fw-bold">Data Atendimento *</label>
+                        <input type="date" class="form-control" x-model="logistica.data_atendimento" required>
                     </div>
 
                     <div class="col-md-4">
-                        <label for="cliente_id" class="form-label fw-bold">Cliente / Contrato *</label>
-                        <select name="cliente_id" id="cliente_id" onchange="onClienteChange()" required>
-                            <option value="">Carregando...</option>
+                        <label class="form-label fw-bold">Cliente / Contrato *</label>
+                        <select class="form-select" x-model="logistica.cliente_id" @change="onClienteChange()" required>
+                            <option value="">Selecione...</option>
+                            <template x-for="cliente in clientes" :key="cliente.id">
+                                <option :value="cliente.id" x-text="cliente.nome"></option>
+                            </template>
                         </select>
                     </div>
 
                     <div class="col-md-6">
-                        <label for="cidade" class="form-label fw-bold">Local / Cidade *</label>
-                        <input type="text" name="cidade" id="cidade" class="form-control"
+                        <label class="form-label fw-bold">Local / Cidade *</label>
+                        <input type="text" class="form-control" x-model="logistica.cidade"
                             placeholder="Ex: Shopping Iguatemi, Loja 10..." required>
                     </div>
 
                     <div class="col-md-6">
-                        <label for="observacoes" class="form-label fw-bold">Observações</label>
-                        <input type="text" name="observacoes" id="observacoes" class="form-control"
+                        <label class="form-label fw-bold">Observações</label>
+                        <input type="text" class="form-control" x-model="logistica.observacoes"
                             placeholder="Imprevistos, detalhes de acesso...">
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="card shadow-sm mb-4">
-            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+        <!-- FSAs Table Card -->
+        <div class="card shadow-sm mb-4 border-0">
+            <div class="card-header bg-transparent d-flex justify-content-between align-items-center border-bottom">
                 <h6 class="m-0 fw-bold text-success"><i class="bi bi-list-check me-2"></i>Ordens de Serviço (FSAs)</h6>
-                <button type="button" class="btn btn-sm btn-success" onclick="addFsaRow()">
+                <button type="button" class="btn btn-sm btn-success" @click="addFsaRow()">
                     <i class="bi bi-plus-lg"></i> Adicionar FSA
                 </button>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
-                    <table class="table table-bordered mb-0 align-middle" id="fsaTable">
-                        <thead class="bg-light text-center">
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead class="bg-light text-secondary small text-uppercase">
                             <tr>
-                                <th style="width: 5%">#</th>
+                                <th style="width: 5%" class="text-center">#</th>
                                 <th style="width: 15%">Código FSA</th>
                                 <th style="width: 25%">Serviço</th>
                                 <th style="width: 15%">Horário</th>
-                                <th style="width: 20%" id="pecaHeader">Peça</th>
+                                <th style="width: 20%">Peça</th>
                                 <th style="width: 10%">Fornecedor</th>
                                 <th style="width: 10%">Custo</th>
                                 <th style="width: 5%"></th>
                             </tr>
                         </thead>
-                        <tbody id="fsaTableBody">
+                        <tbody>
+                            <template x-for="(row, index) in fsas" :key="index">
+                                <tr>
+                                    <td class="text-center fw-bold text-muted" x-text="index + 1"></td>
+
+                                    <!-- Código FSA -->
+                                    <td>
+                                        <input type="text" class="form-control form-control-sm"
+                                            x-model="row.codigo_chamado" placeholder="FSA..." required>
+                                    </td>
+
+                                    <!-- Serviço Select -->
+                                    <td>
+                                        <select class="form-select form-select-sm" x-model="row.catalogo_servico_id"
+                                            required>
+                                            <option value="">--</option>
+                                            <template x-for="servico in availableServices" :key="servico.id">
+                                                <option :value="servico.id" x-text="servico.nome"></option>
+                                            </template>
+                                        </select>
+                                    </td>
+
+                                    <!-- Horário -->
+                                    <td>
+                                        <div class="d-flex gap-1">
+                                            <input type="time" class="form-control form-control-sm"
+                                                x-model="row.hora_inicio" required>
+                                            <input type="time" class="form-control form-control-sm"
+                                                x-model="row.hora_fim" required>
+                                        </div>
+                                    </td>
+
+                                    <!-- Peça / Estoque Check -->
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <select class="form-select form-select-sm" x-model="row.peca_id"
+                                                @change="updateRowStock(index)">
+                                                <option value="">-- Nenhuma --</option>
+                                                <template x-for="lpu in availableLpu" :key="lpu.id">
+                                                    <option :value="lpu.id" x-text="lpu.nome"></option>
+                                                </template>
+                                            </select>
+
+                                            <!-- Stock Badge -->
+                                            <span class="badge ms-2" x-show="row.peca_id"
+                                                :class="getStockBadgeClass(row.peca_id)"
+                                                x-text="getStockBadgeText(row.peca_id)">
+                                            </span>
+                                        </div>
+                                    </td>
+
+                                    <!-- Fornecedor -->
+                                    <td>
+                                        <select class="form-select form-select-sm" x-model="row.fornecedor_peca">
+                                            <option value="Empresa">Empresa</option>
+                                            <option value="Tecnico">Técnico</option>
+                                        </select>
+                                    </td>
+
+                                    <!-- Custo (Habilitado apenas se Fornecedor == Tecnico) -->
+                                    <td>
+                                        <input type="number" step="0.01" class="form-control form-control-sm"
+                                            x-model="row.custo_peca" :disabled="row.fornecedor_peca !== 'Tecnico'"
+                                            placeholder="0.00">
+                                    </td>
+
+                                    <!-- Remover -->
+                                    <td class="text-center">
+                                        <button type="button" class="btn btn-sm btn-ghost text-danger"
+                                            @click="removeFsaRow(index)">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            </template>
                         </tbody>
                     </table>
+                </div>
+
+                <!-- Empty State -->
+                <div x-show="fsas.length === 0" class="text-center py-4 text-muted">
+                    <i class="bi bi-inbox fs-4 d-block mb-2"></i>
+                    Nenhum FSA adicionado.
                 </div>
             </div>
         </div>
 
+        <!-- Footer Actions -->
         <div class="d-flex justify-content-end gap-2 pb-5">
             <a href="{{ url_for('operacional.chamados') }}" class="btn btn-secondary">Cancelar</a>
-            <button type="submit" class="btn btn-primary px-4 fw-bold">Salvar Atendimento</button>
+            <button type="submit" class="btn btn-primary px-4 fw-bold" :disabled="isSaving">
+                <span x-show="isSaving" class="spinner-border spinner-border-sm me-2"></span>
+                <span x-text="isSaving ? 'Salvando...' : 'Salvar Atendimento'"></span>
+            </button>
         </div>
     </form>
-</div>
-
-<div class="modal fade" id="smartPasteModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Importar Dados (Texto)</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <textarea id="pasteArea" class="form-control" rows="8"
-                    placeholder="Cole aqui o texto do WhatsApp ou E-mail..."></textarea>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-primary" onclick="processSmartPaste()">Preencher
-                    Formulário</button>
-            </div>
-        </div>
-    </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/tom-select/dist/js/tom-select.complete.min.js"></script>
 
 <script>
-    // Configuração Padrão do TomSelect (Funciona como um select pesquisável nativo)
-    const tomSelectConfig = {
-        create: false,
-        sortField: { field: "text", direction: "asc" },
-        placeholder: "Selecione ou digite...",
-        plugins: ['dropdown_input'], // Garante que a busca funcione bem
-    };
+    function chamadoForm() {
+        return {
+            // State
+            logistica: {
+                tecnico_id: '',
+                data_atendimento: new Date().toISOString().split('T')[0],
+                cliente_id: '',
+                cidade: '',
+                observacoes: ''
+            },
+            fsas: [],
+            clientes: [], // Loaded from API
+            contratosData: {}, // Full API response
+            tecnicoStock: {}, // Stock Map { item_id: qty }
 
-    let contratosData = { clientes: [] };
-    let currentClienteId = null;
-    let rowCount = 0;
-    let currentTechStock = {};
-    let tsTecnico = null;
-    let tsCliente = null;
+            // UI Helpers
+            isSaving: false,
+            stockFeedback: 'Selecione um técnico.',
+            stockStatusClass: 'text-muted',
+            stockIcon: 'bi bi-info-circle',
 
-    // --- LÓGICA DE NEGÓCIO RESTAURADA ---
+            // Computed Helpers (Simulated in Alpine methods)
+            get availableServices() {
+                if (!this.logistica.cliente_id) return [];
+                const cli = this.clientes.find(c => c.id == this.logistica.cliente_id);
+                return cli ? cli.servicos : [];
+            },
 
-    async function loadContratosData() {
-        try {
-            const response = await fetch('/api/dados_contrato');
-            if (!response.ok) throw new Error('Erro ao carregar dados');
-            contratosData = await response.json();
-            populateClienteSelect();
-        } catch (err) { console.error(err); }
-    }
+            get availableLpu() {
+                if (!this.logistica.cliente_id) return [];
+                const cli = this.clientes.find(c => c.id == this.logistica.cliente_id);
+                return cli ? cli.lpu : [];
+            },
 
-    function populateClienteSelect() {
-        const select = document.getElementById('cliente_id');
-        if (!select) return;
-        select.innerHTML = '<option value="">Selecione...</option>';
-        contratosData.clientes.forEach(c => {
-            select.innerHTML += `<option value="${c.id}">${c.nome}</option>`;
-        });
+            async init() {
+                await this.loadContratos();
+                this.addFsaRow();
+            },
 
-        // Reinicia TomSelect do Cliente se já existir
-        if (tsCliente) { tsCliente.destroy(); }
+            // --- Logic ---
 
-        tsCliente = new TomSelect('#cliente_id', {
-            ...tomSelectConfig,
-            onChange: onClienteChange
-        });
-    }
+            async loadContratos() {
+                try {
+                    const res = await fetch('/api/dados_contrato');
+                    const data = await res.json();
+                    this.contratosData = data;
+                    this.clientes = data.clientes || [];
+                } catch (e) {
+                    console.error("Erro ao carregar contratos", e);
+                }
+            },
 
-    async function onTecnicoChange(val) {
-        const feedback = document.getElementById('stock-feedback');
-        if (!val) {
-            currentTechStock = {};
-            feedback.innerHTML = '<i class="bi bi-info-circle"></i> Selecione para verificar estoque.';
-            updateAllRowsStock();
-            return;
-        }
+            initTomSelect() {
+                new TomSelect('#tecnicoSelect', {
+                    create: false,
+                    sortField: { field: "text", direction: "asc" },
+                    placeholder: "Selecione...",
+                    onChange: (value) => {
+                        this.logistica.tecnico_id = value;
+                        this.checkStock(value);
+                    }
+                });
+            },
 
-        feedback.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Verificando estoque...';
+            async checkStock(tecnicoId) {
+                if (!tecnicoId) {
+                    this.tecnicoStock = {};
+                    this.stockFeedback = 'Selecione um técnico.';
+                    this.stockStatusClass = 'text-muted';
+                    return;
+                }
 
-        try {
-            const res = await fetch(`/api/estoque/tecnico/${val}`);
-            if (res.ok) {
-                currentTechStock = await res.json();
-                const total = Object.values(currentTechStock).reduce((a, b) => a + b, 0);
+                this.stockFeedback = 'Verificando estoque...';
+                this.stockStatusClass = 'text-info';
+                this.stockIcon = 'bi bi-hourglass-split';
 
-                if (total > 0) feedback.innerHTML = `<span class="text-success fw-bold"><i class="bi bi-check-circle"></i> ${total} itens em estoque.</span>`;
-                else feedback.innerHTML = `<span class="text-warning"><i class="bi bi-exclamation-triangle"></i> Sem estoque volante.</span>`;
+                try {
+                    const res = await fetch(`/api/estoque/tecnico/${tecnicoId}`);
+                    if (res.ok) {
+                        this.tecnicoStock = await res.json();
+                        const total = Object.values(this.tecnicoStock).reduce((a, b) => a + b, 0);
 
-                updateAllRowsStock();
-            } else {
-                feedback.innerHTML = '<span class="text-danger">Erro ao buscar estoque.</span>';
+                        if (total > 0) {
+                            this.stockFeedback = `${total} itens disponíveis.`;
+                            this.stockStatusClass = 'text-success fw-bold';
+                            this.stockIcon = 'bi bi-check-circle';
+                        } else {
+                            this.stockFeedback = 'Sem estoque volante.';
+                            this.stockStatusClass = 'text-warning';
+                            this.stockIcon = 'bi bi-exclamation-triangle';
+                        }
+                    } else {
+                        throw new Error();
+                    }
+                } catch {
+                    this.stockFeedback = 'Erro ao consultar estoque.';
+                    this.stockStatusClass = 'text-danger';
+                }
+            },
+
+            getStockBadgeText(pecaId) {
+                const qtd = this.tecnicoStock[pecaId] || 0;
+                return `Saldo: ${qtd}`;
+            },
+
+            getStockBadgeClass(pecaId) {
+                const qtd = this.tecnicoStock[pecaId] || 0;
+                return qtd > 0 ? 'bg-success' : 'bg-danger';
+            },
+
+            // --- Clipboard Logic ---
+            async pasteData() {
+                try {
+                    const text = await navigator.clipboard.readText();
+
+                    // Regex Extractors
+                    const cityMatch = text.match(/(?:Cidade|Local|Loja)[:\s]+([^\n]+)/i);
+                    const dateMatch = text.match(/(\d{2}\/\d{2}\/\d{2,4})/);
+
+                    if (cityMatch) this.logistica.cidade = cityMatch[1].trim();
+                    if (dateMatch) {
+                        const parts = dateMatch[1].split('/');
+                        let y = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+                        this.logistica.data_atendimento = `${y}-${parts[1]}-${parts[0]}`;
+                    }
+
+                    // Magical Feedback
+                    const btn = document.querySelector('button[@click="pasteData()"]'); // Simple feedback
+                    const originalHtml = btn.innerHTML;
+                    btn.innerHTML = '<i class="bi bi-check-lg"></i> Colado!';
+                    setTimeout(() => btn.innerHTML = originalHtml, 2000);
+
+                } catch (err) {
+                    alert('Permissão de colar negada ou erro ao ler clipboard.');
+                }
+            },
+
+            // --- Row Management ---
+            addFsaRow() {
+                this.fsas.push({
+                    codigo_chamado: '',
+                    catalogo_servico_id: '',
+                    hora_inicio: '09:00',
+                    hora_fim: '11:00',
+                    peca_id: '',
+                    pect_usada: '', // Name for legacy/reference
+                    fornecedor_peca: 'Empresa',
+                    custo_peca: ''
+                });
+            },
+
+            removeFsaRow(index) {
+                this.fsas.splice(index, 1);
+            },
+
+            onClienteChange() {
+                // Reset child selections when client changes
+                this.fsas.forEach(f => {
+                    f.catalogo_servico_id = '';
+                    f.peca_id = '';
+                });
+            },
+
+            // --- Submit ---
+            async submitForm() {
+                if (this.fsas.length === 0) {
+                    alert('Adicione pelo menos um FSA.');
+                    return;
+                }
+
+                this.isSaving = true;
+
+                // Prepare Payload
+                const payload = {
+                    logistica: this.logistica,
+                    fsas: this.fsas.map(f => {
+                        // Find names for backend redundancy/legacy if needed
+                        const serv = this.availableServices.find(s => s.id == f.catalogo_servico_id);
+                        const peca = this.availableLpu.find(p => p.id == f.peca_id);
+
+                        return {
+                            ...f,
+                            peca_usada: peca ? peca.nome : '',
+                            custo_peca: parseFloat(f.custo_peca) || 0
+                        };
+                    })
+                };
+
+                try {
+                    const res = await fetch('/chamados/criar/multiplo', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    const data = await res.json();
+
+                    if (res.ok) {
+                        window.location.href = '/operacional/atendimentos';
+                    } else {
+                        alert('Erro: ' + (data.error || 'Desconhecido'));
+                    }
+                } catch (e) {
+                    alert('Erro de conexão.');
+                } finally {
+                    this.isSaving = false;
+                }
             }
-        } catch (e) { console.error(e); }
-    }
-
-    function updateAllRowsStock() {
-        document.querySelectorAll('#fsaTableBody tr').forEach(tr => {
-            const rowId = tr.dataset.rowId;
-            const select = tr.querySelector(`select[name="peca_usada_${rowId}"]`);
-            if (select) updateStockBadge(rowId, select.value);
-        });
-    }
-
-    function updateStockBadge(rowId, itemId) {
-        let badge = document.getElementById(`stock-badge-${rowId}`);
-        const td = document.getElementById(`peca-cell-${rowId}`);
-
-        // Cria o badge se não existir
-        if (!badge && td) {
-            badge = document.createElement('span');
-            badge.id = `stock-badge-${rowId}`;
-            badge.className = 'badge bg-secondary ms-2';
-            td.appendChild(badge);
-        }
-
-        if (!itemId || !badge) {
-            if (badge) badge.style.display = 'none';
-            return;
-        }
-
-        const qtd = currentTechStock[parseInt(itemId)] || 0;
-        badge.style.display = 'inline-block';
-        badge.textContent = `Saldo: ${qtd}`;
-        badge.className = qtd > 0 ? 'badge bg-success ms-2' : 'badge bg-danger ms-2';
-    }
-
-    function onClienteChange() {
-        const val = document.getElementById('cliente_id').value;
-        currentClienteId = val ? parseInt(val) : null;
-        document.querySelectorAll('.servico-select').forEach(s => updateServicoOptions(s));
-        document.querySelectorAll('.peca-lpu-select').forEach(s => updateLpuOptions(s));
-    }
-
-    function getClienteData() { return contratosData.clientes.find(c => c.id === currentClienteId); }
-
-    function updateServicoOptions(select) {
-        const cliente = getClienteData();
-        select.innerHTML = '<option value="">-- Serviço --</option>';
-        if (cliente && cliente.servicos) {
-            cliente.servicos.forEach(s => {
-                select.innerHTML += `<option value="${s.id}" 
-                    data-exige-peca="${s.exige_peca}"
-                    data-franquia="${s.horas_franquia || 2}">
-                    ${s.nome}
-                </option>`;
-            });
         }
     }
-
-    function updateLpuOptions(select) {
-        const cliente = getClienteData();
-        select.innerHTML = '<option value="">-- Nenhuma --</option>';
-        if (cliente && cliente.lpu) {
-            cliente.lpu.forEach(l => {
-                select.innerHTML += `<option value="${l.id}">${l.nome}</option>`;
-            });
-        }
-    }
-
-    function addFsaRow() {
-        rowCount++;
-        const tbody = document.getElementById('fsaTableBody');
-        const tr = document.createElement('tr');
-        tr.id = `row-${rowCount}`;
-        tr.dataset.rowId = rowCount;
-
-        tr.innerHTML = `
-            <td class="text-center fw-bold">${rowCount}</td>
-            <td><input type="text" class="form-control form-control-sm" name="codigo_chamado_${rowCount}" placeholder="FSA..." required></td>
-            <td><select class="form-select form-select-sm servico-select" name="servico_${rowCount}" onchange="onServicoChange(this, ${rowCount})" required><option value="">--</option></select></td>
-            <td>
-                <div class="d-flex gap-1">
-                    <input type="time" class="form-control form-control-sm" name="hora_inicio_${rowCount}" value="09:00" required>
-                    <input type="time" class="form-control form-control-sm" name="hora_fim_${rowCount}" value="11:00" required>
-                </div>
-            </td>
-            <td id="peca-cell-${rowCount}" class="d-flex align-items-center">
-                <select class="form-select form-select-sm peca-lpu-select" name="peca_usada_${rowCount}" onchange="updateStockBadge(${rowCount}, this.value)"><option value="">--</option></select>
-            </td>
-            <td>
-                <select class="form-select form-select-sm" name="fornecedor_peca_${rowCount}" onchange="checkSupplier(this, ${rowCount})">
-                    <option value="Empresa">Empresa</option>
-                    <option value="Tecnico">Técnico</option>
-                </select>
-            </td>
-            <td><input type="number" step="0.01" class="form-control form-control-sm" name="custo_peca_${rowCount}" placeholder="0.00" disabled></td>
-            <td class="text-center">
-                <button type="button" class="btn btn-sm btn-danger" onclick="removeRow(${rowCount})"><i class="bi bi-trash"></i></button>
-            </td>
-        `;
-        tbody.appendChild(tr);
-        updateServicoOptions(tr.querySelector('.servico-select'));
-        updateLpuOptions(tr.querySelector('.peca-lpu-select'));
-    }
-
-    function removeRow(id) { document.getElementById(`row-${id}`)?.remove(); }
-
-    function checkSupplier(select, id) {
-        const input = document.querySelector(`input[name="custo_peca_${id}"]`);
-        input.disabled = select.value !== 'Tecnico';
-        if (!input.disabled) input.focus(); else input.value = '';
-    }
-
-    function onServicoChange(select, rowId) {
-        // Lógica de toggle visual se necessário
-        const opt = select.options[select.selectedIndex];
-        const exige = opt.dataset.exigePeca === 'true';
-        // (Opcional) Poderia destacar o campo de peça se exigido
-    }
-
-    async function submitMasterForm(e) {
-        e.preventDefault();
-        const form = document.getElementById('masterForm');
-        const btn = form.querySelector('button[type="submit"]');
-        const originalText = btn.innerHTML;
-
-        // Coleta Logística
-        const logistica = {
-            tecnico_id: document.getElementById('tecnico_id').value,
-            data_atendimento: document.getElementById('data_atendimento').value,
-            cidade: document.getElementById('cidade').value,
-            cliente_id: currentClienteId,
-            observacoes: document.getElementById('observacoes').value
-        };
-
-        // Coleta FSAs
-        const fsas = [];
-        document.querySelectorAll('#fsaTableBody tr').forEach(tr => {
-            const r = tr.dataset.rowId;
-            if (!r) return;
-
-            const serv = tr.querySelector(`select[name="servico_${r}"]`);
-            const peca = tr.querySelector(`select[name="peca_usada_${r}"]`);
-            const pecaOpt = peca ? peca.options[peca.selectedIndex] : null;
-
-            fsas.push({
-                codigo_chamado: form.querySelector(`input[name="codigo_chamado_${r}"]`).value,
-                catalogo_servico_id: serv.value,
-                hora_inicio: form.querySelector(`input[name="hora_inicio_${r}"]`).value,
-                hora_fim: form.querySelector(`input[name="hora_fim_${r}"]`).value,
-                peca_id: peca ? peca.value : '',
-                peca_usada: pecaOpt ? pecaOpt.text : '',
-                fornecedor_peca: form.querySelector(`select[name="fornecedor_peca_${r}"]`).value,
-                custo_peca: parseFloat(form.querySelector(`input[name="custo_peca_${r}"]`).value) || 0
-            });
-        });
-
-        if (fsas.length === 0) { alert('Adicione pelo menos um FSA.'); return; }
-
-        btn.disabled = true;
-        btn.innerHTML = 'Salvando...';
-
-        try {
-            const res = await fetch('/chamados/criar/multiplo', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ logistica, fsas })
-            });
-            const data = await res.json();
-
-            if (res.ok) {
-                window.location.href = '/operacional/atendimentos';
-            } else {
-                alert('Erro: ' + (data.error || 'Desconhecido'));
-                btn.disabled = false;
-                btn.innerHTML = originalText;
-            }
-        } catch (err) {
-            alert('Erro de rede.');
-            btn.disabled = false;
-            btn.innerHTML = originalText;
-        }
-    }
-
-    function processSmartPaste() {
-        const text = document.getElementById('pasteArea').value;
-        if (!text) return;
-
-        const city = text.match(/(?:Cidade|Local|Loja)[:\s]+([^\n]+)/i);
-        const date = text.match(/(\d{2}\/\d{2}\/\d{2,4})/);
-
-        if (city) document.getElementById('cidade').value = city[1].trim();
-        if (date) {
-            const parts = date[1].split('/');
-            let y = parts[2].length === 2 ? '20' + parts[2] : parts[2];
-            document.getElementById('data_atendimento').value = `${y}-${parts[1]}-${parts[0]}`;
-        }
-
-        bootstrap.Modal.getInstance(document.getElementById('smartPasteModal')).hide();
-    }
-
-    // Inicialização
-    document.addEventListener('DOMContentLoaded', () => {
-        loadContratosData();
-        addFsaRow();
-        document.getElementById('data_atendimento').value = new Date().toISOString().split('T')[0];
-
-        // INICIALIZA TOMSELECT TÉCNICO
-        tsTecnico = new TomSelect('#tecnico_id', {
-            ...tomSelectConfig,
-            onChange: onTecnicoChange
-        });
-    });
 </script>
 {% endblock %}

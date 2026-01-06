@@ -161,7 +161,7 @@
                                     <code>{{ chamado.codigo_chamado or chamado.id_chamado }}</code>
                                 </td>
                                 <td>{{ chamado.data_atendimento.strftime('%d/%m') }}</td>
-                                <td>{{ chamado.tipo_servico }}</td>
+                                <td>{{ chamado.servico_nome }}</td>
                                 <td>
                                     {{ chamado.cliente or '-' }}
                                     {% if chamado.status_chamado == 'SPARE' %}

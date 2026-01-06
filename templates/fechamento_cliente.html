@@ -91,7 +91,7 @@
                         <td>
                             <span class="font-monospace text-primary fw-bold">{{ chamado.codigo_chamado or '-' }}</span>
                         </td>
-                        <td>{{ chamado.tipo_servico }}</td>
+                        <td>{{ chamado.servico_nome }}</td>
                         <td>{{ chamado.peca_usada or '-' }}</td>
                         <td class="text-end fw-bold text-success font-numeric">
                             {{ "%.2f"|format(chamado.valor_receita_total)|replace('.', ',') }}

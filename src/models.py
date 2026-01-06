@@ -182,8 +182,24 @@ class Chamado(db.Model):
     catalogo_servico = db.relationship('CatalogoServico', foreign_keys=[catalogo_servico_id])
     
     # Campos legados (mantidos para compatibilidade)
-    tipo_servico = db.Column(db.String(50), nullable=True)
-    tipo_resolucao = db.Column(db.String(50), default='')
+    # Campos legados (mantidos para compatibilidade)
+    # tipo_servico = db.Column(db.String(50), nullable=True)
+    # tipo_resolucao = db.Column(db.String(50), default='')
+    
+    @property
+    def servico_nome(self):
+        if self.catalogo_servico:
+            return self.catalogo_servico.nome
+        return "Serviço Removido"
+
+    # Compatibility Aliases (Prevent AttributeError in legacy code)
+    @property
+    def tipo_servico(self):
+        return self.servico_nome
+        
+    @property
+    def tipo_resolucao(self):
+        return self.servico_nome # Fallback to service name or empty string
     
     status_chamado = db.Column(db.String(20), default='Finalizado')
     is_adicional = db.Column(db.Boolean, default=False)

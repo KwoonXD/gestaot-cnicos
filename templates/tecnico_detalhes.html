@@ -318,7 +318,7 @@
                                 <td><code>{{ chamado.id_chamado }}</code></td>
                                 <td>{{ chamado.codigo_chamado or '-' }}</td>
                                 <td>{{ chamado.data_atendimento.strftime('%d/%m/%Y') }}</td>
-                                <td>{{ chamado.tipo_servico }}</td>
+                                <td>{{ chamado.servico_nome }}</td>
                                 <td>
                                     <span
                                         class="badge badge-status badge-{{ chamado.status_chamado|lower|replace(' ', '-') }}">
@@ -378,7 +378,7 @@
                                 <td><code>{{ chamado.id_chamado }}</code></td>
                                 <td>{{ chamado.codigo_chamado or '-' }}</td>
                                 <td>{{ chamado.data_atendimento.strftime('%d/%m/%Y') }}</td>
-                                <td>{{ chamado.tipo_servico }}</td>
+                                <td>{{ chamado.servico_nome }}</td>
                                 <td>
                                     <span
                                         class="badge badge-status badge-{{ chamado.status_chamado|lower|replace(' ', '-') }}">
