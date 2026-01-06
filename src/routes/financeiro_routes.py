@@ -3,7 +3,7 @@ from flask_login import login_required
 from datetime import datetime
 from ..services.financeiro_service import FinanceiroService
 from ..services.tecnico_service import TecnicoService
-from ..models import ESTADOS_BRASIL, Chamado, Lancamento, Tecnico
+from ..models import ESTADOS_BRASIL, Chamado, Tecnico
 from werkzeug.utils import secure_filename
 import os
 
@@ -198,19 +198,12 @@ def fechamento_lote():
                 Chamado.data_atendimento <= datetime.strptime(periodo_fim, '%Y-%m-%d').date()
             ).all()
             
-            lancamentos_list = Lancamento.query.filter(
-                Lancamento.tecnico_id == t.id,
-                Lancamento.pagamento_id == None,
-                Lancamento.data <= datetime.strptime(periodo_fim, '%Y-%m-%d').date()
-            ).all()
-
+            # Use custo_atribuido if available
             qtd = len(chamados_periodo)
-            total_chamados = sum(c.valor for c in chamados_periodo)
-            total_lancamentos = sum(l.valor if l.tipo == 'Bônus' else -l.valor for l in lancamentos_list)
+            total_chamados = sum(float(c.custo_atribuido if c.custo_atribuido is not None else c.valor or 0) for c in chamados_periodo)
+            total_previsto = float(total_chamados)
             
-            total_previsto = float(total_chamados) + float(total_lancamentos)
-            
-            if qtd > 0 or total_lancamentos != 0:
+            if qtd > 0:
                 tecnicos_display.append({
                     'id': t.id,
                     'id_tecnico': t.id_tecnico,
@@ -223,16 +216,6 @@ def fechamento_lote():
                            tecnicos=tecnicos_display,
                            inicio=periodo_inicio,
                            fim=periodo_fim)
-
-@financeiro_bp.route('/lancamentos/novo', methods=['POST'])
-@login_required
-def novo_lancamento():
-    try:
-        FinanceiroService.criar_lancamento(request.form)
-        flash('Lançamento adicionado com sucesso!', 'success')
-    except Exception as e:
-        flash(f'Erro ao adicionar lançamento: {str(e)}', 'danger')
-    return redirect(url_for('operacional.tecnico_detalhes', id=request.form['tecnico_id']))
 
 @financeiro_bp.route('/fechamento-cliente')
 @login_required

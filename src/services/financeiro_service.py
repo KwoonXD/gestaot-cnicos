@@ -3,7 +3,7 @@ import calendar
 from sqlalchemy import func
 # Importamos o executor global que criamos acima
 from src import executor, db 
-from src.models import Chamado, Pagamento, Tecnico, Lancamento
+from src.models import Chamado, Pagamento, Tecnico
 
 # Função auxiliar de cálculo
 def processar_custos_chamados(chamados, tecnico):
@@ -385,41 +385,14 @@ class FinanceiroService:
 
         chamado.custo_atribuido = valor_base
         
-        if valor_base > 0:
-            lancamento = Lancamento(
-                tecnico_id=tecnico.id,
-                tipo='CREDITO_SERVICO',
-                valor=valor_base,
-                data=datetime.now().date(),
-                descricao=descricao,
-                chamado_id=chamado.id
-            )
-            tecnico.saldo_atual += valor_base
-            db.session.add(lancamento)
-            # Nota: commit deve ser feito pelo caller (ChamadoService) para atomicidade? 
-            # Ou fazemos flush aqui. Vamos fazer flush para garantir ID mas deixar caller commitar se quiser.
-            # Mas aqui estamos num service method que parece ser atomico. Vamos commitar.
-            db.session.commit()
-            return lancamento
-        
+        # NOTE: Ledger (Lancamento) removed. Payment is calculated on demand via Chamado.custo_atribuido.
+        db.session.commit()
         return None
 
     @staticmethod
     def realizar_pagamento_conta_corrente(tecnico_id, valor, observacao=None):
-        tecnico = Tecnico.query.get_or_404(tecnico_id)
-        
-        lancamento = Lancamento(
-            tecnico_id=tecnico.id,
-            tipo='DEBITO_PAGAMENTO',
-            valor=valor,
-            data=datetime.now().date(),
-            descricao=observacao or "Pagamento realizado"
-        )
-        
-        tecnico.saldo_atual -= float(valor)
-        db.session.add(lancamento)
-        db.session.commit()
-        return lancamento
+        # Deprecated: Ledger removed.
+        return None
 
     @staticmethod
     def gerar_pagamento_lote(data):

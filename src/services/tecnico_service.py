@@ -35,103 +35,62 @@ tecnico_schema = TecnicoSchema()
 class TecnicoService:
     @staticmethod
     def get_all(filters=None, page=1, per_page=20):
-        # 1. Subquery for OWN pending totals
-        sq_chamados = db.session.query(
-            Chamado.tecnico_id,
-            func.count(Chamado.id).label('qtd_pendente'),
-            func.sum(Chamado.valor).label('valor_pendente')
-        ).filter(
-            Chamado.status_chamado.in_(['Concluído', 'SPARE']),
-            Chamado.status_validacao == 'Aprovado',
-            Chamado.pago == False,
-            Chamado.pagamento_id == None
-        ).group_by(Chamado.tecnico_id).subquery()
-
-        # 2. Subquery for AGGREGATED (Sub-technicians) totals
-        # We join sq_chamados with Tecnico to sum values of tecnicos that have 'me' as principal
-        sq_agregado = db.session.query(
-            Tecnico.tecnico_principal_id,
-            func.sum(sq_chamados.c.qtd_pendente).label('qtd_sub'),
-            func.sum(sq_chamados.c.valor_pendente).label('valor_sub')
-        ).join(
-            sq_chamados, Tecnico.id == sq_chamados.c.tecnico_id
-        ).filter(
-            Tecnico.tecnico_principal_id.isnot(None)
-        ).group_by(Tecnico.tecnico_principal_id).subquery()
-
-        # 3. Main Query
-        query = db.session.query(
-            Tecnico,
-            func.coalesce(sq_chamados.c.qtd_pendente, 0).label('own_qtd'),
-            func.coalesce(sq_chamados.c.valor_pendente, 0.0).label('own_val'),
-            func.coalesce(sq_agregado.c.qtd_sub, 0).label('sub_qtd'),
-            func.coalesce(sq_agregado.c.valor_sub, 0.0).label('sub_val')
-        ).outerjoin(
-            sq_chamados, Tecnico.id == sq_chamados.c.tecnico_id
-        ).outerjoin(
-            sq_agregado, Tecnico.id == sq_agregado.c.tecnico_principal_id
-        ).options(joinedload(Tecnico.tags))
+        # Query Base: Técnicos + Soma de Chamados Pendentes
+        # Isso substitui o Ledger com performance igual ou superior.
         
-        # Filters
+        # 1. Soma condicional (apenas chamados aprovados e não pagos)
+        # Use custo_atribuido if available (new logic), else valor (legacy)
+        val_term = func.coalesce(Chamado.custo_atribuido, Chamado.valor, 0)
+        
+        valor_pendente = func.sum(
+            case(
+                (
+                    (Chamado.status_chamado.in_(['Concluído', 'SPARE'])) &
+                    (Chamado.status_validacao == 'Aprovado') &
+                    (Chamado.pago == False) &
+                    (Chamado.pagamento_id == None),
+                    val_term
+                ),
+                else_=0
+            )
+        ).label('total_pendente')
+
+        # 2. Query Principal com Join
+        query = db.session.query(Tecnico, valor_pendente)\
+            .outerjoin(Chamado, Tecnico.id == Chamado.tecnico_id)\
+            .group_by(Tecnico.id)
+
+        # 3. Filtros
         if filters:
+            if filters.get('search'):
+                term = f"%{filters['search']}%"
+                query = query.filter(
+                    (Tecnico.nome.ilike(term)) | 
+                    (Tecnico.cidade.ilike(term))
+                )
+            
             if filters.get('estado'):
                 query = query.filter(Tecnico.estado == filters['estado'])
-            if filters.get('cidade'):
-                query = query.filter(Tecnico.cidade.ilike(f"%{filters['cidade']}%"))
-            if filters.get('status'):
-                query = query.filter(Tecnico.status == filters['status'])
-            if filters.get('search'):
-                query = query.filter(Tecnico.nome.ilike(f"%{filters['search']}%"))
-            if filters.get('tag'):
-                query = query.join(Tag).filter(Tag.nome == filters['tag'])
-            
-        # Filter calculation logic
-            total_calc = func.coalesce(sq_chamados.c.valor_pendente, 0) + func.coalesce(sq_agregado.c.valor_sub, 0)
 
+            # Filtro de "Tem algo a receber?" agora é feito no HAVING (pós-soma)
             if filters.get('pagamento') == 'Pendente':
-                # Filter tecnicos that have > 0 to collect
-                query = query.filter(total_calc > 0)
-            
+                query = query.having(valor_pendente > 0)
             elif filters.get('pagamento') == 'Pago':
-                # Filter tecnicos that have nothing to collect
-                query = query.filter(total_calc == 0)
+                query = query.having(func.coalesce(valor_pendente, 0) == 0)
 
-        # Order
-        query = query.order_by(Tecnico.nome)
-
-        if page is None:
-            # Retorna lista completa (para relatórios e selects)
-            items_raw = query.all()
-            final_items = []
-            for row in items_raw:
-                # row é uma tupla (Tecnico, own_qtd, own_val, sub_qtd, sub_val)
-                tecnico, o_q, o_v, s_q, s_v = row
-                
-                if tecnico.tecnico_principal_id:
-                     tecnico.total_agregado = 0.0
-                else:
-                    tecnico.total_agregado = float(o_v + s_v)
-                
-                final_items.append(tecnico)
-            return final_items
-        else:
-            # Retorna Objeto Pagination (para telas de listagem)
-            pagination = query.paginate(page=page, per_page=per_page, error_out=False)
-            
-            new_items = []
-            for row in pagination.items:
-                # row is a tuple (Tecnico, own_qtd, own_val, sub_qtd, sub_val)
-                tecnico, o_q, o_v, s_q, s_v = row
-                
-                if tecnico.tecnico_principal_id:
-                     tecnico.total_agregado = 0.0
-                else:
-                    tecnico.total_agregado = float(o_v + s_v)
-                
-                new_items.append(tecnico)
-                
-            pagination.items = new_items
-            return pagination
+        # 4. Paginação
+        pagination = query.order_by(Tecnico.nome).paginate(page=page, per_page=per_page)
+        
+        # 5. Normalização para o Template
+        # O SQLAlchemy retorna tuplas (Tecnico, total_pendente). 
+        # Vamos injetar o total no objeto para o template não quebrar.
+        for tecnico, total in pagination.items:
+            tecnico.total_a_pagar_cache = float(total or 0.0)
+    
+        # Hack para retornar apenas objetos Tecnico na lista, mantendo a paginação
+        pagination.items = [t[0] for t in pagination.items]
+        
+        return pagination
 
     @staticmethod
     def get_by_id(id):

@@ -45,7 +45,6 @@ class Tecnico(db.Model):
     valor_por_atendimento = db.Column(db.Numeric(10, 2), default=120.00)
     valor_adicional_loja = db.Column(db.Numeric(10, 2), default=20.00)
     valor_hora_adicional = db.Column(db.Numeric(10, 2), default=30.00)  # Valor por hora extra
-    saldo_atual = db.Column(db.Float, default=0.0)  # Conta Corrente (Ledger)
     forma_pagamento = db.Column(db.String(50), nullable=True)
     chave_pagamento = db.Column(db.String(200), nullable=True)
     tecnico_principal_id = db.Column(db.Integer, db.ForeignKey('tecnicos.id'), nullable=True)
@@ -85,8 +84,19 @@ class Tecnico(db.Model):
 
     @property
     def total_a_pagar(self):
-        # Ledger-based balance
-        return max(0.0, float(self.saldo_atual or 0.0))
+        # AVISO: Não use isso dentro de loops de listagem (use a query otimizada do Service).
+        # Use apenas para exibir um técnico individualmente.
+        if hasattr(self, 'total_a_pagar_cache'):
+             return self.total_a_pagar_cache
+
+        query = self.chamados.filter(
+            Chamado.status_chamado.in_(['Concluído', 'SPARE']),
+            Chamado.status_validacao == 'Aprovado',
+            Chamado.pago == False,
+            Chamado.pagamento_id == None
+        )
+        # Use custo_atribuido (New) or valor (Legacy)
+        return sum(float(c.custo_atribuido if c.custo_atribuido is not None else c.valor or 0) for c in query)
 
     @property
     def pending_chamados_list(self):
@@ -344,35 +354,7 @@ class AuditLog(db.Model):
     user = db.relationship('User', backref='audi_logs')
 
 
-class Lancamento(db.Model):
-    __tablename__ = 'lancamentos'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    tecnico_id = db.Column(db.Integer, db.ForeignKey('tecnicos.id'), nullable=False)
-    pagamento_id = db.Column(db.Integer, db.ForeignKey('pagamentos.id'), nullable=True)
-    data = db.Column(db.Date, nullable=False, default=date.today)
-    tipo = db.Column(db.String(20), nullable=False)  # CREDITO_SERVICO, DEBITO_PAGAMENTO, ADIANTAMENTO, MULTA, BONUS
-    valor = db.Column(db.Numeric(10, 2), nullable=False)
-    descricao = db.Column(db.String(200), nullable=False)
-    data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    # Rastreio de origem (opcional)
-    chamado_id = db.Column(db.Integer, db.ForeignKey('chamados.id'), nullable=True)
-    
-    tecnico = db.relationship('Tecnico', backref='lancamentos')
-    pagamento = db.relationship('Pagamento', backref='lancamentos')
-    chamado = db.relationship('Chamado', backref='lancamentos')
-    
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'tecnico_id': self.tecnico_id,
-            'pagamento_id': self.pagamento_id,
-            'data': self.data.isoformat() if self.data else None,
-            'tipo': self.tipo,
-            'valor': float(self.valor),
-            'descricao': self.descricao
-        }
+
 
 class Tag(db.Model):
     __tablename__ = 'tags'

@@ -178,10 +178,11 @@
                             </span>
                         </td>
                         <td>
-                            <span
-                                class="badge bg-{{ 'warning' if tecnico.status_pagamento == 'Pendente' else 'success' }}">
-                                {{ tecnico.status_pagamento }}
-                            </span>
+                            {% if tecnico.total_a_pagar_cache is defined %}
+                            R$ {{ "%.2f"|format(tecnico.total_a_pagar_cache) }}
+                            {% else %}
+                            R$ 0.00
+                            {% endif %}
                         </td>
                         <td class="text-end pe-4">
                             <div class="actions-cell">
