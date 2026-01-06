@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, url_for
 from flask_login import login_required
 from ..services.chamado_service import ChamadoService
 from ..models import Cliente, Chamado, Tecnico, db, TecnicoStock, ItemLPU, Pagamento

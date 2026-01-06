@@ -189,43 +189,15 @@
                                     aria-label="Marcar Chamado {{ chamado.codigo_chamado or chamado.id }} como Concluído">
                                     <i class="bi bi-check-lg" aria-hidden="true"></i>
                                 </button>
-                                {% endif %}
-                                {% if current_user.role == 'Admin' and not chamado.pago and not chamado.pagamento_id %}
-                                <button type="button" class="btn btn-sm btn-outline-danger btn-action" title="Excluir"
-                                    data-bs-toggle="modal" data-bs-target="#deleteModal{{ chamado.id }}">
-                                    <i class="bi bi-trash"></i>
-                                </button>
-                                <!-- Delete Modal -->
-                                <div class="modal fade" id="deleteModal{{ chamado.id }}" tabindex="-1"
-                                    aria-hidden="true">
-                                    <div class="modal-dialog">
-                                        <div class="modal-content">
-                                            <div class="modal-header">
-                                                <h5 class="modal-title text-danger">Excluir Chamado</h5>
-                                                <button type="button" class="btn-close" data-bs-dismiss="modal"
-                                                    aria-label="Close"></button>
-                                            </div>
-                                            <div class="modal-body text-start">
-                                                <p>Tem certeza que deseja apagar o chamado
-                                                    <strong>{{ chamado.codigo_chamado or chamado.id }}</strong>?
-                                                </p>
-                                                <p class="text-muted small">Esta ação não pode ser desfeita e ficará
-                                                    registrada na auditoria.</p>
-                                            </div>
-                                            <div class="modal-footer">
-                                                <button type="button" class="btn btn-secondary"
-                                                    data-bs-dismiss="modal">Cancelar</button>
-                                                <form
-                                                    action="{{ url_for('operacional.deletar_chamado', id=chamado.id) }}"
-                                                    method="POST">
-                                                    <button type="submit" class="btn btn-danger">Excluir
-                                                        Permanentemente</button>
-                                                </form>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                {% endif %}
+                            </form>
+                            {% endif %}
+                            {% if current_user.role == 'Admin' and not chamado.pago and not chamado.pagamento_id %}
+                            <button type="button" class="btn btn-sm btn-outline-danger btn-action btn-delete"
+                                title="Excluir" data-id="{{ chamado.id }}"
+                                data-codigo="{{ chamado.codigo_chamado or chamado.id }}">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}
@@ -338,6 +310,30 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
                 <button type="button" class="btn btn-primary" onclick="saveQuickEdit()">Salvar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal (Single, outside loop) -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title text-danger"><i class="bi bi-exclamation-triangle me-2"></i>Excluir Chamado</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-start">
+                <p>Tem certeza que deseja apagar o chamado <strong id="deleteChamadoCodigo"></strong>?</p>
+                <p class="text-muted small">Esta ação não pode ser desfeita e ficará registrada na auditoria.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <form id="deleteForm" action="" method="POST">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash me-1"></i>Excluir Permanentemente
+                    </button>
+                </form>
             </div>
         </div>
     </div>
@@ -495,6 +491,54 @@
             alert('Erro de conexão');
             console.error(e);
         }
+    }
+
+    // Delete Modal Handler (Event Delegation)
+    const deleteModalEl = document.getElementById('deleteModal');
+    const deleteModal = deleteModalEl ? new bootstrap.Modal(deleteModalEl) : null;
+
+    document.addEventListener('click', function (e) {
+        const btn = e.target.closest('.btn-delete');
+        if (btn && deleteModal) {
+            const id = btn.dataset.id;
+            const codigo = btn.dataset.codigo;
+
+            // Populate modal
+            document.getElementById('deleteChamadoCodigo').textContent = codigo;
+            document.getElementById('deleteForm').action = `/chamados/${id}/delete`;
+
+            deleteModal.show();
+        }
+    });
+
+    // Density Toggle (Compact Table Mode)
+    const densityBtn = document.getElementById('btnDensityToggle');
+    if (densityBtn) {
+        // Check saved preference
+        const isCompact = localStorage.getItem('table_compact') === 'true';
+        if (isCompact) {
+            document.querySelector('.table')?.classList.add('table-compact');
+            densityBtn.querySelector('i').classList.replace('bi-arrows-collapse', 'bi-arrows-expand');
+        }
+
+        densityBtn.addEventListener('click', function () {
+            const table = document.querySelector('.table');
+            if (!table) return;
+
+            table.classList.toggle('table-compact');
+            const nowCompact = table.classList.contains('table-compact');
+
+            // Toggle icon
+            const icon = this.querySelector('i');
+            if (nowCompact) {
+                icon.classList.replace('bi-arrows-collapse', 'bi-arrows-expand');
+            } else {
+                icon.classList.replace('bi-arrows-expand', 'bi-arrows-collapse');
+            }
+
+            // Save preference
+            localStorage.setItem('table_compact', nowCompact);
+        });
     }
 </script>
 {% endblock %}
