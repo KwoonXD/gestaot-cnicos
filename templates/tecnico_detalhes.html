@@ -16,9 +16,9 @@
         <a href="{{ url_for('operacional.editar_tecnico', id=tecnico.id) }}" class="btn btn-outline-secondary btn-sm">
             <i class="bi bi-pencil"></i> Editar
         </a>
-        {% if stats.valor_pendente > 0 %}
+        {% if (stats.valor_pendente|default(0)) > 0 %}
         <a href="{{ url_for('financeiro.gerar_pagamento') }}?tecnico={{ tecnico.id }}" class="btn btn-success btn-sm">
-            <i class="bi bi-cash-stack"></i> Pagar R$ {{ "%.2f"|format(stats.valor_pendente) }}
+            <i class="bi bi-cash-stack"></i> Pagar R$ {{ "%.2f"|format(stats.valor_pendente|default(0)) }}
         </a>
         {% endif %}
     </div>
@@ -28,20 +28,20 @@
     <div class="col-md-4">
         <div class="card p-3 border-0 shadow-sm bg-light">
             <small class="text-muted text-uppercase">Total de Chamados</small>
-            <div class="fs-2 fw-bold">{{ stats.total }}</div>
+            <div class="fs-2 fw-bold">{{ stats.total|default(0) }}</div>
         </div>
     </div>
     <div class="col-md-4">
         <div class="card p-3 border-0 shadow-sm">
             <small class="text-muted text-uppercase">Pendente de Pagamento</small>
-            <div class="fs-2 fw-bold text-primary">{{ stats.pendentes_qtd }} <small
+            <div class="fs-2 fw-bold text-primary">{{ stats.pendentes_qtd|default(0) }} <small
                     class="fs-6 text-muted">chamados</small></div>
         </div>
     </div>
     <div class="col-md-4">
         <div class="card p-3 border-0 shadow-sm bg-primary text-white">
             <small class="text-uppercase opacity-75">Valor a Pagar</small>
-            <div class="fs-2 fw-bold">R$ {{ "%.2f"|format(stats.valor_pendente) }}</div>
+            <div class="fs-2 fw-bold">R$ {{ "%.2f"|format(stats.valor_pendente|default(0)) }}</div>
         </div>
     </div>
 </div>

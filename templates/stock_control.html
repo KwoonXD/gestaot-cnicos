@@ -124,63 +124,82 @@
 
                 <form action="{{ url_for('stock.movimentar_estoque') }}" method="POST" @submit="isSaving = true">
                     <div class="modal-body p-4">
-                        <div class="nav nav-pills nav-fill mb-4 p-1 bg-light rounded-pill" role="tablist">
-                            <div class="nav-item">
-                                <button type="button" class="nav-link rounded-pill fw-bold py-2 small"
-                                    :class="tipo === 'ENVIO' ? 'active bg-success' : 'text-muted'"
-                                    @click="tipo = 'ENVIO'">Enviar</button>
-                            </div>
-                            <div class="nav-item">
-                                <button type="button" class="nav-link rounded-pill fw-bold py-2 small"
-                                    :class="tipo === 'DEVOLUCAO' ? 'active bg-warning text-dark' : 'text-muted'"
-                                    @click="tipo = 'DEVOLUCAO'">Devolver</button>
-                            </div>
-                            <div class="nav-item">
-                                <button type="button" class="nav-link rounded-pill fw-bold py-2 small"
-                                    :class="tipo === 'AJUSTE' ? 'active bg-secondary' : 'text-muted'"
-                                    @click="tipo = 'AJUSTE'">Ajustar</button>
+                        <!-- Type Switcher -->
+                        <div class="d-flex justify-content-center mb-4">
+                            <div class="btn-group bg-light rounded-pill p-1" role="group">
+                                <button type="button" class="btn btn-sm rounded-pill fw-bold px-3 transition-all"
+                                    :class="tipo === 'ENVIO' ? 'btn-white shadow-sm text-success' : 'text-muted border-0'"
+                                    @click="tipo = 'ENVIO'">
+                                    <i class="bi bi-box-arrow-right me-1"></i> Enviar
+                                </button>
+                                <button type="button" class="btn btn-sm rounded-pill fw-bold px-3 transition-all"
+                                    :class="tipo === 'DEVOLUCAO' ? 'btn-white shadow-sm text-warning' : 'text-muted border-0'"
+                                    @click="tipo = 'DEVOLUCAO'">
+                                    <i class="bi bi-box-arrow-in-left me-1"></i> Devolver
+                                </button>
+                                <button type="button" class="btn btn-sm rounded-pill fw-bold px-3 transition-all"
+                                    :class="tipo === 'AJUSTE' ? 'btn-white shadow-sm text-secondary' : 'text-muted border-0'"
+                                    @click="tipo = 'AJUSTE'">
+                                    <i class="bi bi-sliders me-1"></i> Ajustar
+                                </button>
                             </div>
                         </div>
                         <input type="hidden" name="tipo_movimento" x-model="tipo">
 
-                        <div class="mb-3">
-                            <label class="form-label text-uppercase small fw-bold text-muted">Técnico</label>
-                            <div wire:ignore>
-                                <select name="tecnico_id" id="tecnicoSelect" required>
-                                    <option value="">Selecione...</option>
-                                    {% for t in tecnicos %}
-                                    <option value="{{ t.id }}">{{ t.nome }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
+                        <!-- Technician Select -->
+                        <div class="mb-4">
+                            <label class="form-label text-uppercase small fw-bold text-muted mb-1">Técnico</label>
+                            <select name="tecnico_id" id="tecnicoSelect" class="form-control" required
+                                autocomplete="off">
+                                <option value="">Selecione o técnico...</option>
+                                {% for t in tecnicos %}
+                                <option value="{{ t.id }}">{{ t.nome }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text small text-muted" x-show="tipo === 'ENVIO'"><i
+                                    class="bi bi-info-circle me-1"></i>Quem receberá o material?</div>
+                            <div class="form-text small text-muted" x-show="tipo === 'DEVOLUCAO'"><i
+                                    class="bi bi-info-circle me-1"></i>Quem está devolvendo?</div>
                         </div>
 
-                        <div class="row g-3 mb-3">
+                        <!-- Item & Qty -->
+                        <div class="row g-3 mb-4">
                             <div class="col-8">
-                                <label class="form-label text-uppercase small fw-bold text-muted">Item</label>
-                                <select name="item_id" class="form-select bg-light border-0" x-model="itemId" required>
-                                    <option value="">Selecione...</option>
+                                <label class="form-label text-uppercase small fw-bold text-muted mb-1">Item</label>
+                                <select name="item_id" class="form-select py-2" x-model="itemId" required>
+                                    <option value="">Selecione o item...</option>
                                     {% for item in itens %}
                                     <option value="{{ item.id }}">{{ item.nome }}</option>
                                     {% endfor %}
                                 </select>
                             </div>
                             <div class="col-4">
-                                <label class="form-label text-uppercase small fw-bold text-muted">Qtd</label>
-                                <input type="number" name="quantidade" class="form-control text-center fw-bold" min="1"
-                                    x-model="qty" required>
+                                <label class="form-label text-uppercase small fw-bold text-muted mb-1">Qtd</label>
+                                <div class="input-group">
+                                    <button class="btn btn-outline-secondary" type="button"
+                                        @click="qty > 1 ? qty-- : null"><i class="bi bi-dash"></i></button>
+                                    <input type="number" name="quantidade" class="form-control text-center fw-bold"
+                                        min="1" x-model="qty" required>
+                                    <button class="btn btn-outline-secondary" type="button" @click="qty++"><i
+                                            class="bi bi-plus"></i></button>
+                                </div>
                             </div>
                         </div>
 
-                        <div class="alert alert-light border d-flex justify-content-between py-2 px-3 small text-muted"
-                            x-show="itemId && tecnicoId">
-                            <span>Saldo Atual:</span>
-                            <span class="fw-bold text-dark" x-text="currentStock + ' un'"></span>
+                        <!-- Current Stock Indicator -->
+                        <div class="alert bg-primary bg-opacity-10 border-0 d-flex align-items-center justify-content-between py-2 px-3 rounded-3 mb-3"
+                            x-show="itemId && tecnicoId" x-transition>
+                            <span class="small text-primary fw-bold"><i class="bi bi-box-seam me-2"></i>Saldo
+                                Atual</span>
+                            <span class="fs-5 fw-bold text-primary" x-text="currentStock + ' un'"></span>
                         </div>
 
+                        <!-- Observation -->
                         <div class="mb-0">
-                            <label class="form-label text-uppercase small fw-bold text-muted">Observação</label>
-                            <input type="text" name="observacao" class="form-control" placeholder="...">
+                            <label class="form-label text-uppercase small fw-bold text-muted mb-1">Observação <span
+                                    class="fw-normal text-muted opacity-50">(Opcional)</span></label>
+                            <textarea name="observacao" class="form-control bg-light" rows="2"
+                                placeholder="Ex: Reposição mensal..."></textarea>
                         </div>
                     </div>
 
@@ -252,57 +271,55 @@
             modalInstance: null,
             tomSelectInstance: null,
             currentStock: 0,
-            {% set matrix_json = matrix | tojson | safe %}
-        matrixData: { { matrix_json } },
-    },
+            matrixData: {},
 
-    init() {
-        // Inicializa Modal
-        const modalEl = document.getElementById('movimentacaoModal');
-        if (modalEl) this.modalInstance = new bootstrap.Modal(modalEl);
+            init() {
+                // Inicializa Modal
+                const modalEl = document.getElementById('movimentacaoModal');
+                if (modalEl) this.modalInstance = new bootstrap.Modal(modalEl);
 
-        // Inicializa TomSelect
-        const selectEl = document.getElementById('tecnicoSelect');
-        if (selectEl) {
-            this.tomSelectInstance = new TomSelect(selectEl, {
-                create: false,
-                sortField: { field: "text", direction: "asc" },
-                onChange: (value) => {
-                    this.tecnicoId = value;
-                    this.updateCurrentStock();
+                // Inicializa TomSelect
+                const selectEl = document.getElementById('tecnicoSelect');
+                if (selectEl) {
+                    this.tomSelectInstance = new TomSelect(selectEl, {
+                        create: false,
+                        sortField: { field: "text", direction: "asc" },
+                        onChange: (value) => {
+                            this.tecnicoId = value;
+                            this.updateCurrentStock();
+                        }
+                    });
                 }
-            });
-        }
 
-        this.$watch('itemId', () => this.updateCurrentStock());
-    },
+                this.$watch('itemId', () => this.updateCurrentStock());
+            },
 
-    openModal(tecId = '', itemId = '', currentQty = 0) {
-        this.tecnicoId = tecId;
-        if (this.tomSelectInstance) this.tomSelectInstance.setValue(tecId, true);
+            openModal(tecId = '', itemId = '', currentQty = 0) {
+                this.tecnicoId = tecId;
+                if (this.tomSelectInstance) this.tomSelectInstance.setValue(tecId, true);
 
-        this.itemId = itemId;
-        this.currentStock = currentQty;
-        this.tipo = 'ENVIO';
-        this.qty = 1;
-        this.modalInstance?.show();
-    },
+                this.itemId = itemId;
+                this.currentStock = currentQty;
+                this.tipo = 'ENVIO';
+                this.qty = 1;
+                this.modalInstance?.show();
+            },
 
-    updateCurrentStock() {
-        if (this.tecnicoId && this.itemId) {
-            try {
-                const tId = parseInt(this.tecnicoId);
-                const iId = parseInt(this.itemId);
-                this.currentStock = (this.matrixData[tId] && this.matrixData[tId][iId]) || 0;
-            } catch (e) { this.currentStock = 0; }
-        }
-    },
-            
+            updateCurrentStock() {
+                if (this.tecnicoId && this.itemId) {
+                    try {
+                        const tId = parseInt(this.tecnicoId);
+                        const iId = parseInt(this.itemId);
+                        this.currentStock = (this.matrixData[tId] && this.matrixData[tId][iId]) || 0;
+                    } catch (e) { this.currentStock = 0; }
+                }
+            },
+
             get modalTitle() {
-        if (this.tipo === 'ENVIO') return 'Enviar para Técnico';
-        if (this.tipo === 'DEVOLUCAO') return 'Devolução de Material';
-        return 'Ajuste de Inventário';
-    }
+                if (this.tipo === 'ENVIO') return 'Enviar para Técnico';
+                if (this.tipo === 'DEVOLUCAO') return 'Devolução de Material';
+                return 'Ajuste de Inventário';
+            }
         }
     }
 </script>

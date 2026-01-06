@@ -278,36 +278,7 @@ def fechamento_cliente():
         cliente_selecionado=cliente_selecionado
     )
 
-@financeiro_bp.route('/ledger')
-@login_required
-def ledger():
-    from ..models import Tecnico, Lancamento, db
-    tecnicos = Tecnico.query.filter_by(status='Ativo').order_by(Tecnico.nome).all()
-    stats = db.session.query(
-        Lancamento.tecnico_id,
-        db.func.sum(db.case((Lancamento.tipo.in_(['CREDITO_SERVICO', 'BONUS', 'REEMBOLSO']), Lancamento.valor), else_=0)).label('total_creditos'),
-        db.func.sum(db.case((Lancamento.tipo.in_(['DEBITO_PAGAMENTO', 'ADIANTAMENTO', 'MULTA']), Lancamento.valor), else_=0)).label('total_debitos')
-    ).group_by(Lancamento.tecnico_id).all()
-    
-    stats_map = {s.tecnico_id: {'creditos': s.total_creditos or 0, 'debitos': s.total_debitos or 0} for s in stats}
-    dados = []
-    for t in tecnicos:
-        s = stats_map.get(t.id, {'creditos': 0, 'debitos': 0})
-        dados.append({
-            'tecnico': t,
-            'total_creditos': s['creditos'],
-            'total_debitos': s['debitos'],
-            'saldo_atual': t.saldo_atual
-        })
-    return render_template('financeiro_ledger.html', dados=dados, today=datetime.now().date())
 
-@financeiro_bp.route('/extrato/<int:tecnico_id>')
-@login_required
-def extrato(tecnico_id):
-    from ..models import Tecnico, Lancamento
-    tecnico = Tecnico.query.get_or_404(tecnico_id)
-    lancamentos = Lancamento.query.filter_by(tecnico_id=tecnico.id).order_by(Lancamento.data.desc(), Lancamento.id.desc()).all()
-    return render_template('financeiro_extrato.html', tecnico=tecnico, lancamentos=lancamentos)
 
 @financeiro_bp.route('/dashboard/geografico')
 @login_required

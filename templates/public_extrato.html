@@ -68,6 +68,43 @@
         <div class="alert alert-light text-center">Nenhum pagamento registrado ainda.</div>
         {% endfor %}
 
+        <div class="mt-5">
+            <h6 class="text-uppercase text-muted small fw-bold mb-3">Últimes Atendimentos</h6>
+            {% if chamados %}
+            <div class="card shadow-sm border-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="bg-light">
+                            <tr>
+                                <th>Data</th>
+                                <th>Serviço</th>
+                                <th class="text-end">Valor</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for c in chamados %}
+                            <tr>
+                                <td>{{ c.data_atendimento.strftime('%d/%m') }}</td>
+                                <td>
+                                    <div class="fw-medium text-dark">{{ c.catalogo_servico.nome if c.catalogo_servico
+                                        else '-' }}</div>
+                                    <small class="text-muted">{{ c.status_chamado }}</small>
+                                </td>
+                                <td class="text-end text-success fw-bold">
+                                    {% set valor = c.custo_atribuido if c.custo_atribuido is not none else c.valor %}
+                                    R$ {{ "%.2f"|format(valor or 0)|replace('.', ',') }}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% else %}
+            <div class="text-center text-muted p-3">Nenhum atendimento recente.</div>
+            {% endif %}
+        </div>
+
         <div class="text-center mt-5 text-muted small">
             <p>Dúvidas? Entre em contato com o suporte operacional.</p>
         </div>

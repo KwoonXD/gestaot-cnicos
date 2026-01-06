@@ -211,18 +211,21 @@ def novo_tecnico():
 @operacional_bp.route('/tecnicos/<int:id>')
 @login_required
 def tecnico_detalhes(id):
-    from sqlalchemy import case # Import localmente para evitar erro
+    from sqlalchemy import case 
     tecnico = TecnicoService.get_by_id(id)
     
     # 1. Stats Calculation
+    # Definindo termo de valor para reutilização
     val_term = func.coalesce(Chamado.custo_atribuido, Chamado.valor, 0)
+    
     stats = db.session.query(
         func.count(Chamado.id).label('total'),
         func.sum(case(
             (
                 (Chamado.status_chamado.in_(['Concluído', 'SPARE'])) & 
                 (Chamado.pago == False) & 
-                (Chamado.pagamento_id == None), 
+                (Chamado.pagamento_id == None) &
+                (val_term > 0), # Apenas chamados com valor > 0 contam como 'Pendente Financeiro'
                 1
             ), 
             else_=0
@@ -231,12 +234,20 @@ def tecnico_detalhes(id):
             (
                 (Chamado.status_chamado.in_(['Concluído', 'SPARE'])) & 
                 (Chamado.pago == False) & 
-                (Chamado.pagamento_id == None), 
+                (Chamado.pagamento_id == None) &
+                (val_term > 0),
                 val_term
             ), 
             else_=0
         )).label('valor_pendente')
     ).filter_by(tecnico_id=id).first()
+    
+    # Ensure stats has default values (handle None from empty aggregations)
+    stats = {
+        'total': stats.total if stats and stats.total else 0,
+        'pendentes_qtd': stats.pendentes_qtd if stats and stats.pendentes_qtd else 0,
+        'valor_pendente': stats.valor_pendente if stats and stats.valor_pendente else 0.0
+    }
 
     # 2. Pagination for History
     page = request.args.get('page', 1, type=int)
@@ -251,7 +262,7 @@ def tecnico_detalhes(id):
         tecnico=tecnico,
         stats=stats,
         pagination=pagination,
-        chamados=pagination.items, # For compatibility with parts of template that might use 'chamados'
+        chamados=pagination.items,
         pagamentos=pagamentos,
         pagamentos_recentes=pagamentos_recentes,
         sub_tecnicos=sub_tecnicos

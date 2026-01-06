@@ -37,8 +37,8 @@
                     <div class="col-md-5">
                         <label class="form-label fw-bold">Técnico Responsável *</label>
                         <div wire:ignore>
-                            <select id="tecnicoSelect" x-init="initTomSelect()" required>
-                                <option value="">Selecione ou digite...</option>
+                            <select class="form-select" id="tecnicoSelect" x-ref="tecnicoSelect" style="display: none">
+                                <option value="">Selecione...</option>
                                 {% for doc in tecnicos %}
                                 <option value="{{ doc.id }}">{{ doc.nome }} | {{ doc.estado }} - {{ doc.cidade }}
                                 </option>
@@ -52,12 +52,23 @@
                         </div>
                     </div>
 
-                    <div class="col-md-3">
-                        <label class="form-label fw-bold">Data Atendimento *</label>
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold">Data *</label>
                         <input type="date" class="form-control" x-model="logistica.data_atendimento" required>
                     </div>
 
-                    <div class="col-md-4">
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold">Horário *</label>
+                        <div class="d-flex gap-1">
+                            <input type="time" class="form-control px-1 text-center" x-model="logistica.hora_inicio"
+                                required>
+                            <span class="align-self-center">:</span>
+                            <input type="time" class="form-control px-1 text-center" x-model="logistica.hora_fim"
+                                required>
+                        </div>
+                    </div>
+
+                    <div class="col-md-3">
                         <label class="form-label fw-bold">Cliente / Contrato *</label>
                         <select class="form-select" x-model="logistica.cliente_id" @change="onClienteChange()" required>
                             <option value="">Selecione...</option>
@@ -98,7 +109,7 @@
                                 <th style="width: 5%" class="text-center">#</th>
                                 <th style="width: 15%">Código FSA</th>
                                 <th style="width: 25%">Serviço</th>
-                                <th style="width: 15%">Horário</th>
+
                                 <th style="width: 20%">Peça</th>
                                 <th style="width: 10%">Fornecedor</th>
                                 <th style="width: 10%">Custo</th>
@@ -127,15 +138,7 @@
                                         </select>
                                     </td>
 
-                                    <!-- Horário -->
-                                    <td>
-                                        <div class="d-flex gap-1">
-                                            <input type="time" class="form-control form-control-sm"
-                                                x-model="row.hora_inicio" required>
-                                            <input type="time" class="form-control form-control-sm"
-                                                x-model="row.hora_fim" required>
-                                        </div>
-                                    </td>
+
 
                                     <!-- Peça / Estoque Check -->
                                     <td>
@@ -214,6 +217,8 @@
             logistica: {
                 tecnico_id: '',
                 data_atendimento: new Date().toISOString().split('T')[0],
+                hora_inicio: '08:00',
+                hora_fim: '18:00',
                 cliente_id: '',
                 cidade: '',
                 observacoes: ''
@@ -252,6 +257,9 @@
                     alert("Erro ao carregar lista de clientes. Verifique a conexão.");
                 }
 
+                // Inicializa TomSelect
+                this.initTomSelect();
+
                 // Garante que a linha FSA seja criada mesmo sem clientes
                 this.addFsaRow();
             },
@@ -276,6 +284,8 @@
                     placeholder: "Selecione...",
                     onChange: (value) => {
                         this.logistica.tecnico_id = value;
+                        const selectEl = document.getElementById('tecnicoSelect');
+                        if (selectEl) selectEl.value = value;
                         this.checkStock(value);
                     }
                 });
@@ -357,8 +367,7 @@
                 this.fsas.push({
                     codigo_chamado: '',
                     catalogo_servico_id: '',
-                    hora_inicio: '09:00',
-                    hora_fim: '11:00',
+
                     peca_id: '',
                     pect_usada: '', // Name for legacy/reference
                     fornecedor_peca: 'Empresa',
@@ -380,8 +389,32 @@
 
             // --- Submit ---
             async submitForm() {
+                // 1. Validação Logística
+                if (!this.logistica.tecnico_id) {
+                    alert('Selecione um Técnico Responsável.');
+                    return;
+                }
+                if (!this.logistica.cliente_id) {
+                    alert('Selecione um Cliente.');
+                    return;
+                }
+                if (!this.logistica.cidade) {
+                    alert('Informe o Local / Cidade.');
+                    return;
+                }
+
+                // 2. Remove linhas completamente vazias (ghost rows)
+                this.fsas = this.fsas.filter(f => f.codigo_chamado || f.catalogo_servico_id);
+
                 if (this.fsas.length === 0) {
-                    alert('Adicione pelo menos um FSA.');
+                    alert('Adicione pelo menos um FSA válido.');
+                    return;
+                }
+
+                // 2. Validação de Linhas Incompletas (tem um campo mas não o outro)
+                const invalidIndex = this.fsas.findIndex(f => !f.codigo_chamado || !f.catalogo_servico_id);
+                if (invalidIndex !== -1) {
+                    alert(`O FSA da linha ${invalidIndex + 1} está incompleto. Verifique o Código e o Serviço.`);
                     return;
                 }
 
@@ -397,6 +430,8 @@
 
                         return {
                             ...f,
+                            hora_inicio: this.logistica.hora_inicio,
+                            hora_fim: this.logistica.hora_fim,
                             peca_usada: peca ? peca.nome : '',
                             custo_peca: parseFloat(f.custo_peca) || 0
                         };

@@ -169,6 +169,9 @@ class ChamadoService:
         batch_id = str(uuid.uuid4())  # Gera ID único para o lote
         
         try:
+            if not logistica.get('tecnico_id'):
+                 raise ValueError("Técnico não informado.")
+
             # Converte string de data '2025-01-01' para objeto date
             data_atendimento = datetime.strptime(logistica['data_atendimento'], '%Y-%m-%d').date()
         except ValueError:
@@ -282,7 +285,7 @@ class ChamadoService:
                 
                 # Dados FSA
                 codigo_chamado=fsa['codigo_chamado'],
-                catalogo_servico_id=fsa['catalogo_servico_id'],
+                catalogo_servico_id=int(fsa['catalogo_servico_id']) if fsa.get('catalogo_servico_id') else None,
                 hora_inicio=fsa['hora_inicio'],
                 hora_fim=fsa['hora_fim'],
                 is_adicional=is_adicional,
@@ -664,17 +667,26 @@ class ChamadoService:
             chamado.endereco = data.get('endereco', '')
             chamado.observacoes = data.get('observacoes', '')
             
-            # Financeiro Updates 
-            rec_servico = float(data.get('valor_receita_servico', 0.0))
-            rec_peca = float(data.get('valor_receita_peca', 0.0))
+            # Financeiro Updates - Preserve existing values if not in payload
+            if 'valor_receita_servico' in data:
+                rec_servico = float(data.get('valor_receita_servico') or 0.0)
+                chamado.valor_receita_servico = rec_servico
+            else:
+                rec_servico = float(chamado.valor_receita_servico or 0.0)
+                
+            if 'valor_receita_peca' in data:
+                rec_peca = float(data.get('valor_receita_peca') or 0.0)
+                chamado.valor_receita_peca = rec_peca
+            else:
+                rec_peca = float(chamado.valor_receita_peca or 0.0)
             
-            chamado.valor_receita_servico = rec_servico
-            chamado.peca_usada = data.get('peca_usada')
-            chamado.valor_receita_peca = rec_peca
-            chamado.custo_peca = float(data.get('custo_peca', 0.0))
-            chamado.fornecedor_peca = data.get('fornecedor_peca', 'Empresa')
+            # Update Related Fields if provided
+            if 'peca_usada' in data: chamado.peca_usada = data.get('peca_usada')
+            if 'custo_peca' in data: chamado.custo_peca = float(data.get('custo_peca') or 0.0)
+            if 'fornecedor_peca' in data: chamado.fornecedor_peca = data.get('fornecedor_peca')
             
-            chamado.valor = rec_servico + rec_peca
+            chamado.valor_receita_total = rec_servico + rec_peca
+            chamado.valor = chamado.valor_receita_total
             
             # Calculate changes
             changes = {}
