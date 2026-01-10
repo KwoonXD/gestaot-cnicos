@@ -58,72 +58,155 @@ class Tecnico(db.Model):
     pagamentos = db.relationship('Pagamento', backref='tecnico', lazy='dynamic')
     tags = db.relationship('Tag', backref='tecnico')
     
+    # ==========================================================================
+    # PROPRIEDADES SIMPLES (Sem query - OK para uso em loops)
+    # ==========================================================================
+
     @property
     def id_tecnico(self):
         return f"T-{str(self.id).zfill(3)}"
-    
+
     @property
     def localizacao(self):
         return f"{self.cidade}/{self.estado}"
-    
+
     @property
     def identificacao_completa(self):
         return f"[{self.id_tecnico}] {self.nome} - {self.localizacao}"
-    
+
+    # ==========================================================================
+    # PROPRIEDADES AGREGADAS (Usam cache se disponivel, senao fazem query)
+    # AVISO: NAO use em loops! Use TecnicoService.get_tecnicos_com_metricas()
+    # ==========================================================================
+
     @property
     def total_atendimentos(self):
+        """
+        DEPRECATED em loops: Use TecnicoService.get_tecnicos_com_metricas()
+        """
+        if hasattr(self, '_metricas'):
+            return self._metricas.total_atendimentos
+        # Fallback para query (uso individual apenas)
         return self.chamados.count()
-    
+
     @property
     def total_atendimentos_concluidos(self):
+        """
+        DEPRECATED em loops: Use TecnicoService.get_tecnicos_com_metricas()
+        """
+        if hasattr(self, '_metricas'):
+            return self._metricas.total_atendimentos_concluidos
+        # Fallback para query (uso individual apenas)
         return self.chamados.filter(Chamado.status_chamado.in_(['Concluído', 'SPARE'])).count()
-    
+
     @property
     def total_atendimentos_nao_pagos(self):
-        return self.chamados.filter(Chamado.status_chamado.in_(['Concluído', 'SPARE']), Chamado.pago == False).count()
+        """
+        DEPRECATED em loops: Use TecnicoService.get_tecnicos_com_metricas()
+        """
+        if hasattr(self, '_metricas'):
+            return self._metricas.total_atendimentos_nao_pagos
+        # Fallback para query (uso individual apenas)
+        return self.chamados.filter(
+            Chamado.status_chamado.in_(['Concluído', 'SPARE']),
+            Chamado.pago == False
+        ).count()
 
     @property
     def total_a_pagar(self):
-        # AVISO: Não use isso dentro de loops de listagem (use a query otimizada do Service).
-        # Use apenas para exibir um técnico individualmente.
+        """
+        DEPRECATED em loops: Use TecnicoService.get_tecnicos_com_metricas()
+        Retorna valor cacheado se disponivel (injetado pelo Service).
+        """
+        # 1. Cache injetado pelo Service (preferido)
         if hasattr(self, 'total_a_pagar_cache'):
-             return self.total_a_pagar_cache
+            return self.total_a_pagar_cache
 
-        query = self.chamados.filter(
+        # 2. Metricas pre-calculadas
+        if hasattr(self, '_metricas'):
+            return self._metricas.total_a_pagar
+
+        # 3. Fallback: Query (LENTO - usar apenas para tecnico individual)
+        from sqlalchemy import func
+        from . import db  # Import local para evitar circular
+
+        result = db.session.query(
+            func.sum(func.coalesce(Chamado.custo_atribuido, Chamado.valor, 0))
+        ).filter(
+            Chamado.tecnico_id == self.id,
             Chamado.status_chamado.in_(['Concluído', 'SPARE']),
             Chamado.status_validacao == 'Aprovado',
             Chamado.pago == False,
             Chamado.pagamento_id == None
-        )
-        # Use custo_atribuido (New) or valor (Legacy)
-        return sum(float(c.custo_atribuido if c.custo_atribuido is not None else c.valor or 0) for c in query)
+        ).scalar()
+
+        return float(result or 0)
+
+    @property
+    def status_pagamento(self):
+        """Derivado de total_a_pagar (usa cache se disponivel)."""
+        return "Pendente" if self.total_a_pagar > 0 else "Pago"
+
+    # ==========================================================================
+    # PROPRIEDADES REMOVIDAS/DEPRECATED (Causavam N+1 grave)
+    # Usar TecnicoService.get_pendencias() em vez disso
+    # ==========================================================================
 
     @property
     def pending_chamados_list(self):
-        """Helper to get all pending chamados objects efficiently."""
+        """
+        DEPRECATED: Causa N+1 queries em loops.
+        Use TecnicoService.get_pendencias(tecnico_id) em vez disso.
+        """
+        import warnings
+        warnings.warn(
+            "pending_chamados_list e deprecated. Use TecnicoService.get_pendencias()",
+            DeprecationWarning,
+            stacklevel=2
+        )
         if self.tecnico_principal_id:
             return []
-            
-        chamados = list(self.chamados.filter(Chamado.status_chamado.in_(['Concluído', 'SPARE']), Chamado.status_validacao == 'Aprovado', Chamado.pago == False, Chamado.pagamento_id == None))
+
+        chamados = list(self.chamados.filter(
+            Chamado.status_chamado.in_(['Concluído', 'SPARE']),
+            Chamado.status_validacao == 'Aprovado',
+            Chamado.pago == False,
+            Chamado.pagamento_id == None
+        ))
         for sub in self.sub_tecnicos:
-            chamados.extend(list(sub.chamados.filter(Chamado.status_chamado.in_(['Concluído', 'SPARE']), Chamado.status_validacao == 'Aprovado', Chamado.pago == False, Chamado.pagamento_id == None)))
+            chamados.extend(list(sub.chamados.filter(
+                Chamado.status_chamado.in_(['Concluído', 'SPARE']),
+                Chamado.status_validacao == 'Aprovado',
+                Chamado.pago == False,
+                Chamado.pagamento_id == None
+            )))
         return chamados
 
     @property
     def pending_fsas(self):
+        """
+        DEPRECATED: Depende de pending_chamados_list.
+        Use TecnicoService.get_pending_fsas(tecnico_id) em vez disso.
+        """
         codes = []
         for c in self.pending_chamados_list:
             if c.codigo_chamado:
                 codes.append(c.codigo_chamado)
             if c.fsa_codes:
-                # fsa_codes might be comma separated or single
                 extras = [x.strip() for x in c.fsa_codes.replace(';', ',').split(',') if x.strip()]
                 codes.extend(extras)
-        # Unique and sorted
         return sorted(list(set(codes)))
 
     @property
     def oldest_pending_atendimento(self):
+        """
+        DEPRECATED em loops: Use metricas do Service.
+        """
+        if hasattr(self, '_metricas') and self._metricas.oldest_pending_date:
+            return self._metricas.oldest_pending_date
+        if hasattr(self, '_metricas_detalhe') and self._metricas_detalhe.get('oldest_pending_date'):
+            return self._metricas_detalhe['oldest_pending_date']
+        # Fallback
         chamados = self.pending_chamados_list
         if not chamados:
             return None
@@ -132,14 +215,21 @@ class Tecnico(db.Model):
 
     @property
     def oldest_pending_criacao(self):
+        """DEPRECATED: Use metricas do Service."""
         chamados = self.pending_chamados_list
         if not chamados:
             return None
         dates = [c.data_criacao for c in chamados if c.data_criacao]
         return min(dates) if dates else None
-    
+
     @property
     def newest_pending_atendimento(self):
+        """DEPRECATED em loops: Use metricas do Service."""
+        if hasattr(self, '_metricas') and self._metricas.newest_pending_date:
+            return self._metricas.newest_pending_date
+        if hasattr(self, '_metricas_detalhe') and self._metricas_detalhe.get('newest_pending_date'):
+            return self._metricas_detalhe['newest_pending_date']
+        # Fallback
         chamados = self.pending_chamados_list
         if not chamados:
             return None
@@ -148,18 +238,26 @@ class Tecnico(db.Model):
 
     @property
     def newest_pending_criacao(self):
+        """DEPRECATED: Use metricas do Service."""
         chamados = self.pending_chamados_list
         if not chamados:
             return None
         dates = [c.data_criacao for c in chamados if c.data_criacao]
         return max(dates) if dates else None
 
-    @property
-    def status_pagamento(self):
-        return "Pendente" if self.total_a_pagar > 0 else "Pago"
-    
-    def to_dict(self):
-        return {
+    # ==========================================================================
+    # SERIALIZACAO
+    # ==========================================================================
+
+    def to_dict(self, include_heavy=False):
+        """
+        Serializa tecnico para dict.
+
+        Args:
+            include_heavy: Se True, inclui campos que podem causar queries.
+                          Use apenas para tecnico individual, nunca em listas.
+        """
+        data = {
             'id': self.id,
             'id_tecnico': self.id_tecnico,
             'nome': self.nome,
@@ -168,20 +266,29 @@ class Tecnico(db.Model):
             'estado': self.estado,
             'localizacao': self.localizacao,
             'status': self.status,
-            'valor_por_atendimento': float(self.valor_por_atendimento),
+            'valor_por_atendimento': float(self.valor_por_atendimento or 0),
+            'valor_adicional_loja': float(self.valor_adicional_loja or 0),
+            'valor_hora_adicional': float(self.valor_hora_adicional or 0),
             'forma_pagamento': self.forma_pagamento,
             'chave_pagamento': self.chave_pagamento,
             'tecnico_principal_id': self.tecnico_principal_id,
             'tecnico_principal_nome': self.tecnico_principal.nome if self.tecnico_principal else None,
             'data_inicio': self.data_inicio.isoformat() if self.data_inicio else None,
             'data_cadastro': self.data_cadastro.isoformat() if self.data_cadastro else None,
-            'total_atendimentos': self.total_atendimentos,
-            'total_atendimentos_concluidos': self.total_atendimentos_concluidos,
-            'total_atendimentos_nao_pagos': self.total_atendimentos_nao_pagos,
-            'total_a_pagar': self.total_a_pagar,
-            'status_pagamento': self.status_pagamento,
             'tags': [t.to_dict() for t in self.tags]
         }
+
+        # Campos agregados (apenas se cache disponivel ou solicitado)
+        if include_heavy or hasattr(self, 'total_a_pagar_cache') or hasattr(self, '_metricas'):
+            data.update({
+                'total_atendimentos': self.total_atendimentos,
+                'total_atendimentos_concluidos': self.total_atendimentos_concluidos,
+                'total_atendimentos_nao_pagos': self.total_atendimentos_nao_pagos,
+                'total_a_pagar': self.total_a_pagar,
+                'status_pagamento': self.status_pagamento,
+            })
+
+        return data
 
 
 class Chamado(db.Model):
