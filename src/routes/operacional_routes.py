@@ -156,16 +156,20 @@ def tecnicos():
 @operacional_bp.route('/tecnicos/exportar')
 @login_required
 def exportar_tecnicos():
-    tecnicos = TecnicoService.get_all(page=None)
-    
+    # CORRIGIDO: Usar get_tecnicos_com_metricas() para ter total_a_pagar correto
+    from ..services.tecnico_service import TecnicoMetricas
+    result = TecnicoService.get_tecnicos_com_metricas(page=None)
+    metricas_list = result['items']  # Lista de TecnicoMetricas
+
     output = io.StringIO()
     writer = csv.writer(output, delimiter=';')
-    
+
     # Header
     writer.writerow(['ID', 'Nome', 'Cidade', 'Estado', 'Status', 'Valor/Atendimento', 'Banco', 'Chave', 'Total a Pagar', 'Tags'])
-    
-    # Rows
-    for t in tecnicos:
+
+    # Rows - usar TecnicoMetricas para acesso otimizado
+    for m in metricas_list:
+        t = m.tecnico
         tags_str = ", ".join([tag.nome for tag in t.tags])
         writer.writerow([
             t.id_tecnico,
@@ -173,10 +177,10 @@ def exportar_tecnicos():
             t.cidade,
             t.estado,
             t.status,
-            f"R$ {t.valor_por_atendimento:.2f}".replace('.', ','),
+            f"R$ {float(t.valor_por_atendimento or 0):.2f}".replace('.', ','),
             t.forma_pagamento or '-',
             t.chave_pagamento or '-',
-            f"R$ {t.total_a_pagar:.2f}".replace('.', ','),
+            f"R$ {m.total_a_pagar_agregado:.2f}".replace('.', ','),
             tags_str
         ])
     
@@ -198,8 +202,8 @@ def novo_tecnico():
         except Exception as e:
             flash(f'Erro ao cadastrar técnico: {str(e)}', 'danger')
     
-    tecnicos_principais = TecnicoService.get_all({'status': 'Ativo'})
-    
+    tecnicos_principais = TecnicoService.get_all({'status': 'Ativo'}, page=None)
+
     return render_template('tecnico_form.html',
         tecnico=None,
         estados=ESTADOS_BRASIL,
@@ -281,9 +285,9 @@ def editar_tecnico(id):
         except Exception as e:
             flash(f'Erro ao atualizar técnico: {str(e)}', 'danger')
     
-    tecnicos_principais = TecnicoService.get_all({'status': 'Ativo'})
+    tecnicos_principais = TecnicoService.get_all({'status': 'Ativo'}, page=None)
     tecnicos_principais = [t for t in tecnicos_principais if t.id != id]
-    
+
     return render_template('tecnico_form.html',
         tecnico=tecnico,
         estados=ESTADOS_BRASIL,
@@ -383,17 +387,17 @@ def novo_chamado():
             return redirect(url_for('operacional.chamados'))
         except Exception as e:
             flash(f'Erro: {str(e)}', 'warning')
-            
+
             # Repopulate form data for template
-            tecnicos = TecnicoService.get_all({'status': 'Ativo'})
+            tecnicos = TecnicoService.get_all({'status': 'Ativo'}, page=None)
             return render_template('chamado_form.html',
-                chamado=request.form, # Pass dictionary/ImmutableMultiDict directly
+                chamado=request.form,  # Pass dictionary/ImmutableMultiDict directly
                 tecnicos=tecnicos,
                 tipos_servico=get_tipos_servico(),
                 status_options=STATUS_CHAMADO
             )
-    
-    tecnicos = TecnicoService.get_all({'status': 'Ativo'})
+
+    tecnicos = TecnicoService.get_all({'status': 'Ativo'}, page=None)
     return render_template('chamado_form.html',
         chamado=None,
         tecnicos=tecnicos,
@@ -405,7 +409,7 @@ def novo_chamado():
 @login_required
 def editar_chamado(id):
     chamado = ChamadoService.get_by_id(id)
-    
+
     if request.method == 'POST':
         try:
             ChamadoService.update(id, request.form)
@@ -413,8 +417,8 @@ def editar_chamado(id):
             return redirect(url_for('operacional.chamados'))
         except Exception as e:
             flash(f'Erro ao atualizar chamado: {str(e)}', 'danger')
-    
-    tecnicos = TecnicoService.get_all({'status': 'Ativo'})
+
+    tecnicos = TecnicoService.get_all({'status': 'Ativo'}, page=None)
     return render_template('chamado_form.html',
         chamado=chamado,
         tecnicos=tecnicos,

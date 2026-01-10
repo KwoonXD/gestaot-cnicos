@@ -14,10 +14,10 @@ def controle_estoque():
     # 1. Carrega itens (Gerais - sem cliente específico ou todos se preferir)
     # Ajuste: Mostra itens gerais (cliente_id=None) para o almoxarifado central
     itens = ItemLPU.query.filter_by(cliente_id=None).order_by(ItemLPU.nome).all()
-    
-    # 2. Carrega Técnicos
-    tecnicos = TecnicoService.get_all()
-    
+
+    # 2. Carrega Técnicos (CORRIGIDO: page=None para retornar lista)
+    tecnicos = TecnicoService.get_all({'status': 'Ativo'}, page=None)
+
     # 3. Matriz de Estoque
     stock_data = TecnicoStock.query.all()
     matrix = {}
@@ -26,8 +26,8 @@ def controle_estoque():
             matrix[s.tecnico_id] = {}
         matrix[s.tecnico_id][s.item_lpu_id] = s.quantidade
 
-    return render_template('stock_control.html', 
-        itens=itens, 
+    return render_template('stock_control.html',
+        itens=itens,
         tecnicos=tecnicos,
         matrix=matrix
     )
