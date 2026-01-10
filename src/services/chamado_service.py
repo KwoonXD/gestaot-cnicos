@@ -3,16 +3,19 @@ from ..models import db, Chamado, Tecnico, CatalogoServico, ItemLPU, Cliente, Te
 from datetime import datetime
 from flask_login import current_user
 from .audit_service import AuditService
+from .pricing_service import PricingService
 import uuid
 import re
 from sqlalchemy.orm import joinedload
 from sqlalchemy import or_, func
 
-# Constantes de Negócio
-HORAS_FRANQUIA_PADRAO = 2.0
-VALOR_HORA_EXTRA_DEFAULT = 30.00
-VALOR_ATENDIMENTO_BASE = 120.00
-VALOR_ADICIONAL_LOJA = 20.00
+# Constantes de Negocio (Importadas do PricingService para compatibilidade)
+from .pricing_service import (
+    HORAS_FRANQUIA_PADRAO,
+    VALOR_HORA_EXTRA_DEFAULT,
+    VALOR_ATENDIMENTO_BASE,
+    VALOR_ADICIONAL_LOJA
+)
 
 class ChamadoService:
 
@@ -48,32 +51,9 @@ class ChamadoService:
     def calculate_hours_worked(hora_inicio, hora_fim):
         """
         Calcula horas trabalhadas a partir de strings "HH:MM".
-        Retorna float (ex: 2.5 para 2h30m).
-        Tratamento: Se fim < início, assume virada de dia (+24h).
+        DELEGADO ao PricingService para manter logica unificada.
         """
-        if not hora_inicio or not hora_fim:
-            return HORAS_FRANQUIA_PADRAO  # Default
-        
-        try:
-            from datetime import timedelta
-            
-            # Parse strings
-            inicio = datetime.strptime(hora_inicio.strip(), '%H:%M')
-            fim = datetime.strptime(hora_fim.strip(), '%H:%M')
-            
-            # Calcula diferença
-            diff = fim - inicio
-            
-            # Se negativo, assumir virada de dia
-            if diff.total_seconds() < 0:
-                diff = diff + timedelta(hours=24)
-            
-            # Converte para horas decimais
-            horas = diff.total_seconds() / 3600
-            return round(horas, 2)
-        except Exception as e:
-            print(f"Erro ao calcular horas: {e}")
-            return 2.0  # Default em caso de erro
+        return PricingService.calculate_hours_worked(hora_inicio, hora_fim)
 
     @staticmethod
     def get_all(filters=None, page=1, per_page=20):
@@ -162,22 +142,24 @@ class ChamadoService:
     @staticmethod
     def create_multiplo(logistica, fsas):
         """
-        Cria chamados em lote, aplica regras de precificação (Primeiro vs Adicional)
+        Cria chamados em lote, aplica regras de precificacao (Primeiro vs Adicional)
         e baixa estoque automaticamente.
+
+        REFATORADO (2025): Usa PricingService para calculo unificado de custos.
         """
         criados = []
-        batch_id = str(uuid.uuid4())  # Gera ID único para o lote
-        
+        batch_id = str(uuid.uuid4())  # Gera ID unico para o lote
+
         try:
             if not logistica.get('tecnico_id'):
-                 raise ValueError("Técnico não informado.")
+                raise ValueError("Tecnico nao informado.")
 
             # Converte string de data '2025-01-01' para objeto date
             data_atendimento = datetime.strptime(logistica['data_atendimento'], '%Y-%m-%d').date()
         except ValueError:
             data_atendimento = datetime.now().date()
-            
-        # 1. Pre-fetch Serviços e Ordenação (Priorizar maior valor receita como Principal)
+
+        # 1. Pre-fetch Servicos
         service_ids = []
         for f in fsas:
             try:
@@ -185,95 +167,53 @@ class ChamadoService:
                     service_ids.append(int(f.get('catalogo_servico_id')))
             except (ValueError, TypeError):
                 continue
-                
+
         services_map = {s.id: s for s in CatalogoServico.query.filter(CatalogoServico.id.in_(service_ids)).all()}
-        
-        def get_service_value(fsa):
-            try:
-                sid = int(fsa.get('catalogo_servico_id') or 0)
-                if sid in services_map:
-                    return float(services_map[sid].valor_receita or 0)
-            except (ValueError, TypeError):
-                pass
-            return 0.0
-            
-        # Ordena FSAs por valor decrescente para garantir que o mais caro pague cheio
-        fsas.sort(key=get_service_value, reverse=True)
-        
-        is_first_slot_available = True
-        
-        for fsa in fsas:
-            # --- Lógica de Estoque (Baixa automática) ---
+
+        # 2. USAR PRICING SERVICE para calcular custos (Logica Unificada)
+        resultados_pricing = PricingService.processar_criacao_multipla(
+            fsas=fsas,
+            logistica=logistica,
+            services_map=services_map
+        )
+
+        # 3. Criar chamados com valores calculados pelo PricingService
+        for resultado in resultados_pricing:
+            fsa = resultado['fsa']
+
+            # --- Logica de Estoque (Baixa automatica) ---
             peca_nome = ""
             custo_peca = 0.0
-            
+
             if fsa.get('peca_id'):
                 item = ItemLPU.query.get(fsa['peca_id'])
                 if item:
                     peca_nome = item.nome
-                    
-                    # Se Fornecedor = Empresa -> Baixa Estoque Técnico
+
+                    # Se Fornecedor = Empresa -> Baixa Estoque Tecnico
                     if fsa.get('fornecedor_peca') == 'Empresa':
                         estoque = TecnicoStock.query.filter_by(
-                            tecnico_id=logistica['tecnico_id'], 
+                            tecnico_id=logistica['tecnico_id'],
                             item_lpu_id=item.id
                         ).first()
-                        
+
                         if estoque and estoque.quantidade > 0:
                             estoque.quantidade -= 1
                             db.session.add(estoque)
-                    
-                    # Se Fornecedor = Técnico -> Reembolso (Custo)
+
+                    # Se Fornecedor = Tecnico -> Reembolso (Custo)
                     elif fsa.get('fornecedor_peca') == 'Tecnico':
                         custo_peca = float(fsa.get('custo_peca', 0))
 
-            # --- Lógica Financeira (Receita x Custo) ---
-            valor_receita_servico = 0.0
-            custo_tecnico_servico = 0.0
-            is_adicional = False
-            
+            # Valores calculados pelo PricingService
+            valor_receita_servico = resultado['valor_receita_servico']
+            valor_receita_total = resultado['valor_receita_total']
+            custo_atribuido = resultado['custo_atribuido']
+            horas_trabalhadas = resultado['horas_trabalhadas']
+            is_adicional = resultado['is_adicional']
 
-            try:
-                sid = int(fsa.get('catalogo_servico_id') or 0)
-                servico = services_map.get(sid)
-            except (ValueError, TypeError):
-                servico = None
-            
-            if servico:
-
-                # --- Cálculo de Horas e Extras ---
-                horas_trabalhadas = ChamadoService.calculate_hours_worked(fsa['hora_inicio'], fsa['hora_fim'])
-                horas_franquia = float(servico.horas_franquia or 2.0)
-                horas_extras = max(0.0, horas_trabalhadas - horas_franquia)
-                
-                he_receita = horas_extras * float(servico.valor_hora_adicional_receita or 0.0)
-                he_custo = horas_extras * float(servico.valor_hora_adicional_custo or 0.0)
-
-                if servico.pagamento_integral:
-                    valor_receita_servico = float(servico.valor_receita or 0.0)
-                    custo_tecnico_servico = float(servico.valor_custo_tecnico or 0.0)
-                else:
-                    if is_first_slot_available:
-                        # 1º Chamado do Lote (Full Price)
-                        valor_receita_servico = float(servico.valor_receita or 0.0)
-                        custo_tecnico_servico = float(servico.valor_custo_tecnico or 0.0)
-                        is_first_slot_available = False
-                    else:
-                        # Chamados Adicionais (Preço Reduzido/Adicional)
-                        valor_receita_servico = float(servico.valor_adicional_receita or 0.0)
-                        custo_tecnico_servico = float(servico.valor_adicional_custo or 0.0)
-                        is_adicional = True
-                
-                # Soma Extras ao final
-                valor_receita_servico += he_receita
-                custo_tecnico_servico += he_custo
-            else:
-                 horas_trabalhadas = 0.0
-                 horas_extras = 0.0
-            
             # Totais
-            valor_receita_total = valor_receita_servico # + futuramente receita de peça
-            valor_legacy = valor_receita_total # Campo 'valor' mantém compatibilidade com Receita
+            valor_legacy = valor_receita_total  # Campo 'valor' mantem compatibilidade
 
             # Cria o Chamado
             novo_chamado = Chamado(
@@ -282,29 +222,29 @@ class ChamadoService:
                 cidade=logistica['cidade'],
                 data_atendimento=data_atendimento,
                 observacoes=logistica.get('observacoes'),
-                
+
                 # Dados FSA
                 codigo_chamado=fsa['codigo_chamado'],
                 catalogo_servico_id=int(fsa['catalogo_servico_id']) if fsa.get('catalogo_servico_id') else None,
-                hora_inicio=fsa['hora_inicio'],
-                hora_fim=fsa['hora_fim'],
+                hora_inicio=fsa.get('hora_inicio'),
+                hora_fim=fsa.get('hora_fim'),
                 is_adicional=is_adicional,
-                
-                # Peças
+
+                # Pecas
                 peca_usada=peca_nome,
                 custo_peca=custo_peca,
                 fornecedor_peca=fsa.get('fornecedor_peca', 'Empresa'),
-                
-                # Financeiro - RECEITA
+
+                # Financeiro - RECEITA (Calculado pelo PricingService)
                 valor_receita_servico=valor_receita_servico,
                 valor_receita_total=valor_receita_total,
-                valor=valor_legacy, # Legado
-                
-                # Financeiro - CUSTO (Novo)
-                custo_atribuido=custo_tecnico_servico,
+                valor=valor_legacy,  # Legado
+
+                # Financeiro - CUSTO (Calculado pelo PricingService)
+                custo_atribuido=custo_atribuido,
 
                 created_by_id=current_user.id,
-                status_chamado='Concluído', 
+                status_chamado='Concluído',
                 status_validacao='Pendente',
                 batch_id=batch_id
             )

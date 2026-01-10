@@ -2,70 +2,25 @@ from datetime import datetime
 import calendar
 from sqlalchemy import func
 # Importamos o executor global que criamos acima
-from src import executor, db 
+from src import executor, db
 from src.models import Chamado, Pagamento, Tecnico
+from src.services.pricing_service import PricingService
 
-# Função auxiliar de cálculo
+
+# Funcao auxiliar de calculo - DELEGADA ao PricingService
 def processar_custos_chamados(chamados, tecnico):
     """
-    Novo Modelo de Cálculo (2025):
-    Agrupamento: (tecnico_id, data_atendimento, cidade)
+    Calcula custos de chamados aplicando regras de LOTE.
+
+    REFATORADO (2025): Delega ao PricingService para logica unificada.
+
     Regras:
-    1. 'Falha' ou 'Falha Operacional' => Paga 0.00
-    2. 'Retorno SPARE' => Paga valor cheio (R$ 120 ou valor_por_atendimento)
-    3. Demais Casos (Atendimento Normal):
-       - Primeiro chamado do grupo: Valor Cheio
-       - Próximos chamados do grupo: Valor Adicional
+    1. Agrupamento por (data_atendimento, cidade)
+    2. 1o chamado do lote: valor cheio
+    3. Demais: valor adicional
+    4. Excecoes: paga_tecnico=False, pagamento_integral=True
     """
-    total_pagamento = 0.0
-    
-    from collections import defaultdict
-    grupos = defaultdict(list)
-    
-    for c in chamados:
-        # Usar cidade como agrupador principal, fallback para loja
-        city_key = getattr(c, 'cidade', None) or c.loja or "INDEFINIDO"
-        key = (c.data_atendimento, city_key)
-        grupos[key].append(c)
-        
-    for key, lista in grupos.items():
-        ja_pagou_principal = False
-        lista.sort(key=lambda x: x.id)
-        
-        for c in lista:
-            valor_a_pagar = 0.0
-            # --- Refatorado: Uso de Custos do Contrato (CatalogoServico) ---
-            catalogo = c.catalogo_servico
-            
-            # Default or Legacy values (Fallback to Tecnico default if no service defined)
-            paga_tecnico = catalogo.paga_tecnico if catalogo else True
-            pagamento_integral = catalogo.pagamento_integral if catalogo else False
-            
-            # Determine values to use
-            val_base = float(catalogo.valor_custo_tecnico) if catalogo else float(tecnico.valor_por_atendimento)
-            val_adic = float(catalogo.valor_adicional_custo) if catalogo else float(tecnico.valor_adicional_loja)
-
-            if not paga_tecnico:
-                 valor_a_pagar = 0.0
-            elif pagamento_integral:
-                 # Paga cheio sempre (ignora regra de lote)
-                 valor_a_pagar = val_base
-            else:
-                # Regra Padrão (Principal vs Adicional)
-                if not ja_pagou_principal:
-                    valor_a_pagar = val_base
-                    ja_pagou_principal = True
-                else:
-                    valor_a_pagar = val_adic
-
-            # Reembolso de Peça (Sempre paga se Tec comprou)
-            if getattr(c, 'fornecedor_peca', None) == 'Tecnico':
-                valor_a_pagar += float(c.custo_peca or 0.0)
-                
-            c.custo_atribuido = valor_a_pagar
-            total_pagamento += valor_a_pagar
-
-    return total_pagamento
+    return PricingService.processar_fechamento(chamados, tecnico)
 
 # Função isolada (fora da classe) para rodar em background
 def task_processar_lote(tecnicos_ids, inicio_str, fim_str):
@@ -324,67 +279,23 @@ class FinanceiroService:
     @staticmethod
     def registrar_credito_servico(chamado):
         """
-        Calcula o valor do serviço (considerando regras de lote dia/cidade) e lança crédito.
-        Deve ser chamado quando o chamado é APROVADO.
+        Calcula o valor do servico (considerando regras de lote dia/cidade).
+        Deve ser chamado quando o chamado e APROVADO.
+
+        REFATORADO (2025): Usa PricingService para calculo unificado.
         """
         tecnico = chamado.tecnico
         if not tecnico and chamado.tecnico_id:
             tecnico = Tecnico.query.get(chamado.tecnico_id)
-            
+
         if not tecnico:
             return None
-        
-        # 1. Calcular Valor (Lógica Simplificada de Lote em Tempo Real)
-        # Verifica se já existe outro chamado PAGAVEL (Aprovado/Concluido) no mesmo dia e cidade/loja
-        # que NÃO seja este mesmo chamado.
-        
-        # Chave de agrupamento: Data + (Cidade ou Loja)
-        city_key = chamado.cidade if chamado.cidade and chamado.cidade != 'Indefinido' else chamado.loja
-        
-        outros_chamados_dia = Chamado.query.filter(
-            Chamado.tecnico_id == chamado.tecnico_id,
-            Chamado.data_atendimento == chamado.data_atendimento,
-            Chamado.status_chamado == 'Concluído',
-            Chamado.status_validacao == 'Aprovado',
-            Chamado.id != chamado.id
-        ).all()
-        
-        # Filtra por cidade/loja (Python side filtering for complex logic OR)
-        outros_no_lote = [c for c in outros_chamados_dia if (getattr(c, 'cidade', '') == chamado.cidade or getattr(c, 'loja', '') == chamado.loja)]
-        
-        is_primeiro = len(outros_no_lote) == 0
-        
-        valor_base = 0.0
-        descricao = f"Crédito ref. Chamado {chamado.codigo_chamado or chamado.id}"
-        
-        # Regras Específicas
-        tipo_res = chamado.tipo_resolucao or ''
-        
-        catalogo = chamado.catalogo_servico
-        val_base = float(catalogo.valor_custo_tecnico) if catalogo else float(tecnico.valor_por_atendimento)
-        val_adic = float(catalogo.valor_adicional_custo) if catalogo else float(tecnico.valor_adicional_loja)
 
-        if 'Falha' in tipo_res:
-             valor_base = 0.0
-             descricao += " (Falha - R$ 0,00)"
-        elif 'Retorno SPARE' in tipo_res or (catalogo and catalogo.pagamento_integral):
-             valor_base = val_base
-             descricao += " (Valor Cheio/Integral)"
-        else:
-            if is_primeiro:
-                valor_base = val_base
-                descricao += " (Base)"
-            else:
-                valor_base = val_adic
-                descricao += " (Adicional)"
-                
-        # Adicionar Custo Peça (Reembolso)
-        if chamado.fornecedor_peca == 'Tecnico' and chamado.custo_peca:
-             valor_base += float(chamado.custo_peca)
-             descricao += f" + Peça (R$ {chamado.custo_peca})"
+        # USAR PRICING SERVICE para calculo em tempo real
+        custo_calculado = PricingService.calcular_custo_tempo_real(chamado, tecnico)
 
-        chamado.custo_atribuido = valor_base
-        
+        chamado.custo_atribuido = custo_calculado
+
         # NOTE: Ledger (Lancamento) removed. Payment is calculated on demand via Chamado.custo_atribuido.
         db.session.commit()
         return None
