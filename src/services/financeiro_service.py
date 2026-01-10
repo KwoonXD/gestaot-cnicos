@@ -1,10 +1,14 @@
 from datetime import datetime
 import calendar
+import logging
 from sqlalchemy import func
 # Importamos o executor global que criamos acima
 from src import executor, db
 from src.models import Chamado, Pagamento, Tecnico
 from src.services.pricing_service import PricingService
+
+# Logger dedicado para tarefas de background (funciona fora do app_context)
+logger = logging.getLogger(__name__)
 
 
 # Funcao auxiliar de calculo - DELEGADA ao PricingService
@@ -22,9 +26,43 @@ def processar_custos_chamados(chamados, tecnico):
     """
     return PricingService.processar_fechamento(chamados, tecnico)
 
+
+def garantir_custo_atribuido(chamados, tecnico):
+    """
+    INTEGRIDADE FINANCEIRA (P3): Garante que todo chamado tenha custo_atribuido.
+
+    Se algum chamado nao tiver custo_atribuido definido (None ou 0 quando deveria ter valor),
+    recalcula via PricingService antes de prosseguir com o pagamento.
+
+    Args:
+        chamados: Lista de Chamado a verificar
+        tecnico: Tecnico responsavel (para obter valores base)
+
+    Returns:
+        int: Quantidade de chamados que foram recalculados
+    """
+    recalculados = 0
+
+    for chamado in chamados:
+        # Verifica se custo_atribuido esta ausente ou invalido
+        if chamado.custo_atribuido is None:
+            # Recalcula usando PricingService
+            custo = PricingService.calcular_custo_tempo_real(chamado, tecnico)
+            chamado.custo_atribuido = custo
+            recalculados += 1
+            logger.warning(
+                f"[INTEGRIDADE] Chamado {chamado.id} estava sem custo_atribuido. "
+                f"Recalculado para R$ {custo:.2f}"
+            )
+
+    if recalculados > 0:
+        logger.info(f"[INTEGRIDADE] {recalculados} chamados tiveram custo_atribuido recalculado.")
+
+    return recalculados
+
 # Função isolada (fora da classe) para rodar em background
 def task_processar_lote(tecnicos_ids, inicio_str, fim_str):
-    print(f"--> Iniciando processamento background para {len(tecnicos_ids)} técnicos.")
+    logger.info(f"[LOTE] Iniciando processamento background para {len(tecnicos_ids)} tecnicos.")
     
     inicio = datetime.strptime(inicio_str, '%Y-%m-%d').date()
     fim = datetime.strptime(fim_str, '%Y-%m-%d').date()
@@ -68,10 +106,13 @@ def task_processar_lote(tecnicos_ids, inicio_str, fim_str):
             
             if not chamados_todos:
                 continue
-            
-            # Processar Custos (Agrupamento)
+
+            # Processar Custos (Agrupamento por Lote)
             processar_custos_chamados(chamados_todos, tecnico)
-                
+
+            # P3: INTEGRIDADE - Garantir que todos tenham custo_atribuido
+            garantir_custo_atribuido(chamados_todos, tecnico)
+
             pagamento = Pagamento(
                 tecnico_id=tecnico.id,
                 periodo_inicio=inicio,
@@ -90,11 +131,11 @@ def task_processar_lote(tecnicos_ids, inicio_str, fim_str):
             count += 1
             
         db.session.commit()
-        print(f"--> Lote finalizado. {count} pagamentos gerados.")
-        
+        logger.info(f"[LOTE] Finalizado com sucesso. {count} pagamentos gerados.")
+
     except Exception as e:
         db.session.rollback()
-        print(f"--> Erro no lote: {str(e)}")
+        logger.exception(f"[LOTE] Erro durante processamento: {str(e)}")
 
 class FinanceiroService:
     @staticmethod
@@ -218,10 +259,13 @@ class FinanceiroService:
         dates = [c.data_atendimento for c in chamados_todos]
         periodo_inicio = min(dates)
         periodo_fim = max(dates)
-        
-        # Processar Custos (Agrupamento)
+
+        # Processar Custos (Agrupamento por Lote)
         processar_custos_chamados(chamados_todos, tecnico)
-            
+
+        # P3: INTEGRIDADE - Garantir que todos tenham custo_atribuido
+        garantir_custo_atribuido(chamados_todos, tecnico)
+
         pagamento = Pagamento(
             tecnico_id=tecnico_id,
             periodo_inicio=periodo_inicio,
@@ -257,24 +301,51 @@ class FinanceiroService:
 
     @staticmethod
     def criar_lancamento(data):
-        lancamento = Lancamento(
-            tecnico_id=data.get('tecnico_id'),
-            tipo=data.get('tipo'),
-            valor=float(data.get('valor')),
-            data=datetime.strptime(data.get('data'), '%Y-%m-%d').date() if data.get('data') else datetime.now().date(),
-            descricao=data.get('descricao')
+        """
+        TODO: FIXME - METODO DESABILITADO (2025)
+        ========================================
+        Este metodo foi DESABILITADO porque:
+        1. Referencia classe 'Lancamento' que NAO EXISTE em models.py
+        2. Referencia atributo 'tecnico.saldo_atual' que NAO EXISTE no schema
+        3. A arquitetura atual usa Chamado.custo_atribuido em vez de Ledger
+
+        Para reativar, seria necessario:
+        - Criar model Lancamento com campos: tecnico_id, tipo, valor, data, descricao
+        - Adicionar campo saldo_atual ao model Tecnico
+        - Criar migrations para o banco de dados
+
+        Alternativa atual: Use PricingService para calculos de custo.
+        """
+        import warnings
+        warnings.warn(
+            "criar_lancamento() esta DESABILITADO. "
+            "Use PricingService.calcular_custo_tempo_real() em vez disso.",
+            DeprecationWarning,
+            stacklevel=2
         )
-        
-        # Atualizar Saldo do Técnico
-        tecnico = Tecnico.query.get(lancamento.tecnico_id)
-        if lancamento.tipo in ['CREDITO_SERVICO', 'BONUS', 'REEMBOLSO']:
-            tecnico.saldo_atual += float(lancamento.valor)
-        elif lancamento.tipo in ['DEBITO_PAGAMENTO', 'ADIANTAMENTO', 'MULTA']:
-            tecnico.saldo_atual -= float(lancamento.valor)
-            
-        db.session.add(lancamento)
-        db.session.commit()
-        return lancamento
+        return None
+
+        # =====================================================================
+        # CODIGO ORIGINAL COMENTADO - NAO REMOVER (referencia futura)
+        # =====================================================================
+        # lancamento = Lancamento(
+        #     tecnico_id=data.get('tecnico_id'),
+        #     tipo=data.get('tipo'),
+        #     valor=float(data.get('valor')),
+        #     data=datetime.strptime(data.get('data'), '%Y-%m-%d').date() if data.get('data') else datetime.now().date(),
+        #     descricao=data.get('descricao')
+        # )
+        #
+        # # Atualizar Saldo do Tecnico
+        # tecnico = Tecnico.query.get(lancamento.tecnico_id)
+        # if lancamento.tipo in ['CREDITO_SERVICO', 'BONUS', 'REEMBOLSO']:
+        #     tecnico.saldo_atual += float(lancamento.valor)
+        # elif lancamento.tipo in ['DEBITO_PAGAMENTO', 'ADIANTAMENTO', 'MULTA']:
+        #     tecnico.saldo_atual -= float(lancamento.valor)
+        #
+        # db.session.add(lancamento)
+        # db.session.commit()
+        # return lancamento
 
     @staticmethod
     def registrar_credito_servico(chamado):
@@ -302,7 +373,23 @@ class FinanceiroService:
 
     @staticmethod
     def realizar_pagamento_conta_corrente(tecnico_id, valor, observacao=None):
-        # Deprecated: Ledger removed.
+        """
+        TODO: FIXME - METODO DESABILITADO (2025)
+        ========================================
+        Este metodo foi DESABILITADO porque:
+        1. Dependia da classe 'Lancamento' que NAO EXISTE
+        2. Sistema de conta corrente/ledger foi removido
+        3. Pagamentos agora sao controlados via Pagamento + Chamado.custo_atribuido
+
+        Alternativa atual: Use FinanceiroService.gerar_pagamento() para criar pagamentos.
+        """
+        import warnings
+        warnings.warn(
+            "realizar_pagamento_conta_corrente() esta DESABILITADO. "
+            "Use gerar_pagamento() em vez disso.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         return None
 
     @staticmethod

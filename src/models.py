@@ -75,48 +75,67 @@ class Tecnico(db.Model):
         return f"[{self.id_tecnico}] {self.nome} - {self.localizacao}"
 
     # ==========================================================================
-    # PROPRIEDADES AGREGADAS (Usam cache se disponivel, senao fazem query)
-    # AVISO: NAO use em loops! Use TecnicoService.get_tecnicos_com_metricas()
+    # PROPRIEDADES AGREGADAS (SOMENTE VIA CACHE - SEM QUERIES)
+    # OBRIGATORIO: Use TecnicoService.get_tecnicos_com_metricas() para popular
     # ==========================================================================
 
     @property
     def total_atendimentos(self):
         """
-        DEPRECATED em loops: Use TecnicoService.get_tecnicos_com_metricas()
+        REFATORADO (2025): Retorna APENAS cache, sem fallback para query.
+        Use TecnicoService.get_tecnicos_com_metricas() ANTES de acessar.
         """
         if hasattr(self, '_metricas'):
             return self._metricas.total_atendimentos
-        # Fallback para query (uso individual apenas)
-        return self.chamados.count()
+        if hasattr(self, '_metricas_detalhe'):
+            return self._metricas_detalhe.get('count_total', 0)
+        # Sem fallback - retorna 0 e emite aviso
+        import warnings
+        warnings.warn(
+            f"Tecnico {self.id}.total_atendimentos acessado sem cache. "
+            "Use TecnicoService.get_tecnicos_com_metricas() primeiro.",
+            DeprecationWarning, stacklevel=2
+        )
+        return 0
 
     @property
     def total_atendimentos_concluidos(self):
         """
-        DEPRECATED em loops: Use TecnicoService.get_tecnicos_com_metricas()
+        REFATORADO (2025): Retorna APENAS cache, sem fallback para query.
         """
         if hasattr(self, '_metricas'):
             return self._metricas.total_atendimentos_concluidos
-        # Fallback para query (uso individual apenas)
-        return self.chamados.filter(Chamado.status_chamado.in_(['Concluído', 'SPARE'])).count()
+        import warnings
+        warnings.warn(
+            f"Tecnico {self.id}.total_atendimentos_concluidos acessado sem cache.",
+            DeprecationWarning, stacklevel=2
+        )
+        return 0
 
     @property
     def total_atendimentos_nao_pagos(self):
         """
-        DEPRECATED em loops: Use TecnicoService.get_tecnicos_com_metricas()
+        REFATORADO (2025): Retorna APENAS cache, sem fallback para query.
         """
         if hasattr(self, '_metricas'):
             return self._metricas.total_atendimentos_nao_pagos
-        # Fallback para query (uso individual apenas)
-        return self.chamados.filter(
-            Chamado.status_chamado.in_(['Concluído', 'SPARE']),
-            Chamado.pago == False
-        ).count()
+        if hasattr(self, '_metricas_detalhe'):
+            return self._metricas_detalhe.get('count_pendentes', 0)
+        import warnings
+        warnings.warn(
+            f"Tecnico {self.id}.total_atendimentos_nao_pagos acessado sem cache.",
+            DeprecationWarning, stacklevel=2
+        )
+        return 0
 
     @property
     def total_a_pagar(self):
         """
-        DEPRECATED em loops: Use TecnicoService.get_tecnicos_com_metricas()
-        Retorna valor cacheado se disponivel (injetado pelo Service).
+        REFATORADO (2025): Retorna APENAS cache, sem fallback para query.
+        Elimina imports locais e queries dentro do Model.
+
+        OBRIGATORIO: Usar TecnicoService.get_by_id() ou get_tecnicos_com_metricas()
+        para popular o cache ANTES de acessar esta property.
         """
         # 1. Cache injetado pelo Service (preferido)
         if hasattr(self, 'total_a_pagar_cache'):
@@ -126,21 +145,34 @@ class Tecnico(db.Model):
         if hasattr(self, '_metricas'):
             return self._metricas.total_a_pagar
 
-        # 3. Fallback: Query (LENTO - usar apenas para tecnico individual)
-        from sqlalchemy import func
-        from . import db  # Import local para evitar circular
+        # 3. Metricas detalhe (de get_by_id)
+        if hasattr(self, '_metricas_detalhe'):
+            return self._metricas_detalhe.get('total_a_pagar', 0.0)
 
-        result = db.session.query(
-            func.sum(func.coalesce(Chamado.custo_atribuido, Chamado.valor, 0))
-        ).filter(
-            Chamado.tecnico_id == self.id,
-            Chamado.status_chamado.in_(['Concluído', 'SPARE']),
-            Chamado.status_validacao == 'Aprovado',
-            Chamado.pago == False,
-            Chamado.pagamento_id == None
-        ).scalar()
+        # 4. SEM FALLBACK - emite aviso e retorna 0
+        import warnings
+        warnings.warn(
+            f"Tecnico {self.id}.total_a_pagar acessado SEM cache pre-calculado. "
+            "OBRIGATORIO: Use TecnicoService.get_by_id() ou get_tecnicos_com_metricas() "
+            "para popular metricas ANTES de acessar. Retornando 0.",
+            DeprecationWarning, stacklevel=2
+        )
+        return 0.0
 
-        return float(result or 0)
+    @property
+    def total_agregado(self):
+        """
+        Total incluindo sub-tecnicos. Alias para compatibilidade.
+        REFATORADO (2025): Retorna APENAS cache.
+        """
+        # Verifica atributo privado (nao a property)
+        if hasattr(self, '_total_agregado_cache'):
+            return self._total_agregado_cache
+        if hasattr(self, '_metricas'):
+            return self._metricas.total_a_pagar_agregado
+        if hasattr(self, '_metricas_detalhe'):
+            return self._metricas_detalhe.get('total_agregado', 0.0)
+        return self.total_a_pagar  # Fallback para total simples
 
     @property
     def status_pagamento(self):
