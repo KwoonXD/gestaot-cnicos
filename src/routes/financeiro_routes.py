@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required
 from datetime import datetime
 from ..services.financeiro_service import FinanceiroService
-from ..services.tecnico_service import TecnicoService
+from ..services.tecnico_service import TecnicoService, TecnicoMetricas
 from ..models import ESTADOS_BRASIL, Chamado, Tecnico
 from werkzeug.utils import secure_filename
 import os
@@ -22,35 +22,47 @@ STATUS_PAGAMENTO = ['Pendente', 'Pago', 'Cancelado']
 @financeiro_bp.route('/pagamentos')
 @login_required
 def pagamentos():
+    """
+    Lista pagamentos e tecnicos com pendencias.
+    OTIMIZADO: Usa get_tecnicos_com_metricas() para evitar N+1 queries.
+    """
     filters = {
         'tecnico_id': request.args.get('tecnico', ''),
         'status': request.args.get('status', '')
     }
-    
+
     sort_by = request.args.get('sort_by', 'nome_asc')
-    
+
     pagamentos_list = FinanceiroService.get_all(filters)
-    tecnicos_list = TecnicoService.get_all(page=None)
-    tecnicos_com_pendente = [t for t in tecnicos_list if t.total_a_pagar > 0]
-    
-    # Sorting Logic
+
+    # OTIMIZACAO: Usar get_tecnicos_com_metricas() diretamente
+    # Isso retorna TecnicoMetricas com todas as agregacoes pre-calculadas
+    result = TecnicoService.get_tecnicos_com_metricas(page=None)
+    metricas_list = result['items']  # Lista de TecnicoMetricas
+
+    # Filtrar apenas tecnicos com pendencias (usando metricas pre-calculadas)
+    tecnicos_com_pendente = [m for m in metricas_list if m.total_a_pagar_agregado > 0]
+
+    # Lista completa para dropdown (objetos Tecnico)
+    tecnicos_list = [m.tecnico for m in metricas_list]
+
+    # Sorting Logic (usando atributos do TecnicoMetricas)
     if sort_by == 'nome_asc':
-        tecnicos_com_pendente.sort(key=lambda t: t.nome)
+        tecnicos_com_pendente.sort(key=lambda m: m.nome)
     elif sort_by == 'valor_desc':
-        tecnicos_com_pendente.sort(key=lambda t: t.total_a_pagar, reverse=True)
+        tecnicos_com_pendente.sort(key=lambda m: m.total_a_pagar_agregado, reverse=True)
     elif sort_by == 'antiguidade':
         # Sort by oldest service date (None values last)
-        tecnicos_com_pendente.sort(key=lambda t: t.oldest_pending_atendimento or datetime.max.date())
+        tecnicos_com_pendente.sort(key=lambda m: m.oldest_pending_date or datetime.max.date())
     elif sort_by == 'recente':
         # Sort by newest service date
-        tecnicos_com_pendente.sort(key=lambda t: t.newest_pending_atendimento or datetime.min.date(), reverse=True)
+        tecnicos_com_pendente.sort(key=lambda m: m.newest_pending_date or datetime.min.date(), reverse=True)
     elif sort_by == 'upload_antigo':
-        # Sort by oldest upload (creation) date
-        tecnicos_com_pendente.sort(key=lambda t: t.oldest_pending_criacao or datetime.max)
+        # Fallback para oldest_pending_date (criacao nao esta nas metricas otimizadas)
+        tecnicos_com_pendente.sort(key=lambda m: m.oldest_pending_date or datetime.max.date())
     elif sort_by == 'upload_recente':
-        # Sort by newest upload (creation) date
-        tecnicos_com_pendente.sort(key=lambda t: t.newest_pending_criacao or datetime.min, reverse=True)
-    
+        tecnicos_com_pendente.sort(key=lambda m: m.newest_pending_date or datetime.min.date(), reverse=True)
+
     return render_template('pagamentos.html',
         pagamentos=pagamentos_list,
         tecnicos=tecnicos_list,
@@ -62,54 +74,58 @@ def pagamentos():
 @financeiro_bp.route('/pagamentos/exportar-pix-lote', methods=['POST'])
 @login_required
 def exportar_pix_lote():
-    """Gera arquivo TXT com dados de pagamento para lote"""
+    """
+    Gera arquivo TXT com dados de pagamento para lote.
+    OTIMIZADO: Usa get_tecnicos_com_metricas() para evitar N+1 queries.
+    """
     try:
         tecnicos_ids = request.form.getlist('tecnicos_ids')
         if not tecnicos_ids:
-            flash('Nenhum técnico selecionado.', 'warning')
+            flash('Nenhum tecnico selecionado.', 'warning')
             return redirect(url_for('financeiro.pagamentos'))
-            
-        # Use Service to get enriched objects (with total_a_pagar)
-        all_tecnicos = TecnicoService.get_all(page=None)
-        
+
+        # OTIMIZACAO: Usar get_tecnicos_com_metricas()
+        result = TecnicoService.get_tecnicos_com_metricas(page=None)
+        metricas_map = {str(m.tecnico.id): m for m in result['items']}
+
         # Filter only selected IDs
-        # Convert IDs to string for comparison since form list is strings
         tecnicos_ids_str = set(tecnicos_ids)
-        tecnicos = [t for t in all_tecnicos if str(t.id) in tecnicos_ids_str]
-        
+
         output_lines = []
         total_geral = 0.0
-        
+
         output_lines.append(f"LOTE DE PAGAMENTOS - GERADO EM {datetime.now().strftime('%d/%m/%Y %H:%M')}")
         output_lines.append("="*50 + "\n")
-        
-        for t in tecnicos:
-            if t.total_a_pagar <= 0:
+
+        for tid in tecnicos_ids_str:
+            m = metricas_map.get(tid)
+            if not m or m.total_a_pagar_agregado <= 0:
                 continue
-                
-            valor = t.total_a_pagar
-            chave_pix = t.chave_pagamento if t.chave_pagamento else "CHAVE NÃO CADASTRADA"
-            doc = t.documento if t.documento else "CPF NÃO CADASTRADO"
-            
+
+            t = m.tecnico
+            valor = m.total_a_pagar_agregado
+            chave_pix = t.chave_pagamento if t.chave_pagamento else "CHAVE NAO CADASTRADA"
+            doc = t.documento if t.documento else "CPF NAO CADASTRADO"
+
             total_geral += valor
-            
+
             output_lines.append(f"NOME: {t.nome.upper()}")
             output_lines.append(f"CPF/CNPJ: {doc}")
             output_lines.append(f"VALOR: R$ {valor:.2f}")
             output_lines.append(f"PIX: {chave_pix}")
             output_lines.append("-" * 40 + "\n")
-            
+
         output_lines.append("="*50)
         output_lines.append(f"TOTAL DO LOTE: R$ {total_geral:.2f}")
-        
+
         content = "\n".join(output_lines)
-        
+
         return Response(
             content,
             mimetype="text/plain",
             headers={"Content-disposition": f"attachment; filename=pix_lote_{datetime.now().strftime('%Y%m%d')}.txt"}
         )
-        
+
     except Exception as e:
         flash(f'Erro ao gerar lote: {str(e)}', 'danger')
         return redirect(url_for('financeiro.pagamentos'))
@@ -117,24 +133,37 @@ def exportar_pix_lote():
 @financeiro_bp.route('/pagamentos/gerar', methods=['GET', 'POST'])
 @login_required
 def gerar_pagamento():
+    """
+    Gera pagamento para tecnico(s).
+    OTIMIZADO: Usa get_tecnicos_com_metricas() para evitar N+1 queries.
+    """
     if request.method == 'POST':
         pagamento, error = FinanceiroService.gerar_pagamento(request.form)
         if error:
             # Em caso de erro, recarregamos a lista filtrada
-            todos_tecnicos = TecnicoService.get_all({'status': 'Ativo'}, page=None)
-            tecnicos_display = [t for t in todos_tecnicos if t.tecnico_principal_id is None and getattr(t, 'total_agregado', 0) > 0]
+            result = TecnicoService.get_tecnicos_com_metricas(
+                filters={'status': 'Ativo'},
+                page=None
+            )
+            tecnicos_display = [
+                m for m in result['items']
+                if m.tecnico.tecnico_principal_id is None and m.total_a_pagar_agregado > 0
+            ]
             return render_template('pagamento_gerar.html', tecnicos=tecnicos_display, error=error)
         return redirect(url_for('financeiro.pagamentos'))
-    
-    # GET: Listar apenas CHEFES que têm valores a receber (próprio ou de subs)
-    todos_tecnicos = TecnicoService.get_all({'status': 'Ativo'}, page=None)
-    tecnicos_display = []
-    for t in todos_tecnicos:
-        if t.tecnico_principal_id is not None:
-            continue
-        if getattr(t, 'total_agregado', 0) > 0:
-            tecnicos_display.append(t)
-            
+
+    # GET: Listar apenas CHEFES que tem valores a receber (proprio ou de subs)
+    result = TecnicoService.get_tecnicos_com_metricas(
+        filters={'status': 'Ativo'},
+        page=None
+    )
+
+    # Filtrar: apenas tecnicos principais com valores pendentes
+    tecnicos_display = [
+        m for m in result['items']
+        if m.tecnico.tecnico_principal_id is None and m.total_a_pagar_agregado > 0
+    ]
+
     return render_template('pagamento_gerar.html', tecnicos=tecnicos_display, error=None)
 
 
@@ -164,55 +193,74 @@ def marcar_como_pago(id):
 @financeiro_bp.route('/fechamento', methods=['GET', 'POST'])
 @login_required
 def fechamento_lote():
+    """
+    Fechamento de pagamentos em lote por periodo.
+    OTIMIZADO: Usa query SQL agregada para evitar N+1.
+    """
+    from sqlalchemy import func, case, and_
+
     if request.method == 'POST':
         tecnicos_ids = request.form.getlist('tecnicos_ids')
         periodo_inicio = request.form.get('periodo_inicio')
         periodo_fim = request.form.get('periodo_fim')
-        
+
         if not tecnicos_ids or not periodo_inicio or not periodo_fim:
-            flash('Selecione técnicos e o período corretamente.', 'danger')
+            flash('Selecione tecnicos e o periodo corretamente.', 'danger')
             return redirect(url_for('financeiro.fechamento_lote'))
-            
+
         dados_lote = {
             'tecnicos_ids': [int(id) for id in tecnicos_ids],
             'periodo_inicio': periodo_inicio,
             'periodo_fim': periodo_fim
         }
-        
+
         FinanceiroService.gerar_pagamento_lote(dados_lote)
-        flash(f'O processamento de {len(tecnicos_ids)} técnicos foi iniciado em segundo plano. Atualize a página em instantes.', 'info')
+        flash(f'O processamento de {len(tecnicos_ids)} tecnicos foi iniciado em segundo plano. Atualize a pagina em instantes.', 'info')
         return redirect(url_for('financeiro.pagamentos'))
 
     periodo_inicio = request.args.get('inicio', '')
     periodo_fim = request.args.get('fim', '')
     tecnicos_display = []
-    
-    if periodo_inicio and periodo_fim:
-        tecnicos_ativos = TecnicoService.get_all({'status': 'Ativo'})
-        for t in tecnicos_ativos:
-            chamados_periodo = t.chamados.filter(
-                Chamado.status_chamado == 'Concluído',
-                Chamado.pago == False,
-                Chamado.pagamento_id == None,
-                Chamado.data_atendimento >= datetime.strptime(periodo_inicio, '%Y-%m-%d').date(),
-                Chamado.data_atendimento <= datetime.strptime(periodo_fim, '%Y-%m-%d').date()
-            ).all()
-            
-            # Use custo_atribuido if available
-            qtd = len(chamados_periodo)
-            total_chamados = sum(float(c.custo_atribuido if c.custo_atribuido is not None else c.valor or 0) for c in chamados_periodo)
-            total_previsto = float(total_chamados)
-            
-            if qtd > 0:
-                tecnicos_display.append({
-                    'id': t.id,
-                    'id_tecnico': t.id_tecnico,
-                    'nome': t.nome,
-                    'qtd_chamados': qtd,
-                    'total_previsto': total_previsto
-                })
 
-    return render_template('fechamento_lote.html', 
+    if periodo_inicio and periodo_fim:
+        data_inicio = datetime.strptime(periodo_inicio, '%Y-%m-%d').date()
+        data_fim = datetime.strptime(periodo_fim, '%Y-%m-%d').date()
+
+        # OTIMIZACAO: Query SQL agregada em vez de N+1
+        val_expr = func.coalesce(Chamado.custo_atribuido, Chamado.valor, 0)
+
+        from ..models import db
+
+        result = db.session.query(
+            Tecnico.id,
+            Tecnico.nome,
+            func.count(Chamado.id).label('qtd_chamados'),
+            func.sum(val_expr).label('total_previsto')
+        ).join(
+            Chamado, Tecnico.id == Chamado.tecnico_id
+        ).filter(
+            Tecnico.status == 'Ativo',
+            Chamado.status_chamado == 'Concluído',
+            Chamado.pago == False,
+            Chamado.pagamento_id == None,
+            Chamado.data_atendimento >= data_inicio,
+            Chamado.data_atendimento <= data_fim
+        ).group_by(
+            Tecnico.id
+        ).having(
+            func.count(Chamado.id) > 0
+        ).all()
+
+        for row in result:
+            tecnicos_display.append({
+                'id': row[0],
+                'id_tecnico': f"T-{str(row[0]).zfill(3)}",
+                'nome': row[1],
+                'qtd_chamados': row[2],
+                'total_previsto': float(row[3] or 0)
+            })
+
+    return render_template('fechamento_lote.html',
                            tecnicos=tecnicos_display,
                            inicio=periodo_inicio,
                            fim=periodo_fim)

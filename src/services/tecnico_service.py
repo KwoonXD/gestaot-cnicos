@@ -41,6 +41,11 @@ class TecnicoMetricas:
         return self.total_a_pagar + self.total_a_pagar_subs
 
     @property
+    def total_agregado(self) -> float:
+        """Alias para compatibilidade com templates existentes."""
+        return self.total_a_pagar_agregado
+
+    @property
     def status_pagamento(self) -> str:
         return "Pendente" if self.total_a_pagar_agregado > 0 else "Pago"
 
@@ -49,12 +54,27 @@ class TecnicoMetricas:
         return self.tecnico.id_tecnico
 
     @property
+    def id(self) -> int:
+        return self.tecnico.id
+
+    @property
     def nome(self) -> str:
         return self.tecnico.nome
 
     @property
     def localizacao(self) -> str:
         return self.tecnico.localizacao
+
+    @property
+    def pending_fsas(self) -> List[str]:
+        """
+        Codigos FSA pendentes (lazy loaded).
+        Usa TecnicoService para evitar N+1 quando acessado.
+        """
+        if self._pending_fsas is None:
+            # Lazy load usando o Service
+            self._pending_fsas = TecnicoService.get_pending_fsas(self.tecnico.id)
+        return self._pending_fsas
 
     def __getattr__(self, name):
         """Proxy para atributos do tecnico ORM."""
