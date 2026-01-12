@@ -460,8 +460,8 @@ class Pagamento(db.Model):
     
     @property
     def valor_total(self):
-        # Soma custo_atribuido se existir (novo modelo), senão usa valor (legado)
-        return float(sum((c.custo_atribuido if c.custo_atribuido is not None else c.valor) for c in self.chamados_incluidos))
+        # REFATORADO: Usando apenas custo_atribuido (campo valor está DEPRECATED)
+        return float(sum((c.custo_atribuido or 0.0) for c in self.chamados_incluidos))
     
     def to_dict(self):
         return {

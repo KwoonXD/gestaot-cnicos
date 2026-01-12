@@ -156,8 +156,9 @@ class FinanceiroService:
             
         # Total gasto neste mês até agora
         inicio_mes = datetime(ano, mes, 1)
-        
-        total_atual = db.session.query(func.sum(Chamado.valor))\
+
+        # REFATORADO: Usando custo_atribuido (campo valor está DEPRECATED)
+        total_atual = db.session.query(func.sum(Chamado.custo_atribuido))\
             .filter(Chamado.data_atendimento >= inicio_mes)\
             .filter(Chamado.data_atendimento <= hoje)\
             .scalar() or 0.0
