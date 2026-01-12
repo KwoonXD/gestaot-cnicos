@@ -126,8 +126,9 @@ class TecnicoService:
 
     @staticmethod
     def _valor_chamado_expr():
-        """Expressao SQL para valor do chamado (custo_atribuido ou legacy)."""
-        return func.coalesce(Chamado.custo_atribuido, Chamado.valor, 0)
+        """Expressao SQL para valor do chamado (custo_atribuido)."""
+        # REFATORADO: Removido fallback para Chamado.valor (campo DEPRECATED)
+        return func.coalesce(Chamado.custo_atribuido, 0)
 
     # ==========================================================================
     # METODO PRINCIPAL: GET TECNICOS COM METRICAS (UMA UNICA QUERY SQL)

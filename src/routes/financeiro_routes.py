@@ -227,7 +227,8 @@ def fechamento_lote():
         data_fim = datetime.strptime(periodo_fim, '%Y-%m-%d').date()
 
         # OTIMIZACAO: Query SQL agregada em vez de N+1
-        val_expr = func.coalesce(Chamado.custo_atribuido, Chamado.valor, 0)
+        # REFATORADO: Removido fallback para Chamado.valor (campo DEPRECATED)
+        val_expr = func.coalesce(Chamado.custo_atribuido, 0)
 
         from ..models import db
 

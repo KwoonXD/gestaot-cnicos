@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(cd:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(python:*)",
+      "Bash(py test_custos.py)",
+      "Bash(py audit_custos.py:*)",
+      "Bash(py verify_migration.py)"
     ]
   }
 }

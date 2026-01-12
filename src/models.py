@@ -376,7 +376,10 @@ class Chamado(db.Model):
     custo_peca = db.Column(db.Numeric(10, 2), default=0.00)
     fornecedor_peca = db.Column(db.String(20), default='Empresa')
     custo_atribuido = db.Column(db.Numeric(10, 2), default=0.00)
-    
+
+    # DEPRECATED: Este campo sera removido em versao futura.
+    # Use 'custo_atribuido' para custos. Mantido apenas para compatibilidade.
+    # Data de deprecacao: 2026-01-12 | Previsao de remocao: 2026-03-01
     valor = db.Column(db.Numeric(10, 2), nullable=False, default=0.00)
     pago = db.Column(db.Boolean, default=False)
     pagamento_id = db.Column(db.Integer, db.ForeignKey('pagamentos.id'), nullable=True)

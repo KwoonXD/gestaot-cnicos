@@ -219,8 +219,8 @@ def tecnico_detalhes(id):
     tecnico = TecnicoService.get_by_id(id)
     
     # 1. Stats Calculation
-    # Definindo termo de valor para reutilização
-    val_term = func.coalesce(Chamado.custo_atribuido, Chamado.valor, 0)
+    # REFATORADO: Removido fallback para Chamado.valor (campo DEPRECATED)
+    val_term = func.coalesce(Chamado.custo_atribuido, 0)
     
     stats = db.session.query(
         func.count(Chamado.id).label('total'),
