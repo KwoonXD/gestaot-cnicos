@@ -4,6 +4,7 @@ from datetime import datetime
 from flask_login import current_user
 from .audit_service import AuditService
 from .pricing_service import PricingService
+from .stock_service import StockService
 import uuid
 import re
 from sqlalchemy.orm import joinedload
@@ -181,30 +182,6 @@ class ChamadoService:
         for resultado in resultados_pricing:
             fsa = resultado['fsa']
 
-            # --- Logica de Estoque (Baixa automatica) ---
-            peca_nome = ""
-            custo_peca = 0.0
-
-            if fsa.get('peca_id'):
-                item = ItemLPU.query.get(fsa['peca_id'])
-                if item:
-                    peca_nome = item.nome
-
-                    # Se Fornecedor = Empresa -> Baixa Estoque Tecnico
-                    if fsa.get('fornecedor_peca') == 'Empresa':
-                        estoque = TecnicoStock.query.filter_by(
-                            tecnico_id=logistica['tecnico_id'],
-                            item_lpu_id=item.id
-                        ).first()
-
-                        if estoque and estoque.quantidade > 0:
-                            estoque.quantidade -= 1
-                            db.session.add(estoque)
-
-                    # Se Fornecedor = Tecnico -> Reembolso (Custo)
-                    elif fsa.get('fornecedor_peca') == 'Tecnico':
-                        custo_peca = float(fsa.get('custo_peca', 0))
-
             # Valores calculados pelo PricingService
             valor_receita_servico = resultado['valor_receita_servico']
             valor_receita_total = resultado['valor_receita_total']
@@ -212,10 +189,25 @@ class ChamadoService:
             horas_trabalhadas = resultado['horas_trabalhadas']
             is_adicional = resultado['is_adicional']
 
-            # Totais
-            valor_legacy = valor_receita_total  # Campo 'valor' mantem compatibilidade
+            # Inicializa valores de peça
+            peca_nome = ""
+            custo_peca = 0.0
+            fornecedor = fsa.get('fornecedor_peca', 'Empresa')
 
-            # Cria o Chamado
+            # Pre-fetch nome da peça se informada
+            if fsa.get('peca_id'):
+                item = ItemLPU.query.get(fsa['peca_id'])
+                if item:
+                    peca_nome = item.nome
+
+                    # Se Fornecedor = Tecnico -> Custo informado manualmente
+                    if fornecedor == 'Tecnico':
+                        custo_peca = float(fsa.get('custo_peca', 0))
+
+            # Totais
+            valor_legacy = valor_receita_total  # Campo 'valor' mantém compatibilidade
+
+            # Cria o Chamado (sem custo de peça ainda se for da Empresa)
             novo_chamado = Chamado(
                 tecnico_id=int(logistica['tecnico_id']),
                 horas_trabalhadas=horas_trabalhadas,
@@ -230,10 +222,10 @@ class ChamadoService:
                 hora_fim=fsa.get('hora_fim'),
                 is_adicional=is_adicional,
 
-                # Pecas
+                # Pecas (custo será atualizado após flush se for da Empresa)
                 peca_usada=peca_nome,
                 custo_peca=custo_peca,
-                fornecedor_peca=fsa.get('fornecedor_peca', 'Empresa'),
+                fornecedor_peca=fornecedor,
 
                 # Financeiro - RECEITA (Calculado pelo PricingService)
                 valor_receita_servico=valor_receita_servico,
@@ -249,6 +241,29 @@ class ChamadoService:
                 batch_id=batch_id
             )
             db.session.add(novo_chamado)
+
+            # Flush para obter o ID do chamado (necessário para vincular movimentação)
+            db.session.flush()
+
+            # --- INTEGRACAO COM ESTOQUE (Pilar de Custos de Materiais) ---
+            # Se peça foi usada e fornecida pela Empresa -> Registrar uso com rastreabilidade
+            if fsa.get('peca_id') and fornecedor == 'Empresa':
+                try:
+                    custo_peca = StockService.registrar_uso_chamado(
+                        tecnico_id=int(logistica['tecnico_id']),
+                        item_id=int(fsa['peca_id']),
+                        chamado_id=novo_chamado.id,
+                        user_id=current_user.id,
+                        quantidade=1
+                    )
+                    # Atualizar custo_peca no chamado
+                    novo_chamado.custo_peca = custo_peca
+                except ValueError as e:
+                    # Log warning mas não bloqueia criação do chamado
+                    # (peça pode ter sido registrada sem estoque disponível)
+                    import logging
+                    logging.warning(f"Estoque: {e} - Chamado {novo_chamado.codigo_chamado}")
+
             criados.append(novo_chamado)
 
         db.session.commit()

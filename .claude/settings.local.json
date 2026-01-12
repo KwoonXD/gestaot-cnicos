@@ -6,7 +6,15 @@
       "Bash(python:*)",
       "Bash(py test_custos.py)",
       "Bash(py audit_custos.py:*)",
-      "Bash(py verify_migration.py)"
+      "Bash(py verify_migration.py)",
+      "Bash(tasklist:*)",
+      "Bash(findstr:*)",
+      "Bash(py migrate_stock_cost.py --check)",
+      "Bash(py migrate_stock_cost.py:*)",
+      "Bash(py test_stock_integration.py:*)",
+      "Bash(py migrate_reposicao.py:*)",
+      "Bash(py migrate_preco_historico.py --apply)",
+      "Bash(py -c:*)"
     ]
   }
 }

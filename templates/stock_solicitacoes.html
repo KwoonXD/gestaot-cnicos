@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Solicitações de Reposição | WT{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="h4 fw-bold text-gray-800 mb-1">
+                <i class="bi bi-inbox me-2"></i>Solicitações de Reposição
+            </h2>
+            <p class="text-muted small mb-0">Gerenciar pedidos de reposição de estoque</p>
+        </div>
+
+        <div class="d-flex gap-2">
+            <!-- Filtro de Status -->
+            <div class="btn-group">
+                <a href="?status=Pendente" class="btn btn-sm {{ 'btn-warning' if status_filtro == 'Pendente' else 'btn-outline-warning' }}">
+                    <i class="bi bi-clock"></i> Pendentes
+                    {% if pendentes > 0 %}<span class="badge bg-dark ms-1">{{ pendentes }}</span>{% endif %}
+                </a>
+                <a href="?status=Enviada" class="btn btn-sm {{ 'btn-success' if status_filtro == 'Enviada' else 'btn-outline-success' }}">
+                    <i class="bi bi-check-circle"></i> Enviadas
+                </a>
+                <a href="?status=Recusada" class="btn btn-sm {{ 'btn-danger' if status_filtro == 'Recusada' else 'btn-outline-danger' }}">
+                    <i class="bi bi-x-circle"></i> Recusadas
+                </a>
+                <a href="?status=Todas" class="btn btn-sm {{ 'btn-secondary' if status_filtro == 'Todas' else 'btn-outline-secondary' }}">
+                    Todas
+                </a>
+            </div>
+
+            <a href="{{ url_for('stock.controle_estoque') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left"></i> Voltar
+            </a>
+        </div>
+    </div>
+
+    <!-- Lista de Solicitações -->
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-0">
+            {% if solicitacoes %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>ID</th>
+                            <th>Data</th>
+                            <th>Técnico</th>
+                            <th>Peça</th>
+                            <th class="text-center">Qtd</th>
+                            <th>Justificativa</th>
+                            <th>Status</th>
+                            <th class="text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in solicitacoes %}
+                        <tr>
+                            <td><span class="badge bg-light text-dark">#{{ s.id }}</span></td>
+                            <td class="text-muted small">
+                                {{ s.data_criacao.strftime('%d/%m/%Y %H:%M') if s.data_criacao else '-' }}
+                            </td>
+                            <td class="fw-medium">{{ s.tecnico.nome if s.tecnico else 'N/A' }}</td>
+                            <td>{{ s.item_lpu.nome if s.item_lpu else 'N/A' }}</td>
+                            <td class="text-center">
+                                <span class="badge bg-primary">{{ s.quantidade }}</span>
+                            </td>
+                            <td class="small text-muted" style="max-width: 200px;">
+                                {{ s.justificativa|truncate(50) if s.justificativa else '-' }}
+                            </td>
+                            <td>
+                                {% if s.status == 'Pendente' %}
+                                <span class="badge bg-warning text-dark">Pendente</span>
+                                {% elif s.status == 'Enviada' %}
+                                <span class="badge bg-success">Enviada</span>
+                                {% elif s.status == 'Recusada' %}
+                                <span class="badge bg-danger">Recusada</span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ s.status }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if s.status == 'Pendente' %}
+                                <div class="btn-group btn-group-sm">
+                                    <form action="{{ url_for('stock.aprovar_solicitacao', id=s.id) }}" method="POST" style="display: inline;">
+                                        <button type="submit" class="btn btn-success btn-sm" title="Aprovar e Enviar"
+                                            onclick="return confirm('Aprovar e enviar {{ s.quantidade }}x {{ s.item_lpu.nome }} para {{ s.tecnico.nome }}?')">
+                                            <i class="bi bi-check-lg"></i>
+                                        </button>
+                                    </form>
+                                    <button type="button" class="btn btn-danger btn-sm" title="Recusar"
+                                        data-bs-toggle="modal" data-bs-target="#recusarModal{{ s.id }}">
+                                        <i class="bi bi-x-lg"></i>
+                                    </button>
+                                </div>
+
+                                <!-- Modal Recusar -->
+                                <div class="modal fade" id="recusarModal{{ s.id }}" tabindex="-1">
+                                    <div class="modal-dialog modal-dialog-centered">
+                                        <div class="modal-content">
+                                            <form action="{{ url_for('stock.recusar_solicitacao', id=s.id) }}" method="POST">
+                                                <div class="modal-header">
+                                                    <h5 class="modal-title">Recusar Solicitação #{{ s.id }}</h5>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                </div>
+                                                <div class="modal-body">
+                                                    <p class="text-muted">
+                                                        <strong>{{ s.quantidade }}x {{ s.item_lpu.nome }}</strong> para {{ s.tecnico.nome }}
+                                                    </p>
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Motivo da Recusa</label>
+                                                        <textarea name="motivo" class="form-control" rows="3" required
+                                                            placeholder="Informe o motivo..."></textarea>
+                                                    </div>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                                    <button type="submit" class="btn btn-danger">Recusar</button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% else %}
+                                <span class="text-muted small">
+                                    {% if s.aprovado_por %}
+                                        por {{ s.aprovado_por.username }}
+                                    {% endif %}
+                                </span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5 text-muted">
+                <i class="bi bi-inbox fs-1 d-block mb-3 opacity-25"></i>
+                <p>Nenhuma solicitação {{ status_filtro.lower() if status_filtro != 'Todas' else '' }} encontrada.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -610,17 +610,80 @@ TipoServico = CatalogoServico
 class ItemLPU(db.Model):
     """Itens LPU (Peças) por Cliente - Ex: Scanner (R$ 180), Monitor (R$ 200)"""
     __tablename__ = 'itens_lpu'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(100), nullable=False)
-    valor_receita = db.Column(db.Float, default=0.0)
+    valor_receita = db.Column(db.Float, default=0.0)  # Preço cobrado do cliente
+    valor_custo = db.Column(db.Float, default=0.0)    # Custo de aquisição da peça
     cliente_id = db.Column(db.Integer, db.ForeignKey('clientes.id'), nullable=True)
-    
+
+    @property
+    def margem(self):
+        """Margem bruta da peça (receita - custo)"""
+        return (self.valor_receita or 0.0) - (self.valor_custo or 0.0)
+
     def to_dict(self):
         return {
             'id': self.id,
             'nome': self.nome,
-            'valor': self.valor_receita
+            'valor': self.valor_receita,
+            'valor_custo': self.valor_custo,
+            'margem': self.margem
+        }
+
+
+class ItemLPUPrecoHistorico(db.Model):
+    """Histórico de alterações de preços de peças (custo e receita)"""
+    __tablename__ = 'itens_lpu_preco_historico'
+
+    id = db.Column(db.Integer, primary_key=True)
+    item_lpu_id = db.Column(db.Integer, db.ForeignKey('itens_lpu.id'), nullable=False, index=True)
+
+    # Valores ANTES da alteração
+    valor_custo_anterior = db.Column(db.Float, nullable=True)
+    valor_receita_anterior = db.Column(db.Float, nullable=True)
+
+    # Valores DEPOIS da alteração
+    valor_custo_novo = db.Column(db.Float, nullable=True)
+    valor_receita_novo = db.Column(db.Float, nullable=True)
+
+    # Metadados
+    motivo = db.Column(db.String(200), nullable=True)  # Motivo da alteração
+    data_alteracao = db.Column(db.DateTime, default=datetime.utcnow)
+    alterado_por_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+
+    # Relacionamentos
+    item_lpu = db.relationship('ItemLPU', backref=db.backref('historico_precos', lazy='dynamic', order_by='ItemLPUPrecoHistorico.data_alteracao.desc()'))
+    alterado_por = db.relationship('User')
+
+    @property
+    def variacao_custo(self):
+        """Variação percentual do custo"""
+        if self.valor_custo_anterior and self.valor_custo_anterior > 0:
+            return ((self.valor_custo_novo or 0) - self.valor_custo_anterior) / self.valor_custo_anterior * 100
+        return None
+
+    @property
+    def variacao_receita(self):
+        """Variação percentual da receita"""
+        if self.valor_receita_anterior and self.valor_receita_anterior > 0:
+            return ((self.valor_receita_novo or 0) - self.valor_receita_anterior) / self.valor_receita_anterior * 100
+        return None
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'item_lpu_id': self.item_lpu_id,
+            'item_nome': self.item_lpu.nome if self.item_lpu else 'N/A',
+            'custo_anterior': self.valor_custo_anterior,
+            'custo_novo': self.valor_custo_novo,
+            'receita_anterior': self.valor_receita_anterior,
+            'receita_novo': self.valor_receita_novo,
+            'variacao_custo': self.variacao_custo,
+            'variacao_receita': self.variacao_receita,
+            'motivo': self.motivo,
+            'data_alteracao': self.data_alteracao.isoformat() if self.data_alteracao else None,
+            'alterado_por': self.alterado_por.username if self.alterado_por else 'Sistema'
         }
 
 
@@ -681,26 +744,86 @@ class TecnicoStock(db.Model):
 class StockMovement(db.Model):
     """Histórico de Movimentações de Estoque"""
     __tablename__ = 'stock_movements'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     item_lpu_id = db.Column(db.Integer, db.ForeignKey('itens_lpu.id'), nullable=False)
-    
+
     # Origem e Destino
     # Envios: Origem=NULL (Almoxarifado Central) -> Destino=Tecnico
-    # Uso: Origem=Tecnico -> Destino=Chamado (ou NULL)
+    # Uso: Origem=Tecnico -> chamado_id preenchido
     # Devolução: Origem=Tecnico -> Destino=NULL (Almoxarifado Central)
-    
+
     origem_tecnico_id = db.Column(db.Integer, db.ForeignKey('tecnicos.id'), nullable=True)
     destino_tecnico_id = db.Column(db.Integer, db.ForeignKey('tecnicos.id'), nullable=True)
-    
+
+    # Vínculo com Chamado (para movimentações tipo 'USO')
+    chamado_id = db.Column(db.Integer, db.ForeignKey('chamados.id'), nullable=True, index=True)
+
     quantidade = db.Column(db.Integer, nullable=False)
-    tipo_movimento = db.Column(db.String(20), nullable=False) # 'ENVIO', 'USO', 'DEVOLUCAO', 'AJUSTE'
+    tipo_movimento = db.Column(db.String(20), nullable=False)  # 'ENVIO', 'USO', 'DEVOLUCAO', 'AJUSTE'
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
-    
+
     observacao = db.Column(db.String(200), nullable=True)
     created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
-    
+
+    # Relationships
     item_lpu = db.relationship('ItemLPU')
     origem_tecnico = db.relationship('Tecnico', foreign_keys=[origem_tecnico_id])
     destino_tecnico = db.relationship('Tecnico', foreign_keys=[destino_tecnico_id])
+    chamado = db.relationship('Chamado', backref='movimentacoes_estoque')
     created_by = db.relationship('User')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'item_nome': self.item_lpu.nome if self.item_lpu else None,
+            'item_lpu_id': self.item_lpu_id,
+            'origem_tecnico': self.origem_tecnico.nome if self.origem_tecnico else 'Almoxarifado',
+            'destino_tecnico': self.destino_tecnico.nome if self.destino_tecnico else 'Almoxarifado',
+            'chamado_id': self.chamado_id,
+            'quantidade': self.quantidade,
+            'tipo_movimento': self.tipo_movimento,
+            'data_criacao': self.data_criacao.isoformat() if self.data_criacao else None,
+            'observacao': self.observacao
+        }
+
+
+class SolicitacaoReposicao(db.Model):
+    """Solicitações de reposição de estoque."""
+    __tablename__ = 'solicitacoes_reposicao'
+
+    id = db.Column(db.Integer, primary_key=True)
+    tecnico_id = db.Column(db.Integer, db.ForeignKey('tecnicos.id'), nullable=False)
+    item_lpu_id = db.Column(db.Integer, db.ForeignKey('itens_lpu.id'), nullable=False)
+    quantidade = db.Column(db.Integer, nullable=False, default=1)
+
+    # Status: 'Pendente', 'Aprovada', 'Enviada', 'Recusada'
+    status = db.Column(db.String(20), default='Pendente')
+
+    # Justificativa/Observação
+    justificativa = db.Column(db.Text, nullable=True)
+    resposta_admin = db.Column(db.Text, nullable=True)
+
+    # Rastreabilidade
+    created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    aprovado_por_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+
+    data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
+    data_resposta = db.Column(db.DateTime, nullable=True)
+
+    # Relacionamentos
+    tecnico = db.relationship('Tecnico', backref='solicitacoes_reposicao')
+    item_lpu = db.relationship('ItemLPU')
+    created_by = db.relationship('User', foreign_keys=[created_by_id])
+    aprovado_por = db.relationship('User', foreign_keys=[aprovado_por_id])
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'tecnico_nome': self.tecnico.nome if self.tecnico else 'N/A',
+            'item_nome': self.item_lpu.nome if self.item_lpu else 'N/A',
+            'quantidade': self.quantidade,
+            'status': self.status,
+            'justificativa': self.justificativa,
+            'data_criacao': self.data_criacao.isoformat() if self.data_criacao else None
+        }

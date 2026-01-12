@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+
+{% block title %}Relatório de Materiais | WT{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="h4 fw-bold text-gray-800 mb-1">
+                <i class="bi bi-graph-up-arrow me-2"></i>Relatório de Custos de Materiais
+            </h2>
+            <p class="text-muted small mb-0">Análise de consumo e custos de peças</p>
+        </div>
+
+        <!-- Filtro de Período -->
+        <form class="d-flex gap-2 align-items-end" method="GET">
+            <div>
+                <label class="form-label small text-muted mb-1">De</label>
+                <input type="date" name="data_inicio" class="form-control form-control-sm"
+                    value="{{ data_inicio.strftime('%Y-%m-%d') }}">
+            </div>
+            <div>
+                <label class="form-label small text-muted mb-1">Até</label>
+                <input type="date" name="data_fim" class="form-control form-control-sm"
+                    value="{{ data_fim.strftime('%Y-%m-%d') }}">
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm">
+                <i class="bi bi-filter"></i> Filtrar
+            </button>
+
+            <!-- Dropdown de Exportação -->
+            <div class="dropdown">
+                <button class="btn btn-success btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    <i class="bi bi-download"></i> Exportar
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li>
+                        <a class="dropdown-item" href="{{ url_for('stock.exportar_estoque') }}">
+                            <i class="bi bi-box-seam me-2"></i>Posição de Estoque
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item" href="{{ url_for('stock.exportar_movimentacoes', data_inicio=data_inicio, data_fim=data_fim) }}">
+                            <i class="bi bi-arrow-left-right me-2"></i>Movimentações
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item" href="{{ url_for('stock.exportar_custos_chamados', data_inicio=data_inicio, data_fim=data_fim) }}">
+                            <i class="bi bi-receipt me-2"></i>Custos por Chamado
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <a href="{{ url_for('stock.controle_estoque') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left"></i> Voltar
+            </a>
+        </form>
+    </div>
+
+    <!-- Alertas de Estoque Baixo -->
+    {% if alertas_estoque %}
+    <div class="alert alert-warning border-0 shadow-sm mb-4">
+        <div class="d-flex align-items-center">
+            <i class="bi bi-exclamation-triangle-fill fs-4 me-3"></i>
+            <div>
+                <strong>Atenção:</strong> {{ alertas_estoque|length }} técnico(s) com estoque baixo (1 unidade ou menos)
+                <ul class="mb-0 mt-2 small">
+                    {% for alerta in alertas_estoque[:5] %}
+                    <li>{{ alerta.tecnico.nome }} - {{ alerta.item_lpu.nome }}: {{ alerta.quantidade }} un</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- KPIs -->
+    <div class="row g-4 mb-4">
+        <!-- Peças Utilizadas -->
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <p class="text-muted small mb-1">Peças Utilizadas</p>
+                            <h3 class="fw-bold mb-0">{{ total_pecas }}</h3>
+                            <small class="text-muted">em {{ total_movs }} chamados</small>
+                        </div>
+                        <div class="bg-primary bg-opacity-10 rounded-3 p-3">
+                            <i class="bi bi-cpu text-primary fs-4"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Custo Total -->
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <p class="text-muted small mb-1">Custo de Materiais</p>
+                            <h3 class="fw-bold text-danger mb-0">R$ {{ "%.2f"|format(custo_periodo) }}</h3>
+                            <small class="text-muted">no período</small>
+                        </div>
+                        <div class="bg-danger bg-opacity-10 rounded-3 p-3">
+                            <i class="bi bi-cash-stack text-danger fs-4"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Estoque em Rua -->
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <p class="text-muted small mb-1">Estoque em Rua</p>
+                            <h3 class="fw-bold mb-0">{{ estoque_rua }}</h3>
+                            <small class="text-muted">peças com técnicos</small>
+                        </div>
+                        <div class="bg-info bg-opacity-10 rounded-3 p-3">
+                            <i class="bi bi-truck text-info fs-4"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Valor Imobilizado -->
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <p class="text-muted small mb-1">Valor Imobilizado</p>
+                            <h3 class="fw-bold text-warning mb-0">R$ {{ "%.2f"|format(valor_estoque_rua) }}</h3>
+                            <small class="text-muted">em estoque de técnicos</small>
+                        </div>
+                        <div class="bg-warning bg-opacity-10 rounded-3 p-3">
+                            <i class="bi bi-piggy-bank text-warning fs-4"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <!-- Top Peças -->
+        <div class="col-md-5">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-transparent border-0 pb-0">
+                    <h6 class="fw-bold mb-0"><i class="bi bi-trophy me-2 text-warning"></i>Top 5 Peças Mais Usadas</h6>
+                </div>
+                <div class="card-body">
+                    {% if top_pecas %}
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Peça</th>
+                                    <th class="text-center">Qtd</th>
+                                    <th class="text-end">Custo Unit.</th>
+                                    <th class="text-end">Custo Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for peca in top_pecas %}
+                                <tr>
+                                    <td class="fw-medium">{{ peca.nome }}</td>
+                                    <td class="text-center">
+                                        <span class="badge bg-primary bg-opacity-10 text-primary">{{ peca.qtd_usada }}</span>
+                                    </td>
+                                    <td class="text-end text-muted">R$ {{ "%.2f"|format(peca.valor_custo or 0) }}</td>
+                                    <td class="text-end fw-bold text-danger">
+                                        R$ {{ "%.2f"|format((peca.valor_custo or 0) * peca.qtd_usada) }}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted py-4">
+                        <i class="bi bi-inbox fs-1 d-block mb-2 opacity-25"></i>
+                        Nenhuma peça utilizada no período
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Movimentações Recentes -->
+        <div class="col-md-7">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-transparent border-0 pb-0">
+                    <h6 class="fw-bold mb-0"><i class="bi bi-clock-history me-2 text-info"></i>Movimentações Recentes</h6>
+                </div>
+                <div class="card-body p-0">
+                    {% if movimentacoes_recentes %}
+                    <div class="table-responsive" style="max-height: 400px;">
+                        <table class="table table-sm table-hover align-middle mb-0">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th>Data</th>
+                                    <th>Tipo</th>
+                                    <th>Item</th>
+                                    <th>Técnico</th>
+                                    <th class="text-center">Qtd</th>
+                                    <th>Chamado</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for mov in movimentacoes_recentes %}
+                                <tr>
+                                    <td class="text-muted small">
+                                        {{ mov.data_criacao.strftime('%d/%m %H:%M') if mov.data_criacao else '-' }}
+                                    </td>
+                                    <td>
+                                        {% if mov.tipo_movimento == 'ENVIO' %}
+                                        <span class="badge bg-success bg-opacity-10 text-success">ENVIO</span>
+                                        {% elif mov.tipo_movimento == 'USO' %}
+                                        <span class="badge bg-primary bg-opacity-10 text-primary">USO</span>
+                                        {% elif mov.tipo_movimento == 'DEVOLUCAO' %}
+                                        <span class="badge bg-warning bg-opacity-10 text-warning">DEVOLUÇÃO</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary bg-opacity-10 text-secondary">{{ mov.tipo_movimento }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="fw-medium">{{ mov.item_lpu.nome if mov.item_lpu else '-' }}</td>
+                                    <td>
+                                        {% if mov.origem_tecnico %}
+                                        {{ mov.origem_tecnico.nome }}
+                                        {% elif mov.destino_tecnico %}
+                                        {{ mov.destino_tecnico.nome }}
+                                        {% else %}
+                                        Almoxarifado
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">{{ mov.quantidade }}</td>
+                                    <td>
+                                        {% if mov.chamado_id %}
+                                        <a href="#" class="text-decoration-none small">
+                                            #{{ mov.chamado_id }}
+                                        </a>
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted py-4">
+                        <i class="bi bi-inbox fs-1 d-block mb-2 opacity-25"></i>
+                        Nenhuma movimentação no período
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
