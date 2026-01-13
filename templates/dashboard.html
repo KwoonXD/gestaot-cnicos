@@ -4,7 +4,134 @@
 
 {% block content %}
 <div class="container-fluid py-4">
-    <!-- Stats Row -->
+    <!-- KPIs de Lucratividade (ROI) - Fase 2 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <!-- Alerta de Margem Critica -->
+            {% if kpis_roi.margem_global.alerta_critico %}
+            <div class="alert alert-danger d-flex align-items-center mb-3 border-0 shadow-sm" role="alert">
+                <i class="bi bi-exclamation-octagon-fill fs-4 me-3"></i>
+                <div>
+                    <strong>Alerta de Margem Critica!</strong>
+                    A margem de contribuicao esta em <strong>{{ kpis_roi.margem_global.margem_percent }}%</strong>,
+                    abaixo do limite saudavel de 15%. Revise custos e precificacao.
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="card shadow-sm border-0 bg-gradient" style="background: linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%);">
+                <!-- Filtro de Periodo -->
+                <div class="card-header bg-transparent border-0 py-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h6 class="text-white-50 mb-0 small text-uppercase">
+                            <i class="bi bi-graph-up-arrow me-2"></i>KPIs de Lucratividade (ROI)
+                        </h6>
+                        <div class="d-flex align-items-center gap-2">
+                            <select id="periodoRapido" class="form-select form-select-sm bg-white bg-opacity-10 text-white border-0" style="width: auto;">
+                                <option value="mes_atual" selected>Mes Atual</option>
+                                <option value="mes_anterior">Mes Anterior</option>
+                                <option value="ultimos_30">Ultimos 30 dias</option>
+                                <option value="ultimos_90">Ultimos 90 dias</option>
+                                <option value="custom">Personalizado...</option>
+                            </select>
+                            <div id="customPeriodo" class="d-none">
+                                <input type="date" id="dataInicio" class="form-control form-control-sm bg-white bg-opacity-10 text-white border-0" style="width: 130px;">
+                                <input type="date" id="dataFim" class="form-control form-control-sm bg-white bg-opacity-10 text-white border-0 ms-1" style="width: 130px;">
+                                <button id="btnAplicarFiltro" class="btn btn-sm btn-light ms-1">
+                                    <i class="bi bi-funnel"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-body py-3" id="kpisContainer">
+                    <div class="row align-items-center">
+                        <!-- Margem de Contribuicao Global -->
+                        <div class="col-lg-4 border-end border-light border-opacity-25">
+                            <div class="d-flex align-items-center">
+                                <div class="rounded-circle p-3 bg-white bg-opacity-10 me-3">
+                                    <i class="bi bi-pie-chart-fill fs-4 text-white"></i>
+                                </div>
+                                <div>
+                                    <div class="text-white-50 small text-uppercase fw-bold mb-1">Margem de Contribuicao Global</div>
+                                    <div class="d-flex align-items-baseline">
+                                        <span class="h3 mb-0 text-white fw-bold" id="kpiMargem">
+                                            R$ {{ "{:,.2f}".format(kpis_roi.margem_global.margem).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                                        </span>
+                                        <span id="kpiMargemBadge" class="badge ms-2 {{ 'bg-success' if kpis_roi.margem_global.margem_percent > 30 else ('bg-warning text-dark' if kpis_roi.margem_global.margem_percent > 10 else 'bg-danger') }}">
+                                            {{ kpis_roi.margem_global.margem_percent }}%
+                                        </span>
+                                    </div>
+                                    <small class="text-white-50" id="kpiMargemDetalhe">
+                                        Receita: R$ {{ "{:,.0f}".format(kpis_roi.margem_global.receita_total).replace(',', '.') }} |
+                                        Custo: R$ {{ "{:,.0f}".format(kpis_roi.margem_global.custo_total).replace(',', '.') }}
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tecnico Mais Rentavel -->
+                        <div class="col-lg-4 border-end border-light border-opacity-25">
+                            <div class="d-flex align-items-center">
+                                <div class="rounded-circle p-3 bg-white bg-opacity-10 me-3">
+                                    <i class="bi bi-trophy-fill fs-4 text-warning"></i>
+                                </div>
+                                <div class="flex-grow-1">
+                                    <div class="text-white-50 small text-uppercase fw-bold mb-1">
+                                        Tecnico Mais Rentavel
+                                        <button class="btn btn-link btn-sm text-white-50 p-0 ms-2" data-bs-toggle="modal" data-bs-target="#modalRankingTecnicos" title="Ver ranking completo">
+                                            <i class="bi bi-box-arrow-up-right"></i>
+                                        </button>
+                                    </div>
+                                    {% if kpis_roi.top_tecnicos_rentaveis %}
+                                    {% set top = kpis_roi.top_tecnicos_rentaveis[0] %}
+                                    <div class="h5 mb-0 text-white fw-bold text-truncate" style="max-width: 200px;" id="kpiTopTecnico">
+                                        {{ top.nome }}
+                                    </div>
+                                    <small class="text-white-50" id="kpiTopTecnicoDetalhe">
+                                        Margem: R$ {{ "{:,.0f}".format(top.margem).replace(',', '.') }}
+                                        ({{ top.margem_percent }}%) |
+                                        {{ top.volume }} chamados
+                                    </small>
+                                    {% else %}
+                                    <div class="h5 mb-0 text-white-50" id="kpiTopTecnico">Sem dados</div>
+                                    <small class="text-white-50" id="kpiTopTecnicoDetalhe"></small>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Ofensor de Custos -->
+                        <div class="col-lg-4">
+                            <div class="d-flex align-items-center">
+                                <div class="rounded-circle p-3 bg-white bg-opacity-10 me-3">
+                                    <i class="bi bi-exclamation-triangle-fill fs-4 text-danger"></i>
+                                </div>
+                                <div>
+                                    <div class="text-white-50 small text-uppercase fw-bold mb-1">Ofensor de Custos (Pecas)</div>
+                                    {% if kpis_roi.top_ofensores_custo %}
+                                    {% set ofensor = kpis_roi.top_ofensores_custo[0] %}
+                                    <div class="h5 mb-0 text-white fw-bold text-truncate" style="max-width: 200px;" id="kpiOfensor">
+                                        {{ ofensor.nome }}
+                                    </div>
+                                    <small class="text-white-50" id="kpiOfensorDetalhe">
+                                        R$ {{ "{:,.0f}".format(ofensor.custo_total).replace(',', '.') }} consumidos |
+                                        {{ ofensor.quantidade_consumida }} unidades
+                                    </small>
+                                    {% else %}
+                                    <div class="h5 mb-0 text-white-50" id="kpiOfensor">Sem movimentacoes</div>
+                                    <small class="text-white-50" id="kpiOfensorDetalhe"></small>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Stats Row -->
     <div class="stats-grid mb-4">
         <div>
@@ -14,7 +141,7 @@
                         <i class="bi bi-people fs-4"></i>
                     </div>
                     <div>
-                        <div class="text-muted small text-uppercase fw-bold">Técnicos Ativos</div>
+                        <div class="text-muted small text-uppercase fw-bold">Tecnicos Ativos</div>
                         <div class="h2 mb-0 fw-bold text-gray-800">{{ total_tecnicos_ativos }}</div>
                     </div>
                 </div>
@@ -27,7 +154,7 @@
                         <i class="bi bi-clipboard-data fs-4"></i>
                     </div>
                     <div>
-                        <div class="text-muted small text-uppercase fw-bold">Chamados (Mês)</div>
+                        <div class="text-muted small text-uppercase fw-bold">Chamados (Mes)</div>
                         <div class="h2 mb-0 fw-bold text-gray-800">{{ chamados_mes }}</div>
                     </div>
                 </div>
@@ -55,7 +182,7 @@
                         <i class="bi bi-graph-up-arrow fs-4"></i>
                     </div>
                     <div>
-                        <div class="text-muted small text-uppercase fw-bold">Lucro Real (Mês)</div>
+                        <div class="text-muted small text-uppercase fw-bold">Lucro Real (Mes)</div>
                         <div class="h3 mb-0 fw-bold {{ 'text-success' if lucro_stats.lucro > 0 else 'text-danger' }}">
                             R$ {{ "{:,.2f}".format(lucro_stats.lucro).replace('.', ',') }}
                         </div>
@@ -68,14 +195,22 @@
     <!-- Charts & Tables -->
     <div class="row g-4">
         <div class="col-lg-8">
+            <!-- Grafico de Evolucao de Margem -->
             <div class="card shadow-sm border-0 mb-4">
-                <div
-                    class="card-header bg-transparent py-3 d-flex justify-content-between align-items-center border-bottom">
-                    <h6 class="m-0 fw-bold text-primary">Evolução Financeira & Volume (6 Meses)</h6>
+                <div class="card-header bg-transparent py-3 d-flex justify-content-between align-items-center border-bottom">
+                    <h6 class="m-0 fw-bold text-primary">
+                        <i class="bi bi-bar-chart-line me-2"></i>Evolucao da Margem de Contribuicao (6 Meses)
+                    </h6>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <input type="radio" class="btn-check" name="chartType" id="chartMargem" checked>
+                        <label class="btn btn-outline-primary" for="chartMargem">Margem</label>
+                        <input type="radio" class="btn-check" name="chartType" id="chartReceitaCusto">
+                        <label class="btn btn-outline-primary" for="chartReceitaCusto">Receita x Custo</label>
+                    </div>
                 </div>
                 <div class="card-body">
                     <div class="chart-area" style="height: 300px;">
-                        <canvas id="evolutionChart"></canvas>
+                        <canvas id="evolucaoMargemChart"></canvas>
                     </div>
                 </div>
             </div>
@@ -83,9 +218,9 @@
             <div class="card shadow-sm border-0 mb-4">
                 <div
                     class="card-header bg-transparent py-3 d-flex justify-content-between align-items-center border-bottom">
-                    <h6 class="m-0 fw-bold text-secondary"><i class="bi bi-box-seam me-2"></i>Gestão de Estoque</h6>
+                    <h6 class="m-0 fw-bold text-secondary"><i class="bi bi-box-seam me-2"></i>Gestao de Estoque</h6>
                     {% if alertas_estoque %}
-                    <span class="badge bg-danger">Atenção</span>
+                    <span class="badge bg-danger">Atencao</span>
                     {% endif %}
                 </div>
                 <div class="card-body">
@@ -94,7 +229,7 @@
                         role="alert">
                         <i class="bi bi-exclamation-triangle-fill flex-shrink-0 me-2"></i>
                         <div>
-                            <strong>Estoque Crítico (&lt;10 un):</strong>
+                            <strong>Estoque Critico (&lt;10 un):</strong>
                             {% for item, qtd in alertas_estoque %}
                             <span class="badge bg-white text-dark border ms-1">{{ item }} ({{ qtd }})</span>
                             {% endfor %}
@@ -102,12 +237,12 @@
                     </div>
                     {% endif %}
 
-                    <h6 class="small text-muted text-uppercase mb-3 mt-2">Inventário em Posse de Terceiros (Em Rua)</h6>
+                    <h6 class="small text-muted text-uppercase mb-3 mt-2">Inventario em Posse de Terceiros (Em Rua)</h6>
                     <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
                         <table class="table table-hover align-middle">
                             <thead class="table-light sticky-top">
                                 <tr>
-                                    <th class="py-3 ps-3">Técnico</th>
+                                    <th class="py-3 ps-3">Tecnico</th>
                                     <th class="py-3">Item</th>
                                     <th class="py-3 text-center">Qtd</th>
                                 </tr>
@@ -122,7 +257,7 @@
                                 {% else %}
                                 <tr>
                                     <td colspan="3" class="text-center text-muted py-4">Nenhum item em posse de
-                                        técnicos.</td>
+                                        tecnicos.</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -139,7 +274,7 @@
         <div class="col-lg-4">
             <div class="card shadow-sm border-0 mb-4">
                 <div class="card-header bg-transparent py-3 border-bottom">
-                    <h6 class="m-0 fw-bold text-danger">Top Custo Extra (Mês Atual)</h6>
+                    <h6 class="m-0 fw-bold text-danger">Top Custo Extra (Mes Atual)</h6>
                 </div>
                 <div class="card-body">
                     <div class="chart-area" style="height: 200px;">
@@ -161,7 +296,7 @@
 
             <div class="card shadow-sm border-0 mb-4">
                 <div class="card-header bg-transparent py-3 border-bottom">
-                    <h6 class="m-0 fw-bold text-primary">Últimos Registros</h6>
+                    <h6 class="m-0 fw-bold text-primary">Ultimos Registros</h6>
                 </div>
                 <div class="list-group list-group-flush">
                     {% for chamado in ultimos_chamados %}
@@ -171,7 +306,7 @@
                             <span class="badge bg-light text-dark border">{{ chamado.status_chamado }}</span>
                         </div>
                         <div class="mb-1 small fw-bold text-truncate text-dark" style="max-width: 250px;">
-                            {{ chamado.tecnico.nome if chamado.tecnico else 'Sem Técnico' }}
+                            {{ chamado.tecnico.nome if chamado.tecnico else 'Sem Tecnico' }}
                         </div>
                         <small class="text-muted d-block">{{ chamado.cidade }}</small>
                     </div>
@@ -184,6 +319,282 @@
     </div>
 </div>
 
+<!-- Modal Ranking Tecnicos -->
+<div class="modal fade" id="modalRankingTecnicos" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="bi bi-trophy me-2"></i>Ranking de Tecnicos por Rentabilidade
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th class="py-3 ps-3">#</th>
+                                <th class="py-3">Tecnico</th>
+                                <th class="py-3 text-end">Volume</th>
+                                <th class="py-3 text-end">Receita</th>
+                                <th class="py-3 text-end">Custo</th>
+                                <th class="py-3 text-end">Margem</th>
+                                <th class="py-3 text-center">%</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rankingTecnicosBody">
+                            {% for tec in kpis_roi.top_tecnicos_rentaveis %}
+                            <tr>
+                                <td class="ps-3">
+                                    {% if loop.index == 1 %}
+                                    <span class="badge bg-warning text-dark"><i class="bi bi-trophy-fill"></i></span>
+                                    {% elif loop.index == 2 %}
+                                    <span class="badge bg-secondary"><i class="bi bi-trophy"></i></span>
+                                    {% elif loop.index == 3 %}
+                                    <span class="badge bg-danger"><i class="bi bi-trophy"></i></span>
+                                    {% else %}
+                                    {{ loop.index }}
+                                    {% endif %}
+                                </td>
+                                <td class="fw-bold">{{ tec.nome }}</td>
+                                <td class="text-end">{{ tec.volume }}</td>
+                                <td class="text-end text-success">R$ {{ "{:,.0f}".format(tec.receita).replace(',', '.') }}</td>
+                                <td class="text-end text-danger">R$ {{ "{:,.0f}".format(tec.custo_servico + tec.custo_pecas).replace(',', '.') }}</td>
+                                <td class="text-end fw-bold">R$ {{ "{:,.0f}".format(tec.margem).replace(',', '.') }}</td>
+                                <td class="text-center">
+                                    <span class="badge {{ 'bg-success' if tec.margem_percent > 30 else ('bg-warning text-dark' if tec.margem_percent > 10 else 'bg-danger') }}">
+                                        {{ tec.margem_percent }}%
+                                    </span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                <a href="{{ url_for('financeiro.dashboard_geografico') }}" class="btn btn-primary">
+                    <i class="bi bi-geo-alt me-1"></i>Ver por Regiao
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+<script>
+// Grafico de Evolucao de Margem
+let evolucaoChart = null;
+let evolucaoData = null;
+
+async function carregarEvolucaoMargem() {
+    try {
+        const response = await fetch('/api/dashboard/evolucao-margem');
+        evolucaoData = await response.json();
+        renderizarGraficoMargem();
+    } catch (error) {
+        console.error('Erro ao carregar evolucao:', error);
+    }
+}
+
+function renderizarGraficoMargem() {
+    const ctx = document.getElementById('evolucaoMargemChart').getContext('2d');
+
+    if (evolucaoChart) {
+        evolucaoChart.destroy();
+    }
+
+    const isMargem = document.getElementById('chartMargem').checked;
+
+    if (isMargem) {
+        evolucaoChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: evolucaoData.labels,
+                datasets: [{
+                    label: 'Margem (R$)',
+                    data: evolucaoData.margem,
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    fill: true,
+                    tension: 0.4
+                }, {
+                    label: 'Margem (%)',
+                    data: evolucaoData.margem_percent,
+                    borderColor: '#6366f1',
+                    backgroundColor: 'transparent',
+                    borderDash: [5, 5],
+                    yAxisID: 'y1',
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                scales: {
+                    y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        ticks: {
+                            callback: v => 'R$ ' + v.toLocaleString('pt-BR')
+                        }
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        grid: { drawOnChartArea: false },
+                        ticks: { callback: v => v + '%' }
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            afterBody: function(context) {
+                                const idx = context[0].dataIndex;
+                                const raw = evolucaoData.raw[idx];
+                                return `Volume: ${raw.volume} chamados`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    } else {
+        evolucaoChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: evolucaoData.labels,
+                datasets: [{
+                    label: 'Receita',
+                    data: evolucaoData.receita,
+                    backgroundColor: 'rgba(34, 197, 94, 0.7)',
+                    borderColor: '#22c55e',
+                    borderWidth: 1
+                }, {
+                    label: 'Custo',
+                    data: evolucaoData.custo,
+                    backgroundColor: 'rgba(239, 68, 68, 0.7)',
+                    borderColor: '#ef4444',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        ticks: {
+                            callback: v => 'R$ ' + v.toLocaleString('pt-BR')
+                        }
+                    }
+                }
+            }
+        });
+    }
+}
+
+// Filtro de Periodo
+document.getElementById('periodoRapido').addEventListener('change', function() {
+    const customDiv = document.getElementById('customPeriodo');
+    if (this.value === 'custom') {
+        customDiv.classList.remove('d-none');
+        customDiv.classList.add('d-flex');
+    } else {
+        customDiv.classList.add('d-none');
+        customDiv.classList.remove('d-flex');
+        aplicarFiltroPeriodo(this.value);
+    }
+});
+
+document.getElementById('btnAplicarFiltro')?.addEventListener('click', function() {
+    aplicarFiltroPeriodo('custom');
+});
+
+async function aplicarFiltroPeriodo(tipo) {
+    let inicio, fim;
+    const hoje = new Date();
+
+    switch(tipo) {
+        case 'mes_atual':
+            inicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+            fim = hoje;
+            break;
+        case 'mes_anterior':
+            inicio = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+            fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
+            break;
+        case 'ultimos_30':
+            inicio = new Date(hoje.getTime() - 30 * 24 * 60 * 60 * 1000);
+            fim = hoje;
+            break;
+        case 'ultimos_90':
+            inicio = new Date(hoje.getTime() - 90 * 24 * 60 * 60 * 1000);
+            fim = hoje;
+            break;
+        case 'custom':
+            inicio = new Date(document.getElementById('dataInicio').value);
+            fim = new Date(document.getElementById('dataFim').value);
+            break;
+    }
+
+    const inicioStr = inicio.toISOString().split('T')[0];
+    const fimStr = fim.toISOString().split('T')[0];
+
+    try {
+        const response = await fetch(`/api/dashboard/kpis-roi?inicio=${inicioStr}&fim=${fimStr}`);
+        const data = await response.json();
+        atualizarKPIs(data);
+    } catch (error) {
+        console.error('Erro ao atualizar KPIs:', error);
+    }
+}
+
+function atualizarKPIs(data) {
+    // Margem Global
+    const margem = data.margem_global;
+    document.getElementById('kpiMargem').textContent =
+        'R$ ' + margem.margem.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+
+    const badge = document.getElementById('kpiMargemBadge');
+    badge.textContent = margem.margem_percent + '%';
+    badge.className = 'badge ms-2 ' + (margem.margem_percent > 30 ? 'bg-success' :
+        (margem.margem_percent > 10 ? 'bg-warning text-dark' : 'bg-danger'));
+
+    document.getElementById('kpiMargemDetalhe').textContent =
+        `Receita: R$ ${margem.receita_total.toLocaleString('pt-BR', {maximumFractionDigits: 0})} | ` +
+        `Custo: R$ ${margem.custo_total.toLocaleString('pt-BR', {maximumFractionDigits: 0})}`;
+
+    // Top Tecnico
+    if (data.top_tecnicos_rentaveis.length > 0) {
+        const top = data.top_tecnicos_rentaveis[0];
+        document.getElementById('kpiTopTecnico').textContent = top.nome;
+        document.getElementById('kpiTopTecnicoDetalhe').textContent =
+            `Margem: R$ ${top.margem.toLocaleString('pt-BR', {maximumFractionDigits: 0})} ` +
+            `(${top.margem_percent}%) | ${top.volume} chamados`;
+    }
+
+    // Ofensor
+    if (data.top_ofensores_custo.length > 0) {
+        const ofensor = data.top_ofensores_custo[0];
+        document.getElementById('kpiOfensor').textContent = ofensor.nome;
+        document.getElementById('kpiOfensorDetalhe').textContent =
+            `R$ ${ofensor.custo_total.toLocaleString('pt-BR', {maximumFractionDigits: 0})} consumidos | ` +
+            `${ofensor.quantidade_consumida} unidades`;
+    }
+}
+
+// Toggle tipo de grafico
+document.querySelectorAll('input[name="chartType"]').forEach(radio => {
+    radio.addEventListener('change', renderizarGraficoMargem);
+});
+
+// Carregar dados ao iniciar
+document.addEventListener('DOMContentLoaded', carregarEvolucaoMargem);
+</script>
 {% endblock %}

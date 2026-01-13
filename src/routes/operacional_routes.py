@@ -11,6 +11,7 @@ from ..services.financeiro_service import FinanceiroService
 from ..services.tag_service import TagService
 from ..services.saved_view_service import SavedViewService
 from ..services.import_service import ImportService
+from ..services.report_service import ReportService
 from ..decorators import admin_required
 
 operacional_bp = Blueprint('operacional', __name__)
@@ -58,11 +59,15 @@ def dashboard():
     financeiro_stats = FinanceiroService.get_pendentes_stats()
     projecao_stats = FinanceiroService.calcular_projecao_mensal()
     lucro_stats = FinanceiroService.get_lucro_real_mensal()
+
+    # --- KPIs de Lucratividade (ROI) - Fase 2 ---
+    kpis_roi = ReportService.kpis_dashboard()
+
     # --- Feature C: Dados de Estoque para Dashboard ---
     # 1. Estoque Baixo Global (Alerta)
     estoque_baixo_limit = 10
     alertas_estoque = db.session.query(
-        ItemLPU.nome, 
+        ItemLPU.nome,
         func.sum(TecnicoStock.quantidade).label('total')
     ).join(TecnicoStock).group_by(ItemLPU.id)\
     .having(func.sum(TecnicoStock.quantidade) < estoque_baixo_limit).all()
@@ -76,18 +81,19 @@ def dashboard():
     ).select_from(Tecnico).join(TecnicoStock).join(ItemLPU)\
     .filter(TecnicoStock.quantidade > 0)\
     .order_by(Tecnico.nome).all()
-    
+
     return render_template('dashboard.html',
         total_tecnicos_ativos=tecnico_stats['ativos'],
         chamados_mes=chamado_stats['chamados_mes'],
         valor_total_pendente=tecnico_stats['total_pendente'],
         pagamentos_pendentes=financeiro_stats,
-        # chamados_por_status REMOVIDO
         ultimos_chamados=chamado_stats['ultimos'],
         projecao_financeira=projecao_stats,
         lucro_stats=lucro_stats,
         alertas_estoque=alertas_estoque,
-        inventario_rua=inventario_rua
+        inventario_rua=inventario_rua,
+        # KPIs ROI
+        kpis_roi=kpis_roi
     )
 
 @operacional_bp.route('/tecnicos')

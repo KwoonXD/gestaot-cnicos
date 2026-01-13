@@ -1,9 +1,10 @@
 from flask import Blueprint, jsonify, request, url_for
 from flask_login import login_required
 from ..services.chamado_service import ChamadoService
+from ..services.report_service import ReportService
 from ..models import Cliente, Chamado, Tecnico, db, TecnicoStock, ItemLPU, Pagamento
 from sqlalchemy import func
-from datetime import datetime
+from datetime import datetime, date
 
 api_bp = Blueprint('api', __name__)
 
@@ -200,12 +201,12 @@ def get_pagamento_detalhes(id):
     """
     try:
         pagamento = Pagamento.query.get_or_404(id)
-        
+
         # Calcular totais para cards de rentabilidade
         chamados = pagamento.chamados_incluidos.all()
         receita_estimada = sum(float(c.valor_receita_total or 0) for c in chamados)
         lucro_bruto = receita_estimada - float(pagamento.valor_total)
-        
+
         chamados_data = []
         for c in chamados:
             chamados_data.append({
@@ -217,7 +218,7 @@ def get_pagamento_detalhes(id):
                 'valor_pago': float(c.custo_atribuido or c.valor),
                 'status': c.status_chamado
             })
-            
+
         return jsonify({
             'id': pagamento.id,
             'id_pagamento': pagamento.id_pagamento,
@@ -241,5 +242,93 @@ def get_pagamento_detalhes(id):
             },
             'chamados': chamados_data
         })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# =============================================================================
+# APIs DE ROI / LUCRATIVIDADE - FASE 2
+# =============================================================================
+
+@api_bp.route('/dashboard/evolucao-margem')
+@login_required
+def dashboard_evolucao_margem():
+    """
+    Retorna evolucao mensal da margem de contribuicao (ultimos 6 meses).
+    Usado pelo Chart.js para grafico de area/linha.
+    """
+    try:
+        meses = request.args.get('meses', 6, type=int)
+        data = ReportService.evolucao_margem(meses)
+
+        # Formatar para Chart.js
+        return jsonify({
+            'labels': [d['mes_label'] for d in data],
+            'receita': [d['receita'] for d in data],
+            'custo': [d['custo_total'] for d in data],
+            'margem': [d['margem'] for d in data],
+            'margem_percent': [d['margem_percent'] for d in data],
+            'volume': [d['volume'] for d in data],
+            'raw': data  # Dados brutos para tooltips detalhados
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/dashboard/ranking-tecnicos')
+@login_required
+def dashboard_ranking_tecnicos():
+    """
+    Retorna ranking completo de tecnicos por rentabilidade.
+    Permite filtro por periodo via query params.
+    """
+    try:
+        # Filtros de periodo
+        inicio_str = request.args.get('inicio')
+        fim_str = request.args.get('fim')
+
+        inicio = None
+        fim = None
+
+        if inicio_str:
+            inicio = datetime.strptime(inicio_str, '%Y-%m-%d').date()
+        if fim_str:
+            fim = datetime.strptime(fim_str, '%Y-%m-%d').date()
+
+        data = ReportService.ranking_tecnicos_completo(inicio, fim)
+
+        return jsonify({
+            'tecnicos': data,
+            'periodo': {
+                'inicio': inicio.isoformat() if inicio else None,
+                'fim': fim.isoformat() if fim else None
+            }
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/dashboard/kpis-roi')
+@login_required
+def dashboard_kpis_roi():
+    """
+    Retorna KPIs de ROI atualizados (para refresh via AJAX).
+    Permite filtro por periodo via query params.
+    """
+    try:
+        inicio_str = request.args.get('inicio')
+        fim_str = request.args.get('fim')
+
+        inicio = None
+        fim = None
+
+        if inicio_str:
+            inicio = datetime.strptime(inicio_str, '%Y-%m-%d').date()
+        if fim_str:
+            fim = datetime.strptime(fim_str, '%Y-%m-%d').date()
+
+        data = ReportService.kpis_dashboard(inicio, fim)
+
+        return jsonify(data)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
