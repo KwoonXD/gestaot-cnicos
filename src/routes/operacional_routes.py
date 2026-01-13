@@ -54,17 +54,22 @@ def get_tipos_servico():
 @operacional_bp.route('/')
 @login_required
 def dashboard():
-    tecnico_stats = TecnicoService.get_stats()
-    chamado_stats = ChamadoService.get_dashboard_stats()
-    financeiro_stats = FinanceiroService.get_pendentes_stats()
-    projecao_stats = FinanceiroService.calcular_projecao_mensal()
-    lucro_stats = FinanceiroService.get_lucro_real_mensal()
+    """
+    Dashboard Estrategico de Lucratividade.
+    Foco em: Margem, Eficiencia e Alertas.
+    """
+    # =========================================================================
+    # KPIs ESTRATEGICOS (Fonte unica de verdade)
+    # =========================================================================
+    kpis = ReportService.get_dashboard_kpis()
 
-    # --- KPIs de Lucratividade (ROI) - Fase 2 ---
-    kpis_roi = ReportService.kpis_dashboard()
+    # =========================================================================
+    # DADOS COMPLEMENTARES (Apenas o necessario)
+    # =========================================================================
+    # Ultimos chamados para timeline
+    ultimos_chamados = ChamadoService.get_dashboard_stats().get('ultimos', [])
 
-    # --- Feature C: Dados de Estoque para Dashboard ---
-    # 1. Estoque Baixo Global (Alerta)
+    # Alertas de estoque critico
     estoque_baixo_limit = 10
     alertas_estoque = db.session.query(
         ItemLPU.nome,
@@ -72,28 +77,10 @@ def dashboard():
     ).join(TecnicoStock).group_by(ItemLPU.id)\
     .having(func.sum(TecnicoStock.quantidade) < estoque_baixo_limit).all()
 
-    # 2. Inventário em Posse de Terceiros (Top 10 itens com mais volume na rua)
-    # Mostra quem tem o que
-    inventario_rua = db.session.query(
-        Tecnico.nome,
-        ItemLPU.nome,
-        TecnicoStock.quantidade
-    ).select_from(Tecnico).join(TecnicoStock).join(ItemLPU)\
-    .filter(TecnicoStock.quantidade > 0)\
-    .order_by(Tecnico.nome).all()
-
     return render_template('dashboard.html',
-        total_tecnicos_ativos=tecnico_stats['ativos'],
-        chamados_mes=chamado_stats['chamados_mes'],
-        valor_total_pendente=tecnico_stats['total_pendente'],
-        pagamentos_pendentes=financeiro_stats,
-        ultimos_chamados=chamado_stats['ultimos'],
-        projecao_financeira=projecao_stats,
-        lucro_stats=lucro_stats,
-        alertas_estoque=alertas_estoque,
-        inventario_rua=inventario_rua,
-        # KPIs ROI
-        kpis_roi=kpis_roi
+        kpis=kpis,
+        ultimos_chamados=ultimos_chamados,
+        alertas_estoque=alertas_estoque
     )
 
 @operacional_bp.route('/tecnicos')

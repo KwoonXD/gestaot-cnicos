@@ -14,7 +14,10 @@
       "Bash(py test_stock_integration.py:*)",
       "Bash(py migrate_reposicao.py:*)",
       "Bash(py migrate_preco_historico.py --apply)",
-      "Bash(py -c:*)"
+      "Bash(py -c:*)",
+      "Bash(dir:*)",
+      "Bash(py app.py:*)",
+      "Bash(timeout /t 4 /nobreak)"
     ]
   }
 }

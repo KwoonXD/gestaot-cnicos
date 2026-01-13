@@ -242,6 +242,201 @@ class ReportService:
         }
 
     @staticmethod
+    def get_dashboard_kpis(mes: int = None, ano: int = None) -> dict:
+        """
+        Retorna KPIs Estrategicos consolidados para o Dashboard.
+        Foco em: Margem, Eficiencia e Alertas de Custo.
+
+        Args:
+            mes: Mes de referencia (1-12). Default: mes atual
+            ano: Ano de referencia. Default: ano atual
+
+        Returns:
+            StrategicKPIs: {
+                'periodo': {...},
+                'financeiro': {
+                    'receita_total', 'custo_servicos', 'custo_pecas',
+                    'custo_total', 'lucro_liquido', 'margem_percent',
+                    'ticket_medio', 'volume_chamados'
+                },
+                'backlog': {'valor', 'quantidade'},
+                'top_tecnicos': [...],  # Top 3 por margem media
+                'ofensor_estoque': {...},
+                'alertas': {'margem_critica', 'margem_baixa'}
+            }
+        """
+        hoje = date.today()
+        if not mes:
+            mes = hoje.month
+        if not ano:
+            ano = hoje.year
+
+        # Periodo do mes
+        inicio = date(ano, mes, 1)
+        if mes == 12:
+            fim = date(ano + 1, 1, 1) - relativedelta(days=1)
+        else:
+            fim = date(ano, mes + 1, 1) - relativedelta(days=1)
+
+        # =====================================================================
+        # 1. FINANCEIRO CONSOLIDADO (Uma unica query otimizada)
+        # =====================================================================
+        result = db.session.query(
+            func.count(Chamado.id).label('volume'),
+            func.coalesce(func.sum(Chamado.valor_receita_total), 0).label('receita'),
+            func.coalesce(func.sum(Chamado.custo_atribuido), 0).label('custo_servicos'),
+            func.coalesce(func.sum(
+                case(
+                    (Chamado.fornecedor_peca == 'Empresa', Chamado.custo_peca),
+                    else_=0
+                )
+            ), 0).label('custo_pecas')
+        ).filter(
+            Chamado.status_chamado == 'Concluído',
+            Chamado.data_atendimento >= inicio,
+            Chamado.data_atendimento <= fim
+        ).first()
+
+        receita = float(result.receita or 0)
+        custo_servicos = float(result.custo_servicos or 0)
+        custo_pecas = float(result.custo_pecas or 0)
+        custo_total = custo_servicos + custo_pecas
+        lucro = receita - custo_total
+        volume = int(result.volume or 0)
+        margem_pct = (lucro / receita * 100) if receita > 0 else 0.0
+        ticket_medio = (receita / volume) if volume > 0 else 0.0
+
+        # =====================================================================
+        # 2. BACKLOG FINANCEIRO (Pendente de Pagamento)
+        # =====================================================================
+        backlog = db.session.query(
+            func.count(Chamado.id).label('qtd'),
+            func.coalesce(func.sum(Chamado.custo_atribuido), 0).label('valor')
+        ).filter(
+            Chamado.status_chamado.in_(['Concluído', 'SPARE']),
+            Chamado.pago == False,
+            Chamado.pagamento_id == None,
+            Chamado.custo_atribuido > 0
+        ).first()
+
+        # =====================================================================
+        # 3. TOP TECNICOS POR EFICIENCIA (Margem Media, nao volume)
+        # =====================================================================
+        tecnicos_raw = db.session.query(
+            Tecnico.id,
+            Tecnico.nome,
+            func.count(Chamado.id).label('volume'),
+            func.coalesce(func.sum(Chamado.valor_receita_total), 0).label('receita'),
+            func.coalesce(func.sum(Chamado.custo_atribuido), 0).label('custo_srv'),
+            func.coalesce(func.sum(
+                case(
+                    (Chamado.fornecedor_peca == 'Empresa', Chamado.custo_peca),
+                    else_=0
+                )
+            ), 0).label('custo_pcs')
+        ).join(
+            Tecnico, Chamado.tecnico_id == Tecnico.id
+        ).filter(
+            Chamado.status_chamado == 'Concluído',
+            Chamado.data_atendimento >= inicio,
+            Chamado.data_atendimento <= fim
+        ).group_by(
+            Tecnico.id, Tecnico.nome
+        ).having(
+            func.count(Chamado.id) >= 1
+        ).all()
+
+        # Calcular margem media por tecnico (eficiencia)
+        top_tecnicos = []
+        for t in tecnicos_raw:
+            rec = float(t.receita or 0)
+            cust = float(t.custo_srv or 0) + float(t.custo_pcs or 0)
+            lucro_tec = rec - cust
+            vol = int(t.volume)
+            margem_media = (lucro_tec / vol) if vol > 0 else 0
+            margem_pct_tec = (lucro_tec / rec * 100) if rec > 0 else 0
+
+            top_tecnicos.append({
+                'id': t.id,
+                'nome': t.nome,
+                'volume': vol,
+                'lucro_total': round(lucro_tec, 2),
+                'margem_media': round(margem_media, 2),
+                'margem_percent': round(margem_pct_tec, 1)
+            })
+
+        # Ordenar por margem % (eficiencia real)
+        top_tecnicos.sort(key=lambda x: x['margem_percent'], reverse=True)
+        top_tecnicos = top_tecnicos[:5]  # Top 5
+
+        # =====================================================================
+        # 4. OFENSOR DE ESTOQUE (Item que mais custou)
+        # =====================================================================
+        ofensor_raw = db.session.query(
+            ItemLPU.id,
+            ItemLPU.nome,
+            func.sum(StockMovement.quantidade).label('qtd'),
+            func.sum(StockMovement.quantidade * ItemLPU.valor_custo).label('custo')
+        ).join(
+            StockMovement, StockMovement.item_lpu_id == ItemLPU.id
+        ).join(
+            Chamado, StockMovement.chamado_id == Chamado.id
+        ).filter(
+            StockMovement.tipo_movimento == 'USO',
+            Chamado.status_chamado == 'Concluído',
+            Chamado.data_atendimento >= inicio,
+            Chamado.data_atendimento <= fim
+        ).group_by(
+            ItemLPU.id, ItemLPU.nome
+        ).order_by(
+            func.sum(StockMovement.quantidade * ItemLPU.valor_custo).desc()
+        ).first()
+
+        ofensor = None
+        if ofensor_raw and ofensor_raw.custo:
+            pct_custo = (float(ofensor_raw.custo) / custo_pecas * 100) if custo_pecas > 0 else 0
+            ofensor = {
+                'id': ofensor_raw.id,
+                'nome': ofensor_raw.nome,
+                'quantidade': int(ofensor_raw.qtd or 0),
+                'custo_total': round(float(ofensor_raw.custo or 0), 2),
+                'percent_do_total': round(pct_custo, 1)
+            }
+
+        # =====================================================================
+        # RETORNO CONSOLIDADO
+        # =====================================================================
+        return {
+            'periodo': {
+                'mes': mes,
+                'ano': ano,
+                'inicio': inicio.isoformat(),
+                'fim': fim.isoformat(),
+                'label': f"{['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][mes-1]}/{ano}"
+            },
+            'financeiro': {
+                'receita_total': round(receita, 2),
+                'custo_servicos': round(custo_servicos, 2),
+                'custo_pecas': round(custo_pecas, 2),
+                'custo_total': round(custo_total, 2),
+                'lucro_liquido': round(lucro, 2),
+                'margem_percent': round(margem_pct, 1),
+                'ticket_medio': round(ticket_medio, 2),
+                'volume_chamados': volume
+            },
+            'backlog': {
+                'valor': round(float(backlog.valor or 0), 2),
+                'quantidade': int(backlog.qtd or 0)
+            },
+            'top_tecnicos': top_tecnicos,
+            'ofensor_estoque': ofensor,
+            'alertas': {
+                'margem_critica': margem_pct < 15,
+                'margem_baixa': 15 <= margem_pct < 25
+            }
+        }
+
+    @staticmethod
     def evolucao_margem(meses: int = 6) -> list:
         """
         Retorna evolução mensal da margem de contribuição.
