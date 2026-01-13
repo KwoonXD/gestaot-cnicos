@@ -527,21 +527,21 @@ class PricingService:
         Retorna o valor de venda de uma peca para um contrato especifico.
         Interface simplificada que retorna apenas o valor float.
 
-        Logica:
-        1. Busca em ContratoItem (preco personalizado)
-        2. Fallback: valor_receita padrao do ItemLPU
-        3. Se nao encontrar: 0.0
+        REGRA DE NEGOCIO (Simplificada):
+        - O preco de venda vem EXCLUSIVAMENTE da tabela ContratoItem.
+        - Se nao houver ContratoItem, retorna 0.0 (item nao precificado).
+        - O catalogo ItemLPU serve apenas para definicao do produto (Nome/SKU).
 
         Args:
             contrato_id: ID do cliente/contrato
             item_lpu_id: ID do ItemLPU (peca)
 
         Returns:
-            float: Valor de venda da peca
+            float: Valor de venda da peca (0.0 se nao precificado no contrato)
         """
-        from src.models import ContratoItem, ItemLPU
+        from src.models import ContratoItem
 
-        # 1. Buscar preco personalizado no contrato
+        # Buscar preco EXCLUSIVAMENTE no contrato
         contrato_item = ContratoItem.query.filter_by(
             cliente_id=contrato_id,
             item_lpu_id=item_lpu_id,
@@ -551,12 +551,7 @@ class PricingService:
         if contrato_item:
             return float(contrato_item.valor_venda or 0.0)
 
-        # 2. Fallback: Preco padrao do catalogo
-        item = ItemLPU.query.get(item_lpu_id)
-        if item:
-            return float(item.valor_receita or 0.0)
-
-        # 3. Nao encontrado
+        # SEM FALLBACK: Item nao precificado neste contrato
         return 0.0
 
     @staticmethod
@@ -564,9 +559,10 @@ class PricingService:
         """
         Busca o valor de venda de uma peca para um cliente especifico.
 
-        Logica:
-        1. Tenta buscar em ContratoItem (preco personalizado)
-        2. Fallback: Retorna valor_receita padrao do ItemLPU
+        REGRA DE NEGOCIO (Simplificada):
+        - O preco de venda vem EXCLUSIVAMENTE da tabela ContratoItem.
+        - Se nao houver ContratoItem, retorna is_precificado=False.
+        - O valor_custo (almoxarifado) serve apenas para referencia de margem.
 
         Args:
             cliente_id: ID do cliente/contrato
@@ -576,14 +572,14 @@ class PricingService:
             dict: {
                 'valor_venda': float,
                 'valor_repasse': float or None,
-                'valor_custo': float,
-                'is_personalizado': bool,
+                'valor_custo': float (referencia),
+                'is_precificado': bool,
                 'margem': float
             }
         """
         from src.models import ContratoItem, ItemLPU
 
-        # 1. Buscar preco personalizado no contrato
+        # Buscar preco EXCLUSIVAMENTE no contrato
         contrato_item = ContratoItem.query.filter_by(
             cliente_id=cliente_id,
             item_lpu_id=item_id,
@@ -595,82 +591,58 @@ class PricingService:
                 'valor_venda': contrato_item.valor_venda,
                 'valor_repasse': contrato_item.valor_repasse,
                 'valor_custo': contrato_item.item_lpu.valor_custo if contrato_item.item_lpu else 0,
-                'is_personalizado': True,
+                'is_precificado': True,
                 'margem': contrato_item.margem
             }
 
-        # 2. Fallback: Preco padrao do catalogo
+        # SEM FALLBACK: Buscar apenas custo de referencia
         item = ItemLPU.query.get(item_id)
-        if item:
-            return {
-                'valor_venda': item.valor_receita,
-                'valor_repasse': None,
-                'valor_custo': item.valor_custo,
-                'is_personalizado': False,
-                'margem': item.margem
-            }
-
-        # 3. Item nao encontrado
         return {
             'valor_venda': 0.0,
             'valor_repasse': None,
-            'valor_custo': 0.0,
-            'is_personalizado': False,
+            'valor_custo': float(item.valor_custo or 0) if item else 0.0,
+            'is_precificado': False,
             'margem': 0.0
         }
 
     @staticmethod
     def get_tabela_precos_contrato(cliente_id: int) -> list:
         """
-        Retorna a tabela de precos completa para um cliente.
-        Inclui itens com preco personalizado e itens do catalogo geral.
+        Retorna a tabela de precos para um cliente.
+
+        REGRA DE NEGOCIO (Simplificada):
+        - Retorna APENAS itens que possuem preco definido no contrato.
+        - Itens sem ContratoItem NAO sao cobraveis neste contrato.
 
         Args:
             cliente_id: ID do cliente/contrato
 
         Returns:
-            Lista de dicts com todos os itens e seus precos para este cliente.
+            Lista de dicts com itens precificados para este cliente.
         """
-        from src.models import ContratoItem, ItemLPU
+        from src.models import ContratoItem
 
         resultado = []
 
-        # 1. Buscar todos os itens do catalogo
-        todos_itens = ItemLPU.query.filter_by(ativo=True).all() if hasattr(ItemLPU, 'ativo') else ItemLPU.query.all()
+        # Buscar APENAS itens precificados neste contrato
+        contrato_itens = ContratoItem.query.filter_by(
+            cliente_id=cliente_id,
+            ativo=True
+        ).all()
 
-        # 2. Buscar precos personalizados deste cliente
-        precos_personalizados = {
-            ci.item_lpu_id: ci
-            for ci in ContratoItem.query.filter_by(cliente_id=cliente_id, ativo=True).all()
-        }
+        for ci in contrato_itens:
+            item = ci.item_lpu
+            if not item:
+                continue
 
-        # 3. Montar lista consolidada
-        for item in todos_itens:
-            contrato_item = precos_personalizados.get(item.id)
-
-            if contrato_item:
-                resultado.append({
-                    'item_id': item.id,
-                    'nome': item.nome,
-                    'valor_venda': contrato_item.valor_venda,
-                    'valor_repasse': contrato_item.valor_repasse,
-                    'valor_custo': item.valor_custo,
-                    'valor_catalogo': item.valor_receita,
-                    'is_personalizado': True,
-                    'desconto_percent': round(
-                        (1 - contrato_item.valor_venda / item.valor_receita) * 100, 1
-                    ) if item.valor_receita and item.valor_receita > 0 else 0
-                })
-            else:
-                resultado.append({
-                    'item_id': item.id,
-                    'nome': item.nome,
-                    'valor_venda': item.valor_receita,
-                    'valor_repasse': None,
-                    'valor_custo': item.valor_custo,
-                    'valor_catalogo': item.valor_receita,
-                    'is_personalizado': False,
-                    'desconto_percent': 0
-                })
+            resultado.append({
+                'item_id': item.id,
+                'nome': item.nome,
+                'valor_venda': ci.valor_venda,
+                'valor_repasse': ci.valor_repasse,
+                'valor_custo': float(item.valor_custo or 0),
+                'margem': ci.margem,
+                'margem_percent': round(ci.margem_percent, 1)
+            })
 
         return resultado

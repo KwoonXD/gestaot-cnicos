@@ -17,7 +17,8 @@
       "Bash(py -c:*)",
       "Bash(dir:*)",
       "Bash(py app.py:*)",
-      "Bash(timeout /t 4 /nobreak)"
+      "Bash(timeout /t 4 /nobreak)",
+      "Bash(netstat:*)"
     ]
   }
 }

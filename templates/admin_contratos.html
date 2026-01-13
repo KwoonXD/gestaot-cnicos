@@ -458,47 +458,115 @@
 
         <!-- Modal: Novo Preço Personalizado (Per Cliente) -->
         <div class="modal fade" id="modalNovoPreco{{ cliente.id }}" tabindex="-1">
-            <div class="modal-dialog">
+            <div class="modal-dialog modal-lg">
                 <div class="modal-content">
                     <form action="{{ url_for('admin.adicionar_contrato_item', id=cliente.id) }}" method="POST">
                         <div class="modal-header bg-warning bg-opacity-10">
                             <h5 class="modal-title">
-                                <i class="bi bi-tags me-2 text-warning"></i>Novo Preço - {{ cliente.nome }}
+                                <i class="bi bi-tags me-2 text-warning"></i>Tabela de Preços - {{ cliente.nome }}
                             </h5>
                             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                         </div>
                         <div class="modal-body">
-                            <div class="alert alert-info small py-2">
-                                <i class="bi bi-info-circle me-1"></i>
-                                Defina um preço especial para este contrato. Se não configurado, será usado o preço padrão do catálogo.
+                            <div class="alert alert-warning small py-2 mb-3">
+                                <i class="bi bi-exclamation-triangle me-1"></i>
+                                <strong>Importante:</strong> Somente peças cadastradas aqui serão cobráveis neste contrato.
                             </div>
-                            <div class="mb-3">
-                                <label class="form-label">Selecione a Peça *</label>
-                                <select name="item_lpu_id" class="form-select select-peca" data-cliente="{{ cliente.id }}" required>
-                                    <option value="">-- Selecione uma peça --</option>
-                                </select>
-                                <small class="text-muted">Preço catálogo: <span class="preco-catalogo-{{ cliente.id }}">-</span></small>
-                            </div>
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label">Valor de Venda (R$) *</label>
-                                    <input type="number" step="0.01" name="valor_venda" class="form-control"
-                                        placeholder="150.00" required>
-                                    <small class="text-muted">Cobrado deste cliente</small>
+
+                            <!-- Formulário de Adição -->
+                            <div class="card bg-light border-0 mb-3">
+                                <div class="card-body py-3">
+                                    <div class="row g-2 align-items-end">
+                                        <div class="col-md-5">
+                                            <label class="form-label small fw-bold">Selecione a Peça</label>
+                                            <select name="item_lpu_id" class="form-select select-peca-modal" data-cliente="{{ cliente.id }}" required>
+                                                <option value="">-- Selecione --</option>
+                                                {% for item in todos_itens_lpu %}
+                                                <option value="{{ item.id }}" data-custo="{{ custos_itens.get(item.id, 0) }}">
+                                                    {{ item.nome }}
+                                                </option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label small fw-bold">Preço Venda (R$) *</label>
+                                            <input type="number" step="0.01" min="0.01" name="valor_venda" class="form-control"
+                                                placeholder="0.00" required>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <label class="form-label small fw-bold">Repasse (R$)</label>
+                                            <input type="number" step="0.01" name="valor_repasse" class="form-control bg-white"
+                                                placeholder="Opcional">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <button type="submit" class="btn btn-warning w-100">
+                                                <i class="bi bi-plus-lg me-1"></i> Adicionar
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <!-- Custo de referência -->
+                                    <div class="custo-referencia-{{ cliente.id }} mt-2" style="display: none;">
+                                        <small class="text-muted">
+                                            <i class="bi bi-info-circle me-1"></i>
+                                            Custo Médio Atual: <strong class="text-dark custo-valor-{{ cliente.id }}">R$ 0,00</strong>
+                                            <span class="ms-2 text-success margem-sugerida-{{ cliente.id }}"></span>
+                                        </small>
+                                    </div>
                                 </div>
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label">Repasse Técnico (R$)</label>
-                                    <input type="number" step="0.01" name="valor_repasse" class="form-control bg-light"
-                                        placeholder="Opcional">
-                                    <small class="text-muted">Deixe vazio para usar padrão</small>
-                                </div>
                             </div>
+
+                            <!-- Lista de Itens Configurados -->
+                            <h6 class="fw-bold text-secondary mb-2">
+                                <i class="bi bi-list-check me-1"></i> Peças Cobráveis ({{ cliente.itens.count() }})
+                            </h6>
+                            {% if cliente.itens.count() > 0 %}
+                            <div class="table-responsive" style="max-height: 300px;">
+                                <table class="table table-sm table-hover mb-0">
+                                    <thead class="bg-light sticky-top">
+                                        <tr>
+                                            <th>Peça</th>
+                                            <th class="text-end">Custo</th>
+                                            <th class="text-end">Venda</th>
+                                            <th class="text-end">Margem</th>
+                                            <th style="width: 50px;"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for ci in cliente.itens %}
+                                        {% set custo = ci.item_lpu.valor_custo or 0 if ci.item_lpu else 0 %}
+                                        <tr>
+                                            <td class="align-middle fw-semibold">{{ ci.item_lpu.nome if ci.item_lpu else 'N/A' }}</td>
+                                            <td class="align-middle text-end text-muted small">R$ {{ "%.2f"|format(custo) }}</td>
+                                            <td class="align-middle text-end fw-bold text-success">R$ {{ "%.2f"|format(ci.valor_venda) }}</td>
+                                            <td class="align-middle text-end">
+                                                <span class="badge {{ 'bg-success' if ci.margem_percent > 30 else ('bg-warning text-dark' if ci.margem_percent > 15 else 'bg-danger') }}">
+                                                    {{ "%.0f"|format(ci.margem_percent) }}%
+                                                </span>
+                                            </td>
+                                            <td class="align-middle text-center">
+                                                <button type="button" class="btn btn-sm btn-outline-danger btn-remover-preco"
+                                                    data-cliente="{{ cliente.id }}"
+                                                    data-item="{{ ci.item_lpu_id }}"
+                                                    data-nome="{{ ci.item_lpu.nome if ci.item_lpu else 'item' }}"
+                                                    title="Remover peça deste contrato">
+                                                    <i class="bi bi-x-lg"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% else %}
+                            <div class="text-center text-muted py-4 bg-light rounded">
+                                <i class="bi bi-exclamation-circle display-6 opacity-50 text-warning"></i>
+                                <p class="mb-0 mt-2 fw-semibold">Nenhuma peça cobrável</p>
+                                <small>Adicione peças acima para habilitar cobrança neste contrato</small>
+                            </div>
+                            {% endif %}
                         </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                            <button type="submit" class="btn btn-warning">
-                                <i class="bi bi-check-lg me-1"></i> Salvar Preço
-                            </button>
+                        <div class="modal-footer bg-light">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
                         </div>
                     </form>
                 </div>
@@ -736,60 +804,97 @@
     // Tabela de Preços por Contrato
     // ========================================
 
-    // Cache de peças disponíveis
-    let pecasCache = null;
-
-    // Carregar peças disponíveis
-    async function carregarPecas() {
-        if (pecasCache) return pecasCache;
-
-        try {
-            const response = await fetch('/admin/pecas-disponiveis');
-            pecasCache = await response.json();
-            return pecasCache;
-        } catch (err) {
-            console.error('Erro ao carregar peças:', err);
-            return [];
-        }
-    }
-
-    // Preencher select de peças quando modal abrir
-    document.querySelectorAll('[id^="modalNovoPreco"]').forEach(modal => {
-        modal.addEventListener('show.bs.modal', async function() {
-            const select = this.querySelector('.select-peca');
-            const clienteId = select.dataset.cliente;
-
-            // Limpar e adicionar opção padrão
-            select.innerHTML = '<option value="">-- Selecione uma peça --</option>';
-
-            // Carregar peças
-            const pecas = await carregarPecas();
-
-            pecas.forEach(peca => {
-                const option = document.createElement('option');
-                option.value = peca.id;
-                option.textContent = `${peca.nome} (R$ ${peca.valor_receita.toFixed(2)})`;
-                option.dataset.valor = peca.valor_receita;
-                select.appendChild(option);
-            });
-        });
-    });
-
-    // Atualizar preço catálogo quando selecionar peça
-    document.querySelectorAll('.select-peca').forEach(select => {
+    // Exibir Custo Médio de referência quando selecionar peça
+    document.querySelectorAll('.select-peca-modal').forEach(select => {
         select.addEventListener('change', function() {
             const clienteId = this.dataset.cliente;
             const selectedOption = this.options[this.selectedIndex];
-            const precoCatalogo = selectedOption.dataset.valor || '-';
+            const custo = parseFloat(selectedOption.dataset.custo) || 0;
 
-            const spanPreco = document.querySelector(`.preco-catalogo-${clienteId}`);
-            if (spanPreco) {
-                spanPreco.textContent = precoCatalogo !== '-' ? `R$ ${parseFloat(precoCatalogo).toFixed(2)}` : '-';
+            const divCusto = document.querySelector(`.custo-referencia-${clienteId}`);
+            const spanCusto = document.querySelector(`.custo-valor-${clienteId}`);
+            const spanMargem = document.querySelector(`.margem-sugerida-${clienteId}`);
+
+            if (selectedOption.value) {
+                // Mostrar custo de referência
+                if (divCusto) divCusto.style.display = 'block';
+                if (spanCusto) spanCusto.textContent = `R$ ${custo.toFixed(2)}`;
+                if (spanMargem) spanMargem.innerHTML = '';
+            } else {
+                // Esconder se nada selecionado
+                if (divCusto) divCusto.style.display = 'none';
+            }
+
+            // Limpar campo de valor ao mudar seleção
+            const inputValor = this.closest('.card-body').querySelector('input[name="valor_venda"]');
+            if (inputValor) inputValor.value = '';
+        });
+    });
+
+    // Calcular margem em tempo real ao digitar preço de venda
+    document.querySelectorAll('input[name="valor_venda"]').forEach(input => {
+        input.addEventListener('input', function() {
+            const cardBody = this.closest('.card-body');
+            if (!cardBody) return;
+
+            const select = cardBody.querySelector('.select-peca-modal');
+            if (!select) return;
+
+            const clienteId = select.dataset.cliente;
+            const selectedOption = select.options[select.selectedIndex];
+            const custo = parseFloat(selectedOption?.dataset?.custo) || 0;
+            const precoVenda = parseFloat(this.value) || 0;
+
+            const spanMargem = document.querySelector(`.margem-sugerida-${clienteId}`);
+            if (!spanMargem) return;
+
+            if (precoVenda > 0 && custo > 0) {
+                const margem = ((precoVenda - custo) / precoVenda * 100);
+                if (margem > 30) {
+                    spanMargem.innerHTML = `<span class="badge bg-success">Margem: ${margem.toFixed(0)}%</span>`;
+                } else if (margem > 15) {
+                    spanMargem.innerHTML = `<span class="badge bg-warning text-dark">Margem: ${margem.toFixed(0)}%</span>`;
+                } else if (margem > 0) {
+                    spanMargem.innerHTML = `<span class="badge bg-danger">Margem baixa: ${margem.toFixed(0)}%</span>`;
+                } else {
+                    spanMargem.innerHTML = `<span class="badge bg-dark">Prejuízo: ${margem.toFixed(0)}%</span>`;
+                }
+            } else {
+                spanMargem.innerHTML = '';
             }
         });
     });
 
-    // Auto-save para preços de contrato (edição inline)
+    // Remover peça do contrato (botão dentro do modal)
+    document.querySelectorAll('.btn-remover-preco').forEach(btn => {
+        btn.addEventListener('click', async function() {
+            const clienteId = this.dataset.cliente;
+            const itemId = this.dataset.item;
+            const nome = this.dataset.nome;
+
+            if (!confirm(`Remover "${nome}" deste contrato?\n\n⚠️ A peça não será mais cobrável neste cliente.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/admin/contrato/${clienteId}/itens/${itemId}`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                if (response.ok) {
+                    // Recarregar página para atualizar lista
+                    location.reload();
+                } else {
+                    throw new Error('Erro ao remover');
+                }
+            } catch (err) {
+                alert('Erro ao remover preço. Tente novamente.');
+            }
+        });
+    });
+
+    // Auto-save para preços de contrato (edição inline na tabela principal)
     document.querySelectorAll('.editable-preco-contrato').forEach(input => {
         input.addEventListener('change', async function() {
             const clienteId = this.dataset.cliente;
@@ -820,9 +925,6 @@
                     setTimeout(() => {
                         this.classList.remove('border-success');
                     }, 2000);
-
-                    // Recarregar para atualizar margem (opcional - ou calcular no frontend)
-                    // location.reload();
                 } else {
                     throw new Error('Erro ao salvar');
                 }
