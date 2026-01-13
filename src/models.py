@@ -833,6 +833,9 @@ class StockMovement(db.Model):
     tipo_movimento = db.Column(db.String(20), nullable=False)  # 'ENVIO', 'USO', 'DEVOLUCAO', 'AJUSTE'
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
 
+    # Custo unitário no momento da movimentação (para auditoria e cálculo de média ponderada)
+    custo_unitario = db.Column(db.Float, nullable=True)
+
     observacao = db.Column(db.String(200), nullable=True)
     created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
 
@@ -853,6 +856,7 @@ class StockMovement(db.Model):
             'chamado_id': self.chamado_id,
             'quantidade': self.quantidade,
             'tipo_movimento': self.tipo_movimento,
+            'custo_unitario': self.custo_unitario,
             'data_criacao': self.data_criacao.isoformat() if self.data_criacao else None,
             'observacao': self.observacao
         }

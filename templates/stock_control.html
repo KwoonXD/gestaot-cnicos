@@ -176,13 +176,13 @@
                         </div>
 
                         <!-- Item & Qty -->
-                        <div class="row g-3 mb-4">
+                        <div class="row g-3 mb-3">
                             <div class="col-8">
                                 <label class="form-label text-uppercase small fw-bold text-muted mb-1">Item</label>
                                 <select name="item_id" class="form-select py-2" x-model="itemId" required>
                                     <option value="">Selecione o item...</option>
                                     {% for item in itens %}
-                                    <option value="{{ item.id }}">{{ item.nome }}</option>
+                                    <option value="{{ item.id }}" data-custo="{{ item.valor_custo or 0 }}">{{ item.nome }}</option>
                                     {% endfor %}
                                 </select>
                             </div>
@@ -196,6 +196,29 @@
                                     <button class="btn btn-outline-secondary" type="button" @click="qty++"><i
                                             class="bi bi-plus"></i></button>
                                 </div>
+                            </div>
+                        </div>
+
+                        <!-- Custo de Aquisição (apenas para ENVIO) -->
+                        <div class="mb-3" x-show="tipo === 'ENVIO'" x-transition>
+                            <label class="form-label text-uppercase small fw-bold text-danger mb-1">
+                                <i class="bi bi-cash-coin me-1"></i>Custo Unitário de Compra (R$)
+                            </label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-danger text-white">R$</span>
+                                <input type="number" name="custo_aquisicao" class="form-control"
+                                    step="0.01" min="0" x-model="custoAquisicao"
+                                    placeholder="Valor pago por unidade" required>
+                            </div>
+                            <div class="form-text small text-muted">
+                                <i class="bi bi-calculator me-1"></i>
+                                <span x-show="custoAtual > 0">
+                                    Custo atual: <strong class="text-danger">R$ <span x-text="custoAtual.toFixed(2)"></span></strong>
+                                    <span x-show="custoAquisicao && custoAquisicao != custoAtual" class="ms-2">
+                                        → Novo custo médio será recalculado automaticamente
+                                    </span>
+                                </span>
+                                <span x-show="custoAtual <= 0">Primeira entrada - define o custo base</span>
                             </div>
                         </div>
 
@@ -393,6 +416,8 @@
             tecnicoId: '',
             itemId: '',
             qty: 1,
+            custoAquisicao: '',
+            custoAtual: 0,
             isSaving: false,
             modalInstance: null,
             tomSelectInstance: null,
@@ -417,7 +442,10 @@
                     });
                 }
 
-                this.$watch('itemId', () => this.updateCurrentStock());
+                this.$watch('itemId', () => {
+                    this.updateCurrentStock();
+                    this.updateCustoAtual();
+                });
             },
 
             openModal(tecId = '', itemId = '', currentQty = 0) {
@@ -428,6 +456,9 @@
                 this.currentStock = currentQty;
                 this.tipo = 'ENVIO';
                 this.qty = 1;
+                this.custoAquisicao = '';
+                this.custoAtual = 0;
+                this.updateCustoAtual();
                 this.modalInstance?.show();
             },
 
@@ -438,6 +469,20 @@
                         const iId = parseInt(this.itemId);
                         this.currentStock = (this.matrixData[tId] && this.matrixData[tId][iId]) || 0;
                     } catch (e) { this.currentStock = 0; }
+                }
+            },
+
+            updateCustoAtual() {
+                if (this.itemId) {
+                    const select = document.querySelector('select[name="item_id"]');
+                    const option = select?.querySelector(`option[value="${this.itemId}"]`);
+                    this.custoAtual = parseFloat(option?.dataset?.custo || 0);
+                    // Pré-preencher com custo atual se vazio
+                    if (!this.custoAquisicao && this.custoAtual > 0) {
+                        this.custoAquisicao = this.custoAtual.toFixed(2);
+                    }
+                } else {
+                    this.custoAtual = 0;
                 }
             },
 

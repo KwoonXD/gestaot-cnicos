@@ -165,20 +165,24 @@ def contratos():
     """Dashboard de gestão de clientes/contratos"""
     clientes = Cliente.query.order_by(Cliente.nome).all()
 
-    # Buscar todas as peças únicas para o dropdown de seleção
+    # Buscar todos os itens do catálogo para o dropdown
     todos_itens_lpu = ItemLPU.query.order_by(ItemLPU.nome).all()
 
-    # Montar dicionário de custos para referência no frontend
-    # O custo serve apenas para tomada de decisão (não é preço de venda)
-    custos_itens = {
-        item.id: float(item.valor_custo or 0)
+    # Serializar catálogo para JavaScript (id, nome, custo_ref)
+    # REGRA: ItemLPU define apenas PRODUTO e CUSTO. Preço de venda vem do ContratoItem.
+    itens_catalogo = [
+        {
+            'id': item.id,
+            'nome': item.nome,
+            'custo_ref': float(item.valor_custo or 0)
+        }
         for item in todos_itens_lpu
-    }
+    ]
 
     return render_template('admin_contratos.html',
         clientes=clientes,
         todos_itens_lpu=todos_itens_lpu,
-        custos_itens=custos_itens
+        itens_catalogo=itens_catalogo
     )
 
 

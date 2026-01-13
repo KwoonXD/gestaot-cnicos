@@ -457,76 +457,97 @@
         </div>
 
         <!-- Modal: Novo Preço Personalizado (Per Cliente) -->
+        <!-- MODAL: LPU do Contrato (Single Source of Pricing) -->
         <div class="modal fade" id="modalNovoPreco{{ cliente.id }}" tabindex="-1">
             <div class="modal-dialog modal-lg">
                 <div class="modal-content">
                     <form action="{{ url_for('admin.adicionar_contrato_item', id=cliente.id) }}" method="POST">
-                        <div class="modal-header bg-warning bg-opacity-10">
+                        <div class="modal-header bg-primary text-white">
                             <h5 class="modal-title">
-                                <i class="bi bi-tags me-2 text-warning"></i>Tabela de Preços - {{ cliente.nome }}
+                                <i class="bi bi-file-earmark-text me-2"></i>LPU do Contrato - {{ cliente.nome }}
                             </h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                         </div>
                         <div class="modal-body">
-                            <div class="alert alert-warning small py-2 mb-3">
-                                <i class="bi bi-exclamation-triangle me-1"></i>
-                                <strong>Importante:</strong> Somente peças cadastradas aqui serão cobráveis neste contrato.
+                            <!-- Regra de Negócio -->
+                            <div class="alert alert-info small py-2 mb-3 d-flex align-items-center">
+                                <i class="bi bi-info-circle-fill me-2 fs-5"></i>
+                                <div>
+                                    <strong>Single Source of Pricing:</strong>
+                                    Defina aqui o valor cobrado para cada peça. Itens não listados = R$ 0,00.
+                                </div>
                             </div>
 
-                            <!-- Formulário de Adição -->
-                            <div class="card bg-light border-0 mb-3">
+                            <!-- Formulário: Adicionar Peça -->
+                            <div class="card border-primary mb-4">
+                                <div class="card-header bg-primary bg-opacity-10 py-2">
+                                    <span class="fw-bold text-primary">
+                                        <i class="bi bi-plus-lg me-1"></i> Adicionar Peça à LPU
+                                    </span>
+                                </div>
                                 <div class="card-body py-3">
                                     <div class="row g-2 align-items-end">
                                         <div class="col-md-5">
-                                            <label class="form-label small fw-bold">Selecione a Peça</label>
+                                            <label class="form-label small fw-bold mb-1">Peça (Almoxarifado)</label>
                                             <select name="item_lpu_id" class="form-select select-peca-modal" data-cliente="{{ cliente.id }}" required>
-                                                <option value="">-- Selecione --</option>
+                                                <option value="" data-custo="0">-- Selecione --</option>
                                                 {% for item in todos_itens_lpu %}
-                                                <option value="{{ item.id }}" data-custo="{{ custos_itens.get(item.id, 0) }}">
+                                                <option value="{{ item.id }}" data-custo="{{ item.valor_custo or 0 }}">
                                                     {{ item.nome }}
                                                 </option>
                                                 {% endfor %}
                                             </select>
                                         </div>
                                         <div class="col-md-3">
-                                            <label class="form-label small fw-bold">Preço Venda (R$) *</label>
-                                            <input type="number" step="0.01" min="0.01" name="valor_venda" class="form-control"
-                                                placeholder="0.00" required>
+                                            <label class="form-label small fw-bold mb-1">Valor Cobrado *</label>
+                                            <div class="input-group">
+                                                <span class="input-group-text">R$</span>
+                                                <input type="number" step="0.01" min="0.01" name="valor_venda"
+                                                    class="form-control input-valor-venda" data-cliente="{{ cliente.id }}"
+                                                    placeholder="0.00" required>
+                                            </div>
                                         </div>
                                         <div class="col-md-2">
-                                            <label class="form-label small fw-bold">Repasse (R$)</label>
-                                            <input type="number" step="0.01" name="valor_repasse" class="form-control bg-white"
+                                            <label class="form-label small fw-bold mb-1">Repasse</label>
+                                            <input type="number" step="0.01" name="valor_repasse" class="form-control"
                                                 placeholder="Opcional">
                                         </div>
                                         <div class="col-md-2">
-                                            <button type="submit" class="btn btn-warning w-100">
+                                            <button type="submit" class="btn btn-primary w-100">
                                                 <i class="bi bi-plus-lg me-1"></i> Adicionar
                                             </button>
                                         </div>
                                     </div>
-                                    <!-- Custo de referência -->
-                                    <div class="custo-referencia-{{ cliente.id }} mt-2" style="display: none;">
-                                        <small class="text-muted">
-                                            <i class="bi bi-info-circle me-1"></i>
-                                            Custo Médio Atual: <strong class="text-dark custo-valor-{{ cliente.id }}">R$ 0,00</strong>
-                                            <span class="ms-2 text-success margem-sugerida-{{ cliente.id }}"></span>
-                                        </small>
+                                    <!-- Info: Custo Médio -->
+                                    <div class="info-preco-{{ cliente.id }} mt-3 p-2 bg-light rounded border" style="display: none;">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <small class="text-muted">
+                                                <i class="bi bi-box-seam me-1"></i>
+                                                Custo Médio: <strong class="text-dark custo-valor-{{ cliente.id }}">R$ 0,00</strong>
+                                                <span class="text-secondary">(informativo)</span>
+                                            </small>
+                                            <div class="margem-calculada-{{ cliente.id }}"></div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
 
-                            <!-- Lista de Itens Configurados -->
-                            <h6 class="fw-bold text-secondary mb-2">
-                                <i class="bi bi-list-check me-1"></i> Peças Cobráveis ({{ cliente.itens.count() }})
-                            </h6>
+                            <!-- Grid: Lista de Peças Cobertas -->
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h6 class="fw-bold text-dark mb-0">
+                                    <i class="bi bi-list-ul me-1"></i> Lista de Peças Cobertas
+                                </h6>
+                                <span class="badge bg-primary">{{ cliente.itens.count() }} itens</span>
+                            </div>
+
                             {% if cliente.itens.count() > 0 %}
-                            <div class="table-responsive" style="max-height: 300px;">
-                                <table class="table table-sm table-hover mb-0">
-                                    <thead class="bg-light sticky-top">
+                            <div class="table-responsive border rounded" style="max-height: 280px;">
+                                <table class="table table-sm table-hover mb-0 align-middle">
+                                    <thead class="table-light sticky-top">
                                         <tr>
-                                            <th>Peça</th>
-                                            <th class="text-end">Custo</th>
-                                            <th class="text-end">Venda</th>
+                                            <th>Nome da Peça</th>
+                                            <th class="text-end text-muted">Custo Médio</th>
+                                            <th class="text-end fw-bold" style="color: #0d6efd;">Valor Cobrado</th>
                                             <th class="text-end">Margem</th>
                                             <th style="width: 50px;"></th>
                                         </tr>
@@ -534,21 +555,22 @@
                                     <tbody>
                                         {% for ci in cliente.itens %}
                                         {% set custo = ci.item_lpu.valor_custo or 0 if ci.item_lpu else 0 %}
+                                        {% set margem_reais = ci.valor_venda - custo %}
                                         <tr>
-                                            <td class="align-middle fw-semibold">{{ ci.item_lpu.nome if ci.item_lpu else 'N/A' }}</td>
-                                            <td class="align-middle text-end text-muted small">R$ {{ "%.2f"|format(custo) }}</td>
-                                            <td class="align-middle text-end fw-bold text-success">R$ {{ "%.2f"|format(ci.valor_venda) }}</td>
-                                            <td class="align-middle text-end">
-                                                <span class="badge {{ 'bg-success' if ci.margem_percent > 30 else ('bg-warning text-dark' if ci.margem_percent > 15 else 'bg-danger') }}">
-                                                    {{ "%.0f"|format(ci.margem_percent) }}%
+                                            <td class="fw-semibold">{{ ci.item_lpu.nome if ci.item_lpu else 'N/A' }}</td>
+                                            <td class="text-end text-muted small">R$ {{ "%.2f"|format(custo) }}</td>
+                                            <td class="text-end fw-bold" style="color: #0d6efd;">R$ {{ "%.2f"|format(ci.valor_venda) }}</td>
+                                            <td class="text-end">
+                                                <span class="badge {{ 'bg-success' if margem_reais > 0 else 'bg-danger' }}">
+                                                    {% if margem_reais >= 0 %}+{% endif %}R$ {{ "%.2f"|format(margem_reais) }}
                                                 </span>
                                             </td>
-                                            <td class="align-middle text-center">
-                                                <button type="button" class="btn btn-sm btn-outline-danger btn-remover-preco"
+                                            <td class="text-center">
+                                                <button type="button" class="btn btn-sm btn-outline-danger btn-remover-preco py-0 px-1"
                                                     data-cliente="{{ cliente.id }}"
                                                     data-item="{{ ci.item_lpu_id }}"
                                                     data-nome="{{ ci.item_lpu.nome if ci.item_lpu else 'item' }}"
-                                                    title="Remover peça deste contrato">
+                                                    title="Remover">
                                                     <i class="bi bi-x-lg"></i>
                                                 </button>
                                             </td>
@@ -558,14 +580,17 @@
                                 </table>
                             </div>
                             {% else %}
-                            <div class="text-center text-muted py-4 bg-light rounded">
-                                <i class="bi bi-exclamation-circle display-6 opacity-50 text-warning"></i>
-                                <p class="mb-0 mt-2 fw-semibold">Nenhuma peça cobrável</p>
-                                <small>Adicione peças acima para habilitar cobrança neste contrato</small>
+                            <div class="text-center py-5 bg-light rounded border">
+                                <i class="bi bi-clipboard-x display-4 text-muted opacity-50"></i>
+                                <p class="mb-1 mt-3 fw-semibold text-dark">Nenhuma peça na LPU</p>
+                                <small class="text-muted">Use o formulário acima para adicionar peças a este contrato</small>
                             </div>
                             {% endif %}
                         </div>
                         <div class="modal-footer bg-light">
+                            <span class="text-muted small me-auto">
+                                <i class="bi bi-shield-check me-1"></i> Preços definidos aqui são a única fonte de cobrança
+                            </span>
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
                         </div>
                     </form>
@@ -804,35 +829,38 @@
     // Tabela de Preços por Contrato
     // ========================================
 
-    // Exibir Custo Médio de referência quando selecionar peça
+    // Exibir Custo Ref quando selecionar peça no dropdown
     document.querySelectorAll('.select-peca-modal').forEach(select => {
         select.addEventListener('change', function() {
             const clienteId = this.dataset.cliente;
             const selectedOption = this.options[this.selectedIndex];
             const custo = parseFloat(selectedOption.dataset.custo) || 0;
 
-            const divCusto = document.querySelector(`.custo-referencia-${clienteId}`);
+            const divInfo = document.querySelector(`.info-preco-${clienteId}`);
             const spanCusto = document.querySelector(`.custo-valor-${clienteId}`);
-            const spanMargem = document.querySelector(`.margem-sugerida-${clienteId}`);
+            const divMargem = document.querySelector(`.margem-calculada-${clienteId}`);
 
             if (selectedOption.value) {
-                // Mostrar custo de referência
-                if (divCusto) divCusto.style.display = 'block';
+                // Mostrar painel de info com custo de referência
+                if (divInfo) divInfo.style.display = 'block';
                 if (spanCusto) spanCusto.textContent = `R$ ${custo.toFixed(2)}`;
-                if (spanMargem) spanMargem.innerHTML = '';
+                if (divMargem) divMargem.innerHTML = '';
             } else {
                 // Esconder se nada selecionado
-                if (divCusto) divCusto.style.display = 'none';
+                if (divInfo) divInfo.style.display = 'none';
             }
 
             // Limpar campo de valor ao mudar seleção
             const inputValor = this.closest('.card-body').querySelector('input[name="valor_venda"]');
-            if (inputValor) inputValor.value = '';
+            if (inputValor) {
+                inputValor.value = '';
+                inputValor.focus();
+            }
         });
     });
 
     // Calcular margem em tempo real ao digitar preço de venda
-    document.querySelectorAll('input[name="valor_venda"]').forEach(input => {
+    document.querySelectorAll('.input-valor-venda').forEach(input => {
         input.addEventListener('input', function() {
             const cardBody = this.closest('.card-body');
             if (!cardBody) return;
@@ -840,27 +868,33 @@
             const select = cardBody.querySelector('.select-peca-modal');
             if (!select) return;
 
-            const clienteId = select.dataset.cliente;
+            const clienteId = this.dataset.cliente;
             const selectedOption = select.options[select.selectedIndex];
             const custo = parseFloat(selectedOption?.dataset?.custo) || 0;
             const precoVenda = parseFloat(this.value) || 0;
 
-            const spanMargem = document.querySelector(`.margem-sugerida-${clienteId}`);
-            if (!spanMargem) return;
+            const divMargem = document.querySelector(`.margem-calculada-${clienteId}`);
+            if (!divMargem) return;
 
             if (precoVenda > 0 && custo > 0) {
-                const margem = ((precoVenda - custo) / precoVenda * 100);
-                if (margem > 30) {
-                    spanMargem.innerHTML = `<span class="badge bg-success">Margem: ${margem.toFixed(0)}%</span>`;
-                } else if (margem > 15) {
-                    spanMargem.innerHTML = `<span class="badge bg-warning text-dark">Margem: ${margem.toFixed(0)}%</span>`;
-                } else if (margem > 0) {
-                    spanMargem.innerHTML = `<span class="badge bg-danger">Margem baixa: ${margem.toFixed(0)}%</span>`;
+                const lucro = precoVenda - custo;
+                const margemPct = (lucro / precoVenda * 100);
+
+                let badge = '';
+                if (margemPct > 30) {
+                    badge = `<span class="badge bg-success"><i class="bi bi-graph-up-arrow me-1"></i>Margem: ${margemPct.toFixed(0)}% (R$ ${lucro.toFixed(2)})</span>`;
+                } else if (margemPct > 15) {
+                    badge = `<span class="badge bg-warning text-dark"><i class="bi bi-dash-lg me-1"></i>Margem: ${margemPct.toFixed(0)}% (R$ ${lucro.toFixed(2)})</span>`;
+                } else if (margemPct > 0) {
+                    badge = `<span class="badge bg-danger"><i class="bi bi-exclamation-triangle me-1"></i>Margem baixa: ${margemPct.toFixed(0)}%</span>`;
                 } else {
-                    spanMargem.innerHTML = `<span class="badge bg-dark">Prejuízo: ${margem.toFixed(0)}%</span>`;
+                    badge = `<span class="badge bg-dark"><i class="bi bi-x-circle me-1"></i>Prejuízo: ${margemPct.toFixed(0)}%</span>`;
                 }
+                divMargem.innerHTML = badge;
+            } else if (precoVenda > 0 && custo === 0) {
+                divMargem.innerHTML = `<span class="badge bg-info">Lucro: R$ ${precoVenda.toFixed(2)}</span>`;
             } else {
-                spanMargem.innerHTML = '';
+                divMargem.innerHTML = '';
             }
         });
     });

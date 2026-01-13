@@ -51,18 +51,30 @@ def movimentar_estoque():
         qtd = int(request.form.get('quantidade', 0))
         obs = request.form.get('observacao')
 
+        # Custo de aquisição (apenas para ENVIO - entrada de estoque)
+        custo_aquisicao = request.form.get('custo_aquisicao')
+        custo_aquisicao = float(custo_aquisicao) if custo_aquisicao else None
+
         if not all([tipo, tecnico_id, item_id, qtd]):
             flash('Dados incompletos.', 'warning')
             return redirect(url_for('stock.controle_estoque'))
 
         if tipo == 'ENVIO':
-            StockService.transferir_sede_para_tecnico(tecnico_id, item_id, qtd, current_user.id, obs)
-            flash(f'✅ Enviado {qtd}un para o técnico.', 'success')
-            
+            # Envia com custo para cálculo de média ponderada
+            StockService.transferir_sede_para_tecnico(
+                tecnico_id, item_id, qtd, current_user.id, obs,
+                custo_aquisicao=custo_aquisicao
+            )
+            if custo_aquisicao:
+                item = ItemLPU.query.get(item_id)
+                flash(f'✅ Enviado {qtd}un para o técnico. Novo custo médio: R$ {item.valor_custo:.2f}', 'success')
+            else:
+                flash(f'✅ Enviado {qtd}un para o técnico.', 'success')
+
         elif tipo == 'DEVOLUCAO':
             StockService.devolver_tecnico_para_sede(tecnico_id, item_id, qtd, current_user.id, obs)
             flash(f'✅ Recebido {qtd}un do técnico.', 'info')
-            
+
         elif tipo == 'AJUSTE':
             StockService.ajustar_saldo(tecnico_id, item_id, qtd, current_user.id, obs)
             flash(f'⚠️ Saldo ajustado para {qtd}un.', 'warning')

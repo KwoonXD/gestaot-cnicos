@@ -9,36 +9,63 @@ class StockService:
         return stock.quantidade if stock else 0
 
     @staticmethod
-    def _update_stock(tecnico_id, item_id, delta, user_id, tipo, obs=None):
+    def _update_stock(tecnico_id, item_id, delta, user_id, tipo, obs=None, custo_unitario=None):
         stock = TecnicoStock.query.filter_by(tecnico_id=tecnico_id, item_lpu_id=item_id).first()
         if not stock:
             stock = TecnicoStock(tecnico_id=tecnico_id, item_lpu_id=item_id, quantidade=0)
             db.session.add(stock)
-        
+
         stock.quantidade += delta
-        
-        # Log Movimento
+
+        # Log Movimento (com custo para auditoria)
         mov = StockMovement(
             item_lpu_id=item_id,
             tipo_movimento=tipo,
             quantidade=abs(delta),
+            custo_unitario=custo_unitario,
             observacao=obs,
             created_by_id=user_id
         )
-        
+
         if delta > 0: # Entrada no técnico (ENVIO ou AJUSTE positivo)
             mov.destino_tecnico_id = tecnico_id
         else: # Saída do técnico (DEVOLUCAO ou AJUSTE negativo)
             mov.origem_tecnico_id = tecnico_id
-            
+
         db.session.add(mov)
         db.session.commit()
         return stock
 
     @staticmethod
-    def transferir_sede_para_tecnico(tecnico_id, item_id, qtd, user_id, obs=None):
-        """Sede envia para técnico (Aumenta saldo do técnico)"""
-        return StockService._update_stock(tecnico_id, item_id, qtd, user_id, 'ENVIO', obs)
+    def transferir_sede_para_tecnico(tecnico_id, item_id, qtd, user_id, obs=None, custo_aquisicao=None):
+        """
+        Sede envia para técnico (Aumenta saldo do técnico).
+
+        Se custo_aquisicao for informado, recalcula o Custo Médio Ponderado:
+        Novo Custo = ((Qtd Atual * Custo Atual) + (Qtd Entrada * Custo Entrada)) / (Qtd Atual + Qtd Entrada)
+        """
+        # Calcular custo médio ponderado se custo informado
+        if custo_aquisicao is not None and custo_aquisicao > 0:
+            item = ItemLPU.query.get(item_id)
+            if item:
+                # Buscar quantidade total atual em todos os técnicos
+                qtd_atual_total = db.session.query(func.sum(TecnicoStock.quantidade)).filter(
+                    TecnicoStock.item_lpu_id == item_id,
+                    TecnicoStock.quantidade > 0
+                ).scalar() or 0
+
+                custo_atual = float(item.valor_custo or 0)
+
+                # Cálculo de Custo Médio Ponderado
+                valor_total_atual = qtd_atual_total * custo_atual
+                valor_total_entrada = qtd * custo_aquisicao
+                nova_quantidade = qtd_atual_total + qtd
+
+                if nova_quantidade > 0:
+                    novo_custo_medio = (valor_total_atual + valor_total_entrada) / nova_quantidade
+                    item.valor_custo = round(novo_custo_medio, 2)
+
+        return StockService._update_stock(tecnico_id, item_id, qtd, user_id, 'ENVIO', obs, custo_aquisicao)
 
     @staticmethod
     def devolver_tecnico_para_sede(tecnico_id, item_id, qtd, user_id, obs=None):
