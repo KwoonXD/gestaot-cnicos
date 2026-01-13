@@ -542,7 +542,9 @@ class Cliente(db.Model):
     # Relacionamentos
     tipos_servico = db.relationship('CatalogoServico', backref='cliente', lazy='dynamic', cascade='all, delete-orphan')
     itens_lpu = db.relationship('ItemLPU', backref='cliente', lazy='dynamic', cascade='all, delete-orphan')
-    
+    # Tabela de precos personalizada (ContratoItem)
+    itens = db.relationship('ContratoItem', backref='contrato', lazy='dynamic', foreign_keys='ContratoItem.cliente_id', overlaps='cliente,itens_contrato')
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -685,6 +687,74 @@ class ItemLPUPrecoHistorico(db.Model):
             'data_alteracao': self.data_alteracao.isoformat() if self.data_alteracao else None,
             'alterado_por': self.alterado_por.username if self.alterado_por else 'Sistema'
         }
+
+
+# =============================================================================
+# TABELA DE PRECOS POR CONTRATO
+# =============================================================================
+
+class ContratoItem(db.Model):
+    """
+    Tabela de Precos Personalizada por Contrato (Cliente).
+    Permite que cada cliente tenha valores diferenciados para pecas do almoxarifado.
+
+    Se um cliente nao tiver entrada aqui, usa o valor padrao do ItemLPU.
+    """
+    __tablename__ = 'contrato_itens'
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # Relacionamentos
+    cliente_id = db.Column(db.Integer, db.ForeignKey('clientes.id'), nullable=False, index=True)
+    item_lpu_id = db.Column(db.Integer, db.ForeignKey('itens_lpu.id'), nullable=False, index=True)
+
+    # Valores de Preco
+    valor_venda = db.Column(db.Float, nullable=False)       # Preco cobrado DESTE cliente
+    valor_repasse = db.Column(db.Float, nullable=True)      # Opcional: repasse ao tecnico (se diferir)
+
+    # Metadados
+    ativo = db.Column(db.Boolean, default=True)
+    data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
+    data_atualizacao = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Constraint: Um cliente nao pode ter o mesmo item duas vezes
+    __table_args__ = (
+        db.UniqueConstraint('cliente_id', 'item_lpu_id', name='uq_contrato_item'),
+    )
+
+    # Relacionamentos ORM (backref definido em Cliente.itens)
+    item_lpu = db.relationship('ItemLPU', backref=db.backref('precos_contrato', lazy='dynamic'))
+
+    @property
+    def margem(self):
+        """Margem bruta: valor de venda - custo da peca"""
+        custo = self.item_lpu.valor_custo if self.item_lpu else 0
+        return (self.valor_venda or 0) - custo
+
+    @property
+    def margem_percent(self):
+        """Margem percentual"""
+        if self.valor_venda and self.valor_venda > 0:
+            return (self.margem / self.valor_venda) * 100
+        return 0
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'cliente_id': self.cliente_id,
+            'cliente_nome': self.cliente.nome if self.cliente else None,
+            'item_lpu_id': self.item_lpu_id,
+            'item_nome': self.item_lpu.nome if self.item_lpu else None,
+            'valor_venda': self.valor_venda,
+            'valor_repasse': self.valor_repasse,
+            'valor_custo': self.item_lpu.valor_custo if self.item_lpu else None,
+            'margem': self.margem,
+            'margem_percent': round(self.margem_percent, 1),
+            'ativo': self.ativo
+        }
+
+    def __repr__(self):
+        return f'<ContratoItem {self.cliente.nome if self.cliente else "?"} - {self.item_lpu.nome if self.item_lpu else "?"}: R${self.valor_venda}>'
 
 
 class Notification(db.Model):

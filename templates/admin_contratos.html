@@ -241,6 +241,94 @@
                         </div>
                     </div>
 
+                    <!-- Row 2: Tabela de Preços Personalizada -->
+                    <div class="row g-4 mt-2">
+                        <div class="col-12">
+                            <div class="card border-warning">
+                                <div class="card-header bg-warning bg-opacity-10 d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h6 class="mb-0 text-warning fw-bold">
+                                            <i class="bi bi-tags me-1"></i> Tabela de Preços Personalizada
+                                        </h6>
+                                        <small class="text-muted">Defina preços especiais de peças para este contrato</small>
+                                    </div>
+                                    <button class="btn btn-sm btn-warning" data-bs-toggle="modal"
+                                        data-bs-target="#modalNovoPreco{{ cliente.id }}">
+                                        <i class="bi bi-plus me-1"></i> Adicionar Preço
+                                    </button>
+                                </div>
+                                <div class="card-body p-0">
+                                    <div id="tabelaPrecos{{ cliente.id }}">
+                                        {% if cliente.itens.count() > 0 %}
+                                        <table class="table table-sm table-hover mb-0">
+                                            <thead class="bg-light">
+                                                <tr>
+                                                    <th>Peça</th>
+                                                    <th class="text-end" title="Preço do catálogo padrão">Catálogo (R$)</th>
+                                                    <th class="text-end" title="Preço negociado para este contrato">Contrato (R$)</th>
+                                                    <th class="text-end" title="Repasse ao técnico (opcional)">Repasse (R$)</th>
+                                                    <th class="text-end" title="Margem de lucro">Margem %</th>
+                                                    <th style="width: 80px;"></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for ci in cliente.itens %}
+                                                <tr>
+                                                    <td class="align-middle fw-semibold">
+                                                        {{ ci.item_lpu.nome if ci.item_lpu else 'N/A' }}
+                                                    </td>
+                                                    <td class="align-middle text-end text-muted">
+                                                        {{ "%.2f"|format(ci.item_lpu.valor_receita or 0) if ci.item_lpu else '-' }}
+                                                    </td>
+                                                    <td class="align-middle text-end">
+                                                        <input type="number" step="0.01"
+                                                            class="form-control form-control-sm text-end editable-preco-contrato"
+                                                            style="width: 100px; display: inline-block;"
+                                                            value="{{ ci.valor_venda }}"
+                                                            data-cliente="{{ cliente.id }}"
+                                                            data-item="{{ ci.item_lpu_id }}">
+                                                    </td>
+                                                    <td class="align-middle text-end">
+                                                        <input type="number" step="0.01"
+                                                            class="form-control form-control-sm text-end editable-preco-contrato bg-light"
+                                                            style="width: 90px; display: inline-block;"
+                                                            value="{{ ci.valor_repasse or '' }}"
+                                                            placeholder="-"
+                                                            data-cliente="{{ cliente.id }}"
+                                                            data-item="{{ ci.item_lpu_id }}"
+                                                            data-field="valor_repasse">
+                                                    </td>
+                                                    <td class="align-middle text-end">
+                                                        <span class="badge {{ 'bg-success' if ci.margem_percent > 30 else ('bg-warning text-dark' if ci.margem_percent > 15 else 'bg-danger') }}">
+                                                            {{ "%.1f"|format(ci.margem_percent) }}%
+                                                        </span>
+                                                    </td>
+                                                    <td class="align-middle text-center">
+                                                        <form action="{{ url_for('admin.remover_contrato_item', contrato_id=cliente.id, item_id=ci.item_lpu_id) }}"
+                                                            method="POST" class="d-inline"
+                                                            onsubmit="return confirm('Remover preço personalizado de {{ ci.item_lpu.nome if ci.item_lpu else 'item' }}?');">
+                                                            <button type="submit" class="btn btn-sm btn-outline-danger btn-icon">
+                                                                <i class="bi bi-trash"></i>
+                                                            </button>
+                                                        </form>
+                                                    </td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                        {% else %}
+                                        <div class="p-4 text-center text-muted">
+                                            <i class="bi bi-tags display-6 opacity-50"></i>
+                                            <p class="small mb-0 mt-2">Nenhum preço personalizado configurado</p>
+                                            <p class="small text-muted">Este contrato usa os preços padrão do catálogo</p>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Footer Actions -->
                     <div class="mt-3 pt-3 border-top d-flex justify-content-end gap-2">
                         <form action="{{ url_for('admin.deletar_config', tipo='cliente', id=cliente.id) }}"
@@ -361,6 +449,55 @@
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
                             <button type="submit" class="btn btn-info">
                                 <i class="bi bi-plus-lg me-1"></i> Adicionar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal: Novo Preço Personalizado (Per Cliente) -->
+        <div class="modal fade" id="modalNovoPreco{{ cliente.id }}" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <form action="{{ url_for('admin.adicionar_contrato_item', id=cliente.id) }}" method="POST">
+                        <div class="modal-header bg-warning bg-opacity-10">
+                            <h5 class="modal-title">
+                                <i class="bi bi-tags me-2 text-warning"></i>Novo Preço - {{ cliente.nome }}
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="alert alert-info small py-2">
+                                <i class="bi bi-info-circle me-1"></i>
+                                Defina um preço especial para este contrato. Se não configurado, será usado o preço padrão do catálogo.
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Selecione a Peça *</label>
+                                <select name="item_lpu_id" class="form-select select-peca" data-cliente="{{ cliente.id }}" required>
+                                    <option value="">-- Selecione uma peça --</option>
+                                </select>
+                                <small class="text-muted">Preço catálogo: <span class="preco-catalogo-{{ cliente.id }}">-</span></small>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Valor de Venda (R$) *</label>
+                                    <input type="number" step="0.01" name="valor_venda" class="form-control"
+                                        placeholder="150.00" required>
+                                    <small class="text-muted">Cobrado deste cliente</small>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Repasse Técnico (R$)</label>
+                                    <input type="number" step="0.01" name="valor_repasse" class="form-control bg-light"
+                                        placeholder="Opcional">
+                                    <small class="text-muted">Deixe vazio para usar padrão</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="btn btn-warning">
+                                <i class="bi bi-check-lg me-1"></i> Salvar Preço
                             </button>
                         </div>
                     </form>
@@ -593,6 +730,110 @@
     // ========================================
     document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('searchInput')?.focus();
+    });
+
+    // ========================================
+    // Tabela de Preços por Contrato
+    // ========================================
+
+    // Cache de peças disponíveis
+    let pecasCache = null;
+
+    // Carregar peças disponíveis
+    async function carregarPecas() {
+        if (pecasCache) return pecasCache;
+
+        try {
+            const response = await fetch('/admin/pecas-disponiveis');
+            pecasCache = await response.json();
+            return pecasCache;
+        } catch (err) {
+            console.error('Erro ao carregar peças:', err);
+            return [];
+        }
+    }
+
+    // Preencher select de peças quando modal abrir
+    document.querySelectorAll('[id^="modalNovoPreco"]').forEach(modal => {
+        modal.addEventListener('show.bs.modal', async function() {
+            const select = this.querySelector('.select-peca');
+            const clienteId = select.dataset.cliente;
+
+            // Limpar e adicionar opção padrão
+            select.innerHTML = '<option value="">-- Selecione uma peça --</option>';
+
+            // Carregar peças
+            const pecas = await carregarPecas();
+
+            pecas.forEach(peca => {
+                const option = document.createElement('option');
+                option.value = peca.id;
+                option.textContent = `${peca.nome} (R$ ${peca.valor_receita.toFixed(2)})`;
+                option.dataset.valor = peca.valor_receita;
+                select.appendChild(option);
+            });
+        });
+    });
+
+    // Atualizar preço catálogo quando selecionar peça
+    document.querySelectorAll('.select-peca').forEach(select => {
+        select.addEventListener('change', function() {
+            const clienteId = this.dataset.cliente;
+            const selectedOption = this.options[this.selectedIndex];
+            const precoCatalogo = selectedOption.dataset.valor || '-';
+
+            const spanPreco = document.querySelector(`.preco-catalogo-${clienteId}`);
+            if (spanPreco) {
+                spanPreco.textContent = precoCatalogo !== '-' ? `R$ ${parseFloat(precoCatalogo).toFixed(2)}` : '-';
+            }
+        });
+    });
+
+    // Auto-save para preços de contrato (edição inline)
+    document.querySelectorAll('.editable-preco-contrato').forEach(input => {
+        input.addEventListener('change', async function() {
+            const clienteId = this.dataset.cliente;
+            const itemId = this.dataset.item;
+            const field = this.dataset.field || 'valor_venda';
+            const valor = parseFloat(this.value) || 0;
+
+            // Visual feedback
+            this.classList.add('border-warning');
+            this.disabled = true;
+
+            const payload = {};
+            payload[field] = valor || null;
+
+            try {
+                const response = await fetch(`/admin/contrato/${clienteId}/itens`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        item_lpu_id: itemId,
+                        ...payload
+                    })
+                });
+
+                if (response.ok) {
+                    this.classList.remove('border-warning');
+                    this.classList.add('border-success');
+                    setTimeout(() => {
+                        this.classList.remove('border-success');
+                    }, 2000);
+
+                    // Recarregar para atualizar margem (opcional - ou calcular no frontend)
+                    // location.reload();
+                } else {
+                    throw new Error('Erro ao salvar');
+                }
+            } catch (err) {
+                this.classList.remove('border-warning');
+                this.classList.add('border-danger');
+                alert('Erro ao salvar preço. Tente novamente.');
+            } finally {
+                this.disabled = false;
+            }
+        });
     });
 </script>
 

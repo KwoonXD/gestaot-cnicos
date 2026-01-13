@@ -192,17 +192,29 @@ class ChamadoService:
             # Inicializa valores de peça
             peca_nome = ""
             custo_peca = 0.0
+            valor_receita_peca = 0.0
             fornecedor = fsa.get('fornecedor_peca', 'Empresa')
 
-            # Pre-fetch nome da peça se informada
+            # Pre-fetch nome da peça e valor de receita (usando tabela de precos por contrato)
             if fsa.get('peca_id'):
                 item = ItemLPU.query.get(fsa['peca_id'])
                 if item:
                     peca_nome = item.nome
 
+                    # Obter cliente_id do CatalogoServico para buscar preco personalizado
+                    servico = services_map.get(int(fsa['catalogo_servico_id'])) if fsa.get('catalogo_servico_id') else None
+                    cliente_id = servico.cliente_id if servico else None
+
+                    # Buscar valor de receita da peca usando tabela de precos por contrato
+                    # PricingService.get_valor_peca faz fallback automatico para preco padrao
+                    valor_receita_peca = PricingService.get_valor_peca(cliente_id, item.id) if cliente_id else (item.valor_receita or 0.0)
+
                     # Se Fornecedor = Tecnico -> Custo informado manualmente
                     if fornecedor == 'Tecnico':
                         custo_peca = float(fsa.get('custo_peca', 0))
+
+            # Adicionar receita da peca ao total
+            valor_receita_total = valor_receita_servico + valor_receita_peca
 
             # Totais
             valor_legacy = valor_receita_total  # Campo 'valor' mantém compatibilidade
@@ -227,8 +239,9 @@ class ChamadoService:
                 custo_peca=custo_peca,
                 fornecedor_peca=fornecedor,
 
-                # Financeiro - RECEITA (Calculado pelo PricingService)
+                # Financeiro - RECEITA (Calculado pelo PricingService + Preco Contrato)
                 valor_receita_servico=valor_receita_servico,
+                valor_receita_peca=valor_receita_peca,  # Preco personalizado por contrato
                 valor_receita_total=valor_receita_total,
                 valor=valor_legacy,  # Legado
 
