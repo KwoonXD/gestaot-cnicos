@@ -180,81 +180,54 @@
                             </div>
                         </div>
 
-                        <!-- Col 2: LPU (Peças) -->
+                        <!-- Col 2: Resumo do Contrato -->
                         <div class="col-lg-6">
-                            <div class="card h-100">
-                                <div
-                                    class="card-header bg-info bg-opacity-10 d-flex justify-content-between align-items-center">
-                                    <h6 class="mb-0 text-info fw-bold">
-                                        <i class="bi bi-box-seam me-1"></i> Itens LPU (Peças)
+                            <div class="card h-100 border-primary">
+                                <div class="card-header bg-primary bg-opacity-10">
+                                    <h6 class="mb-0 text-primary fw-bold">
+                                        <i class="bi bi-info-circle me-1"></i> Sobre a LPU
                                     </h6>
-                                    <button class="btn btn-sm btn-info" data-bs-toggle="modal"
-                                        data-bs-target="#modalNovoLPU{{ cliente.id }}">
-                                        <i class="bi bi-plus"></i>
-                                    </button>
                                 </div>
-                                <div class="card-body p-0">
-                                    {% if cliente.itens_lpu.count() > 0 %}
-                                    <table class="table table-sm table-hover mb-0">
-                                        <thead class="bg-light">
-                                            <tr>
-                                                <th>Peça</th>
-                                                <th class="text-end">Valor (R$)</th>
-                                                <th style="width: 80px;"></th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {% for item in cliente.itens_lpu %}
-                                            <tr>
-                                                <td class="align-middle editable-text" data-tipo="lpu"
-                                                    data-id="{{ item.id }}">{{ item.nome }}</td>
-                                                <td class="align-middle text-end">
-                                                    <input type="number" step="0.01"
-                                                        class="form-control form-control-sm text-end editable-valor"
-                                                        style="width: 100px; display: inline-block;"
-                                                        value="{{ item.valor_receita }}" data-tipo="lpu"
-                                                        data-id="{{ item.id }}">
-                                                </td>
-                                                <td class="align-middle text-center">
-                                                    <form
-                                                        action="{{ url_for('admin.deletar_config', tipo='lpu', id=item.id) }}"
-                                                        method="POST" class="d-inline"
-                                                        onsubmit="return confirm('Remover item {{ item.nome }}?');">
-                                                        <button type="submit"
-                                                            class="btn btn-sm btn-outline-danger btn-icon">
-                                                            <i class="bi bi-trash"></i>
-                                                        </button>
-                                                    </form>
-                                                </td>
-                                            </tr>
-                                            {% endfor %}
-                                        </tbody>
-                                    </table>
-                                    {% else %}
-                                    <div class="p-3 text-center text-muted">
-                                        <i class="bi bi-inbox display-6"></i>
-                                        <p class="small mb-0 mt-2">Nenhum item LPU cadastrado</p>
+                                <div class="card-body">
+                                    <div class="alert alert-light border small mb-3">
+                                        <i class="bi bi-shield-check text-success me-2"></i>
+                                        <strong>Single Source of Pricing:</strong><br>
+                                        O preço de venda de peças é definido <strong>exclusivamente</strong> na seção
+                                        "LPU do Contrato" abaixo.
                                     </div>
-                                    {% endif %}
+                                    <ul class="list-unstyled small text-muted mb-0">
+                                        <li class="mb-2">
+                                            <i class="bi bi-check2-circle text-success me-2"></i>
+                                            Peças cadastradas: <strong class="text-dark">{{ cliente.itens.count() }}</strong>
+                                        </li>
+                                        <li class="mb-2">
+                                            <i class="bi bi-arrow-right text-primary me-2"></i>
+                                            Peças não listadas = R$ 0,00 (não cobráveis)
+                                        </li>
+                                        <li>
+                                            <i class="bi bi-box-seam text-info me-2"></i>
+                                            Catálogo de peças: <a href="{{ url_for('stock.controle_estoque') }}">Almoxarifado</a>
+                                        </li>
+                                    </ul>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Row 2: Tabela de Preços Personalizada -->
+                    <!-- Row 2: LPU do Contrato (Peças Cobertas) -->
                     <div class="row g-4 mt-2">
                         <div class="col-12">
-                            <div class="card border-warning">
-                                <div class="card-header bg-warning bg-opacity-10 d-flex justify-content-between align-items-center">
+                            <div class="card border-primary">
+                                <div class="card-header bg-primary bg-opacity-10 d-flex justify-content-between align-items-center">
                                     <div>
-                                        <h6 class="mb-0 text-warning fw-bold">
-                                            <i class="bi bi-tags me-1"></i> Tabela de Preços Personalizada
+                                        <h6 class="mb-0 text-primary fw-bold">
+                                            <i class="bi bi-box-seam me-1"></i> LPU do Contrato (Peças Cobertas)
                                         </h6>
-                                        <small class="text-muted">Defina preços especiais de peças para este contrato</small>
+                                        <small class="text-muted">Defina quais peças são cobertas e seus valores de cobrança</small>
                                     </div>
-                                    <button class="btn btn-sm btn-warning" data-bs-toggle="modal"
+                                    <button class="btn btn-sm btn-primary" data-bs-toggle="modal"
                                         data-bs-target="#modalNovoPreco{{ cliente.id }}">
-                                        <i class="bi bi-plus me-1"></i> Adicionar Preço
+                                        <i class="bi bi-plus me-1"></i> Adicionar Peça
                                     </button>
                                 </div>
                                 <div class="card-body p-0">
@@ -264,8 +237,8 @@
                                             <thead class="bg-light">
                                                 <tr>
                                                     <th>Peça</th>
-                                                    <th class="text-end" title="Preço do catálogo padrão">Catálogo (R$)</th>
-                                                    <th class="text-end" title="Preço negociado para este contrato">Contrato (R$)</th>
+                                                    <th class="text-end" title="Custo médio de aquisição">Custo Médio (R$)</th>
+                                                    <th class="text-end" title="Valor cobrado do cliente">Valor Cobrado (R$)</th>
                                                     <th class="text-end" title="Repasse ao técnico (opcional)">Repasse (R$)</th>
                                                     <th class="text-end" title="Margem de lucro">Margem %</th>
                                                     <th style="width: 80px;"></th>
@@ -278,7 +251,7 @@
                                                         {{ ci.item_lpu.nome if ci.item_lpu else 'N/A' }}
                                                     </td>
                                                     <td class="align-middle text-end text-muted">
-                                                        {{ "%.2f"|format(ci.item_lpu.valor_receita or 0) if ci.item_lpu else '-' }}
+                                                        {{ "%.2f"|format(ci.item_lpu.valor_custo or 0) if ci.item_lpu else '-' }}
                                                     </td>
                                                     <td class="align-middle text-end">
                                                         <input type="number" step="0.01"
@@ -318,9 +291,12 @@
                                         </table>
                                         {% else %}
                                         <div class="p-4 text-center text-muted">
-                                            <i class="bi bi-tags display-6 opacity-50"></i>
-                                            <p class="small mb-0 mt-2">Nenhum preço personalizado configurado</p>
-                                            <p class="small text-muted">Este contrato usa os preços padrão do catálogo</p>
+                                            <i class="bi bi-clipboard-x display-6 opacity-50"></i>
+                                            <p class="small mb-1 mt-2 fw-semibold text-dark">Nenhuma peça configurada neste contrato</p>
+                                            <p class="small text-danger mb-0">
+                                                <i class="bi bi-exclamation-triangle me-1"></i>
+                                                Peças utilizadas serão cobradas em R$ 0,00
+                                            </p>
                                         </div>
                                         {% endif %}
                                     </div>
@@ -422,42 +398,7 @@
             </div>
         </div>
 
-        <!-- Modal: Novo LPU (Per Cliente) -->
-        <div class="modal fade" id="modalNovoLPU{{ cliente.id }}" tabindex="-1">
-            <div class="modal-dialog">
-                <div class="modal-content">
-                    <form action="{{ url_for('admin.adicionar_lpu', id=cliente.id) }}" method="POST">
-                        <div class="modal-header">
-                            <h5 class="modal-title">
-                                <i class="bi bi-box-seam me-2 text-info"></i>Novo Item LPU - {{ cliente.nome }}
-                            </h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">
-                            <div class="mb-3">
-                                <label class="form-label">Nome da Peça *</label>
-                                <input type="text" name="nome" class="form-control"
-                                    placeholder="Ex: Scanner, Monitor, CPU" required>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Valor Receita (R$) *</label>
-                                <input type="number" step="0.01" name="valor" class="form-control" placeholder="180.00"
-                                    required>
-                            </div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                            <button type="submit" class="btn btn-info">
-                                <i class="bi bi-plus-lg me-1"></i> Adicionar
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-
-        <!-- Modal: Novo Preço Personalizado (Per Cliente) -->
-        <!-- MODAL: LPU do Contrato (Single Source of Pricing) -->
+        <!-- Modal: LPU do Contrato (Single Source of Pricing) -->
         <div class="modal fade" id="modalNovoPreco{{ cliente.id }}" tabindex="-1">
             <div class="modal-dialog modal-lg">
                 <div class="modal-content">

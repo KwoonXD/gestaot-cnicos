@@ -250,38 +250,39 @@
         </div>
     </div>
 
-    <!-- Modal Catalogo (Atualizado com Gestão de Custos) -->
+    <!-- Modal Catálogo (Apenas Custo - Preço de Venda definido no Contrato) -->
     <div class="modal fade" id="catalogoModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header bg-light">
-                    <h5 class="modal-title fw-bold"><i class="bi bi-box-seam me-2"></i>Catálogo de Peças</h5>
+                    <h5 class="modal-title fw-bold"><i class="bi bi-box-seam me-2"></i>Catálogo de Materiais</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
+                    <!-- Regra de Negócio -->
+                    <div class="alert alert-info small py-2 mb-3">
+                        <i class="bi bi-info-circle me-1"></i>
+                        <strong>Almoxarifado:</strong> Cadastre aqui as peças com seu <strong>custo de aquisição</strong>.
+                        O preço de venda é definido em cada <strong>Contrato</strong>.
+                    </div>
+
                     <!-- Formulário de Novo Item -->
                     <form action="{{ url_for('stock.adicionar_item') }}" method="POST" class="card bg-light border-0 p-3 mb-4">
                         <h6 class="text-muted small text-uppercase fw-bold mb-3">
-                            <i class="bi bi-plus-circle me-1"></i>Adicionar Nova Peça
+                            <i class="bi bi-plus-circle me-1"></i>Cadastrar Nova Peça
                         </h6>
-                        <div class="row g-2">
-                            <div class="col-md-5">
-                                <input type="text" name="nome" class="form-control" placeholder="Nome da peça..." required>
+                        <div class="row g-2 align-items-end">
+                            <div class="col-md-7">
+                                <label class="form-label small mb-1">Nome do Material</label>
+                                <input type="text" name="nome" class="form-control" placeholder="Ex: Cabo de Rede Cat6..." required>
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-4">
+                                <label class="form-label small mb-1">Custo de Aquisição (R$)</label>
                                 <div class="input-group">
-                                    <span class="input-group-text bg-danger text-white" title="Custo de Aquisição">
+                                    <span class="input-group-text bg-secondary text-white">
                                         <i class="bi bi-cash-stack"></i>
                                     </span>
-                                    <input type="number" name="valor_custo" class="form-control" placeholder="Custo" step="0.01" min="0">
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="input-group">
-                                    <span class="input-group-text bg-success text-white" title="Preço de Venda">
-                                        <i class="bi bi-tag"></i>
-                                    </span>
-                                    <input type="number" name="valor_receita" class="form-control" placeholder="Receita" step="0.01" min="0">
+                                    <input type="number" name="valor_custo" class="form-control" placeholder="0.00" step="0.01" min="0">
                                 </div>
                             </div>
                             <div class="col-md-1">
@@ -290,14 +291,9 @@
                                 </button>
                             </div>
                         </div>
-                        <small class="text-muted mt-2 d-block">
-                            <i class="bi bi-info-circle me-1"></i>
-                            <strong>Custo:</strong> valor pago pela peça |
-                            <strong>Receita:</strong> valor cobrado do cliente
-                        </small>
                     </form>
 
-                    <!-- Lista de Itens com Custos -->
+                    <!-- Lista de Itens -->
                     <h6 class="text-muted small text-uppercase fw-bold mb-3 border-bottom pb-2">
                         <i class="bi bi-list-ul me-1"></i>Peças Cadastradas
                     </h6>
@@ -306,15 +302,11 @@
                         <table class="table table-hover align-middle mb-0" style="font-size: 0.9rem;">
                             <thead class="table-light sticky-top">
                                 <tr>
-                                    <th>Nome</th>
-                                    <th class="text-center" style="width: 120px;">
-                                        <span class="text-danger"><i class="bi bi-cash-stack me-1"></i>Custo</span>
+                                    <th>Nome do Material</th>
+                                    <th class="text-center" style="width: 150px;">
+                                        <span class="text-secondary"><i class="bi bi-cash-stack me-1"></i>Custo Médio</span>
                                     </th>
-                                    <th class="text-center" style="width: 120px;">
-                                        <span class="text-success"><i class="bi bi-tag me-1"></i>Receita</span>
-                                    </th>
-                                    <th class="text-center" style="width: 100px;">Margem</th>
-                                    <th class="text-center" style="width: 80px;">Ações</th>
+                                    <th class="text-center" style="width: 100px;">Ações</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -324,26 +316,16 @@
                                         <td>
                                             <input type="text" name="nome" value="{{ item.nome }}"
                                                 class="form-control form-control-sm border-0 bg-transparent fw-medium"
-                                                style="min-width: 150px;">
+                                                style="min-width: 200px;">
                                         </td>
                                         <td>
-                                            <input type="number" name="valor_custo"
-                                                value="{{ item.valor_custo or 0 }}"
-                                                class="form-control form-control-sm text-center text-danger fw-bold"
-                                                step="0.01" min="0">
-                                        </td>
-                                        <td>
-                                            <input type="number" name="valor_receita"
-                                                value="{{ item.valor_receita or 0 }}"
-                                                class="form-control form-control-sm text-center text-success fw-bold"
-                                                step="0.01" min="0">
-                                        </td>
-                                        <td class="text-center">
-                                            {% set margem = (item.valor_receita or 0) - (item.valor_custo or 0) %}
-                                            <span class="badge {{ 'bg-success' if margem > 0 else 'bg-secondary' }} bg-opacity-10
-                                                {{ 'text-success' if margem > 0 else 'text-secondary' }} fw-bold">
-                                                R$ {{ "%.2f"|format(margem) }}
-                                            </span>
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text">R$</span>
+                                                <input type="number" name="valor_custo"
+                                                    value="{{ '%.2f'|format(item.valor_custo or 0) }}"
+                                                    class="form-control text-center fw-bold"
+                                                    step="0.01" min="0">
+                                            </div>
                                         </td>
                                         <td class="text-center">
                                             <div class="btn-group btn-group-sm">
@@ -363,7 +345,7 @@
                                 </tr>
                                 {% else %}
                                 <tr>
-                                    <td colspan="5" class="text-center text-muted py-4">
+                                    <td colspan="3" class="text-center text-muted py-4">
                                         <i class="bi bi-inbox fs-1 d-block mb-2 opacity-25"></i>
                                         Nenhuma peça cadastrada
                                     </td>
@@ -373,27 +355,27 @@
                         </table>
                     </div>
 
-                    <!-- Resumo Financeiro -->
+                    <!-- Resumo do Catálogo -->
                     {% if itens %}
-                    <div class="card bg-primary bg-opacity-10 border-0 mt-3">
+                    <div class="card bg-secondary bg-opacity-10 border-0 mt-3">
                         <div class="card-body py-2">
                             <div class="row text-center small">
                                 <div class="col">
-                                    <span class="text-muted">Total Itens</span>
+                                    <span class="text-muted">Total de Materiais</span>
                                     <div class="fw-bold fs-5">{{ itens|length }}</div>
                                 </div>
                                 <div class="col">
-                                    <span class="text-danger">Custo Médio</span>
-                                    <div class="fw-bold fs-5 text-danger">
+                                    <span class="text-muted">Custo Médio Global</span>
+                                    <div class="fw-bold fs-5">
                                         R$ {{ "%.2f"|format(itens|map(attribute='valor_custo')|select('number')|list|sum / itens|length if itens else 0) }}
                                     </div>
                                 </div>
-                                <div class="col">
-                                    <span class="text-success">Receita Média</span>
-                                    <div class="fw-bold fs-5 text-success">
-                                        R$ {{ "%.2f"|format(itens|map(attribute='valor_receita')|select('number')|list|sum / itens|length if itens else 0) }}
-                                    </div>
-                                </div>
+                            </div>
+                            <div class="text-center mt-2">
+                                <small class="text-muted">
+                                    <i class="bi bi-arrow-right me-1"></i>
+                                    Preços de venda são definidos em <strong>Admin → Contratos → LPU</strong>
+                                </small>
                             </div>
                         </div>
                     </div>

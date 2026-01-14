@@ -90,6 +90,11 @@ def movimentar_estoque():
 @login_required
 @admin_required
 def adicionar_item():
+    """
+    Adiciona nova peça ao catálogo (Almoxarifado).
+    REGRA: Almoxarifado controla apenas NOME e CUSTO.
+    Preço de venda é definido exclusivamente no Contrato (ContratoItem).
+    """
     try:
         nome = request.form.get('nome')
         if not nome:
@@ -102,20 +107,19 @@ def adicionar_item():
             flash(f'O item "{nome}" já existe.', 'warning')
             return redirect(url_for('stock.controle_estoque'))
 
-        # Valores financeiros (novos campos)
+        # Apenas custo de aquisição (valor_receita não é mais usado aqui)
         valor_custo = float(request.form.get('valor_custo', 0) or 0)
-        valor_receita = float(request.form.get('valor_receita', 0) or 0)
 
-        # Cria novo item com custos
+        # Cria novo item (sem valor_receita - preço definido no Contrato)
         novo_item = ItemLPU(
             nome=nome,
             valor_custo=valor_custo,
-            valor_receita=valor_receita,
-            cliente_id=None  # Item de estoque geral
+            valor_receita=None,  # Ignorado - preço vem do ContratoItem
+            cliente_id=None
         )
         db.session.add(novo_item)
         db.session.commit()
-        flash(f'Item "{nome}" adicionado com sucesso!', 'success')
+        flash(f'Material "{nome}" cadastrado! Defina o preço de venda em cada Contrato.', 'success')
 
     except Exception as e:
         flash(f'Erro ao adicionar item: {str(e)}', 'danger')
@@ -127,47 +131,49 @@ def adicionar_item():
 @login_required
 @admin_required
 def atualizar_item(item_id):
-    """Atualiza dados de um item (nome, custo, receita) e registra histórico de preços."""
+    """
+    Atualiza dados de um item (nome, custo) e registra histórico.
+    REGRA: Almoxarifado controla apenas NOME e CUSTO.
+    Preço de venda é definido exclusivamente no Contrato.
+    """
     try:
         item = ItemLPU.query.get_or_404(item_id)
 
-        # Captura valores ANTES da alteração
+        # Captura custo ANTES da alteração
         custo_anterior = item.valor_custo
-        receita_anterior = item.valor_receita
 
         # Atualizar campos
         if request.form.get('nome'):
             item.nome = request.form.get('nome')
 
         novo_custo = float(request.form.get('valor_custo', 0) or 0)
-        nova_receita = float(request.form.get('valor_receita', 0) or 0)
 
-        # Verifica se houve alteração de preço
-        preco_alterado = (custo_anterior != novo_custo) or (receita_anterior != nova_receita)
+        # Verifica se houve alteração de custo
+        custo_alterado = (custo_anterior != novo_custo)
 
-        if preco_alterado:
-            # Registra histórico de alteração
+        if custo_alterado:
+            # Registra histórico de alteração (apenas custo)
             historico = ItemLPUPrecoHistorico(
                 item_lpu_id=item.id,
                 valor_custo_anterior=custo_anterior,
-                valor_receita_anterior=receita_anterior,
+                valor_receita_anterior=None,
                 valor_custo_novo=novo_custo,
-                valor_receita_novo=nova_receita,
-                motivo=request.form.get('motivo_alteracao', 'Atualização via catálogo'),
+                valor_receita_novo=None,
+                motivo=request.form.get('motivo_alteracao', 'Atualização manual de custo'),
                 alterado_por_id=current_user.id
             )
             db.session.add(historico)
 
-        # Aplica novos valores
+        # Aplica novo custo
         item.valor_custo = novo_custo
-        item.valor_receita = nova_receita
+        # valor_receita não é mais atualizado aqui
 
         db.session.commit()
 
-        if preco_alterado:
-            flash(f'Item "{item.nome}" atualizado! Alteração de preço registrada no histórico.', 'success')
+        if custo_alterado:
+            flash(f'Custo de "{item.nome}" atualizado para R$ {novo_custo:.2f}', 'success')
         else:
-            flash(f'Item "{item.nome}" atualizado com sucesso!', 'success')
+            flash(f'Item "{item.nome}" atualizado!', 'success')
 
     except Exception as e:
         db.session.rollback()

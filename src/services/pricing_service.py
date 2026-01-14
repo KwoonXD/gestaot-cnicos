@@ -518,7 +518,9 @@ class PricingService:
         return resultado.custo_total
 
     # --------------------------------------------------------------------------
-    # PRECOS POR CONTRATO (Tabela de Precos Personalizada)
+    # LPU DO CONTRATO (Single Source of Pricing)
+    # O preço de venda é definido EXCLUSIVAMENTE no ContratoItem.
+    # O Almoxarifado (ItemLPU) armazena apenas nome e custo de aquisição.
     # --------------------------------------------------------------------------
 
     @staticmethod
