@@ -513,6 +513,109 @@ class ChamadoService:
         
         return chamado
 
+    # =========================================================================
+    # VALIDAÇÃO DE LOTES (Inbox de Aprovação)
+    # =========================================================================
+
+    @staticmethod
+    def aprovar_batch(batch_id: str, user_id: int) -> int:
+        """
+        Aprova todos os chamados de um lote e CONGELA o custo.
+        
+        REGRA DE NEGÓCIO CRÍTICA:
+        O custo_atribuido é calculado AQUI e NUNCA mais deve ser alterado.
+        Isso elimina o "Late Binding" onde custos eram recalculados no pagamento.
+        
+        Args:
+            batch_id: ID do lote (UUID string)
+            user_id: ID do usuário que está aprovando
+            
+        Returns:
+            int: Quantidade de chamados aprovados
+        """
+        from decimal import Decimal
+        
+        chamados = Chamado.query.filter(
+            Chamado.batch_id == batch_id,
+            Chamado.status_validacao == 'Pendente'
+        ).all()
+        
+        if not chamados:
+            return 0
+        
+        count = 0
+        for chamado in chamados:
+            # 1. CONGELAR CUSTO (Single Source of Truth)
+            # Se custo_atribuido não foi definido na criação, calcular agora
+            if chamado.custo_atribuido is None or chamado.custo_atribuido == Decimal('0.00'):
+                tecnico = chamado.tecnico
+                if tecnico:
+                    custo_congelado = PricingService.calcular_custo_tempo_real(chamado, tecnico)
+                    chamado.custo_atribuido = custo_congelado
+            
+            # 2. Atualizar Status de Validação
+            chamado.status_validacao = 'Aprovado'
+            chamado.data_validacao = datetime.utcnow()
+            chamado.validado_por_id = user_id
+            
+            count += 1
+        
+        # Audit log
+        AuditService.log_change(
+            model_name='Chamado',
+            object_id=batch_id,
+            action='BATCH_APPROVE',
+            changes=f'{count} chamados aprovados com custo congelado',
+            user_id=user_id
+        )
+        
+        return count
+
+    @staticmethod
+    def rejeitar_batch(batch_id: str, user_id: int, motivo: str) -> int:
+        """
+        Rejeita todos os chamados de um lote.
+        
+        Args:
+            batch_id: ID do lote (UUID string)
+            user_id: ID do usuário que está rejeitando
+            motivo: Motivo da rejeição (obrigatório, mínimo 10 caracteres)
+            
+        Returns:
+            int: Quantidade de chamados rejeitados
+        """
+        chamados = Chamado.query.filter(
+            Chamado.batch_id == batch_id,
+            Chamado.status_validacao == 'Pendente'
+        ).all()
+        
+        if not chamados:
+            return 0
+        
+        count = 0
+        for chamado in chamados:
+            chamado.status_validacao = 'Rejeitado'
+            chamado.motivo_rejeicao = motivo
+            chamado.data_rejeicao = datetime.utcnow()
+            chamado.rejeitado_por_id = user_id
+            count += 1
+        
+        # Audit log
+        AuditService.log_change(
+            model_name='Chamado',
+            object_id=batch_id,
+            action='BATCH_REJECT',
+            changes=f'{count} chamados rejeitados. Motivo: {motivo[:50]}',
+            user_id=user_id
+        )
+        
+        return count
+
+    @staticmethod
+    def get_by_id(id):
+        """Retorna chamado por ID."""
+        return Chamado.query.get_or_404(id)
+
     # Máquina de Estados - Transições Válidas
     VALID_STATUS_TRANSITIONS = {
         'Pendente': ['Em Andamento', 'Concluído', 'Cancelado'],

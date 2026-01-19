@@ -29,36 +29,35 @@ def processar_custos_chamados(chamados, tecnico):
 
 def garantir_custo_atribuido(chamados, tecnico):
     """
-    INTEGRIDADE FINANCEIRA (P3): Garante que todo chamado tenha custo_atribuido.
-
-    Se algum chamado nao tiver custo_atribuido definido (None ou 0 quando deveria ter valor),
-    recalcula via PricingService antes de prosseguir com o pagamento.
-
+    DEPRECATED (2026-01): O custo deve ser congelado na APROVAÇÃO, não no pagamento.
+    
+    Esta função agora apenas VALIDA a integridade.
+    Lança exceção se algum chamado aprovado não tiver custo definido.
+    
+    O recálculo foi removido para eliminar "Late Binding" de custos.
+    Se um chamado chegar aqui sem custo_atribuido, é um BUG no fluxo de aprovação.
+    
     Args:
         chamados: Lista de Chamado a verificar
-        tecnico: Tecnico responsavel (para obter valores base)
+        tecnico: Tecnico responsavel (não utilizado, mantido para compatibilidade)
 
     Returns:
-        int: Quantidade de chamados que foram recalculados
+        int: Sempre 0 (nenhum recálculo feito)
+        
+    Raises:
+        ValueError: Se algum chamado não tiver custo_atribuido definido
     """
-    recalculados = 0
-
     for chamado in chamados:
-        # Verifica se custo_atribuido esta ausente ou invalido
         if chamado.custo_atribuido is None:
-            # Recalcula usando PricingService
-            custo = PricingService.calcular_custo_tempo_real(chamado, tecnico)
-            chamado.custo_atribuido = custo
-            recalculados += 1
-            logger.warning(
-                f"[INTEGRIDADE] Chamado {chamado.id} estava sem custo_atribuido. "
-                f"Recalculado para R$ {custo:.2f}"
+            raise ValueError(
+                f"INTEGRIDADE VIOLADA: Chamado {chamado.id} (código: {chamado.codigo_chamado}) "
+                f"está aprovado mas sem custo_atribuido. "
+                f"O custo deveria ter sido congelado na aprovação (aprovar_batch). "
+                f"Isso é um bug no fluxo ou dado legado. "
+                f"Corrija manualmente ou re-aprove o lote."
             )
-
-    if recalculados > 0:
-        logger.info(f"[INTEGRIDADE] {recalculados} chamados tiveram custo_atribuido recalculado.")
-
-    return recalculados
+    
+    return 0  # Nenhum recálculo feito - integridade OK
 
 # Função isolada (fora da classe) para rodar em background
 def task_processar_lote(tecnicos_ids, inicio_str, fim_str):

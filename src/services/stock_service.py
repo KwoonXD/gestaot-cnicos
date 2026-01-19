@@ -119,35 +119,21 @@ class StockService:
     def transferir_sede_para_tecnico(tecnico_id, item_id, qtd, user_id, obs=None, custo_aquisicao=None):
         """
         Sede envia para técnico (Aumenta saldo do técnico).
+        
+        REFATORADO (2026-01): Removida atualização síncrona de ItemLPU.valor_custo.
+        
+        O custo de aquisição agora é APENAS registrado no StockMovement.custo_unitario
+        para rastreabilidade. O custo médio do item deve ser calculado em um processo
+        batch separado ou relatório, não durante a transferência, para evitar
+        bloqueios na tabela mestra de produtos.
         """
-        try:
-            # Calcular custo médio ponderado se custo informado
-            if custo_aquisicao is not None and custo_aquisicao > 0:
-                item = ItemLPU.query.get(item_id)
-                if item:
-                    # Travar ItemLPU para update seguro do custo médio?
-                    # Por enquanto, assumindo baixo risco de colisão em atualização de mestre de itens.
-                    qtd_atual_total = db.session.query(func.sum(TecnicoStock.quantidade)).filter(
-                        TecnicoStock.item_lpu_id == item_id,
-                        TecnicoStock.quantidade > 0
-                    ).scalar() or 0
-
-                    custo_atual = Decimal(str(item.valor_custo or 0))
-
-                    valor_total_atual = Decimal(str(qtd_atual_total)) * custo_atual
-                    valor_total_entrada = Decimal(str(qtd)) * Decimal(str(custo_aquisicao))
-                    nova_quantidade = qtd_atual_total + qtd
-
-                    if nova_quantidade > 0:
-                        novo_custo_medio = (valor_total_atual + valor_total_entrada) / Decimal(str(nova_quantidade))
-                        item.valor_custo = novo_custo_medio.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-
-            result = StockService._update_stock(
-                tecnico_id, item_id, qtd, user_id, 'ENVIO', obs, custo_aquisicao
-            )
-            return result
-        except Exception as e:
-            raise e
+        # Custo médio DESACOPLADO - apenas log no movimento
+        # O valor é salvo no StockMovement.custo_unitario para auditoria futura
+        
+        result = StockService._update_stock(
+            tecnico_id, item_id, qtd, user_id, 'ENVIO', obs, custo_aquisicao
+        )
+        return result
 
     @staticmethod
     def devolver_tecnico_para_sede(tecnico_id, item_id, qtd, user_id, obs=None):
