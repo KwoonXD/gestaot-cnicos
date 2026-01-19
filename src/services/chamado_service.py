@@ -11,12 +11,12 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy import or_, func
 
 # Constantes de Negocio (Importadas do PricingService para compatibilidade)
-from .pricing_service import (
-    HORAS_FRANQUIA_PADRAO,
-    VALOR_HORA_EXTRA_DEFAULT,
-    VALOR_ATENDIMENTO_BASE,
-    VALOR_ADICIONAL_LOJA
-)
+# Constantes de Negocio (Importadas do PricingService para compatibilidade)
+from .pricing_service import HORAS_FRANQUIA_PADRAO
+from .pricing_service import VALOR_HORA_EXTRA_DEFAULT
+from .pricing_service import VALOR_ATENDIMENTO_BASE
+from .pricing_service import VALOR_ADICIONAL_LOJA
+from .pricing_service import ChamadoInput
 
 class ChamadoService:
 
@@ -69,6 +69,13 @@ class ChamadoService:
                 query = query.filter(Chamado.tecnico_id == int(filters['tecnico_id']))
             if filters.get('status'):
                 query = query.filter(Chamado.status_chamado == filters['status'])
+            if filters.get('status_validacao'):
+                # Handle list or single value
+                val = filters['status_validacao']
+                if isinstance(val, list):
+                    query = query.filter(Chamado.status_validacao.in_(val))
+                else:
+                    query = query.filter(Chamado.status_validacao == val)
             if filters.get('tipo'):
                 query = query.filter(Chamado.tipo_servico == filters['tipo'])
             if filters.get('pago'):
@@ -93,6 +100,7 @@ class ChamadoService:
 
     @staticmethod
     def get_relatorio_faturamento(cliente_id, data_inicio, data_fim, estado=None):
+        from decimal import Decimal
         """
         Gera relatório financeiro de fechamento por contrato.
         Filtra por Cliente (obrigatório), Range de Datas e Estado (opcional).
@@ -115,12 +123,12 @@ class ChamadoService:
         chamados = query.order_by(Chamado.data_atendimento).all()
         
         itens = []
-        total_geral = 0.0
+        total_geral = Decimal('0.00')
         
         for c in chamados:
             # Confia no valor calculado na criação (já considera Retorno=0 se regra aplicada)
             # Mas como segurança, se for nulo, usa 0
-            valor_final = float(c.valor_receita_total or 0.0)
+            valor_final = Decimal(str(c.valor_receita_total or '0.00'))
             
             nome_servico = c.catalogo_servico.nome if c.catalogo_servico else c.tipo_servico
             
@@ -130,18 +138,19 @@ class ChamadoService:
                 'cidade': c.cidade,
                 'estado': c.tecnico.estado if c.tecnico else 'PB', # Default PB is fallback
                 'servico': nome_servico,
-                'valor': valor_final
+                'valor': float(valor_final) # JSON needs float, but calc is Decimal
             })
             total_geral += valor_final
             
         return {
             'itens': itens,
-            'total_geral': total_geral,
+            'total_geral': float(total_geral),
             'periodo': f"{data_inicio.strftime('%d/%m/%Y')} a {data_fim.strftime('%d/%m/%Y')}"
         }
 
     @staticmethod
     def create_multiplo(logistica, fsas):
+        from decimal import Decimal
         """
         Cria chamados em lote, aplica regras de precificacao (Primeiro vs Adicional)
         e baixa estoque automaticamente.
@@ -182,17 +191,21 @@ class ChamadoService:
         for resultado in resultados_pricing:
             fsa = resultado['fsa']
 
-            # Valores calculados pelo PricingService
-            valor_receita_servico = resultado['valor_receita_servico']
-            valor_receita_total = resultado['valor_receita_total']
-            custo_atribuido = resultado['custo_atribuido']
-            horas_trabalhadas = resultado['horas_trabalhadas']
+            # Valores calculados pelo PricingService (agora ja vêm como Decimal ou float dependendo do PricingService)
+            # Garantir casting seguro
+            def to_d(val): return Decimal(str(val or '0.00'))
+
+            valor_receita_servico = to_d(resultado['valor_receita_servico'])
+            valor_receita_total = to_d(resultado['valor_receita_total'])
+            custo_atribuido = to_d(resultado['custo_atribuido'])
+            
+            horas_trabalhadas = to_d(resultado['horas_trabalhadas'])
             is_adicional = resultado['is_adicional']
 
             # Inicializa valores de peça
             peca_nome = ""
-            custo_peca = 0.0
-            valor_receita_peca = 0.0
+            custo_peca = Decimal('0.00')
+            valor_receita_peca = Decimal('0.00')
             fornecedor = fsa.get('fornecedor_peca', 'Empresa')
 
             # Pre-fetch nome da peça e valor de receita (usando tabela de precos por contrato)
@@ -206,12 +219,12 @@ class ChamadoService:
                     cliente_id = servico.cliente_id if servico else None
 
                     # Buscar valor de receita da peca usando tabela de precos por contrato
-                    # PricingService.get_valor_peca faz fallback automatico para preco padrao
-                    valor_receita_peca = PricingService.get_valor_peca(cliente_id, item.id) if cliente_id else (item.valor_receita or 0.0)
-
+                    # PricingService.get_valor_peca agora retorna Decimal
+                    valor_receita_peca = PricingService.get_valor_peca(cliente_id, item.id) if cliente_id else Decimal(str(item.valor_receita or '0.00'))
+                    
                     # Se Fornecedor = Tecnico -> Custo informado manualmente
                     if fornecedor == 'Tecnico':
-                        custo_peca = float(fsa.get('custo_peca', 0))
+                        custo_peca = Decimal(str(fsa.get('custo_peca', 0) or '0.00'))
 
             # Adicionar receita da peca ao total
             valor_receita_total = valor_receita_servico + valor_receita_peca
@@ -279,105 +292,8 @@ class ChamadoService:
 
             criados.append(novo_chamado)
 
-        db.session.commit()
+        # db.session.commit() # REMOVIDO: Caller deve commitar
         return criados
-
-    @staticmethod
-    def aprovar_chamados(ids_lista, user_id):
-        """Aprova chamados para processamento financeiro"""
-        try:
-            count = 0
-            for chamado_id in ids_lista:
-                chamado = Chamado.query.get(chamado_id)
-                if chamado and chamado.status_validacao == 'Pendente':
-                    chamado.status_validacao = 'Aprovado'
-                    chamado.data_validacao = datetime.utcnow()
-                    chamado.validado_por_id = user_id
-                    
-                    # Automating Ledger Credit
-                    from .financeiro_service import FinanceiroService
-                    FinanceiroService.registrar_credito_servico(chamado)
-                    
-                    count += 1
-            db.session.commit()
-            
-            AuditService.log_change(
-                model_name='Chamado',
-                object_id=str(ids_lista),
-                action='APPROVE_BATCH',
-                changes=f"Approved {count} chamados"
-            )
-            return count
-        except Exception as e:
-            db.session.rollback()
-            raise e
-
-    @staticmethod
-    def rejeitar_chamados(ids_lista, user_id, motivo):
-        """
-        Rejeita chamados com HARD DELETE e notifica o criador.
-        """
-        from src.models import Notification
-        
-        try:
-            deleted_count = 0
-            notified_users = []
-            deleted_codes = []
-            
-            for chamado_id in ids_lista:
-                chamado = Chamado.query.get(chamado_id)
-                if not chamado:
-                    continue
-                
-                # Capturar dados antes de deletar
-                codigo = chamado.codigo_chamado or f"ID-{chamado.id}"
-                data_atend = chamado.data_atendimento.strftime('%d/%m/%Y') if chamado.data_atendimento else 'N/A'
-                tecnico_nome = chamado.tecnico.nome if chamado.tecnico else 'N/A'
-                cidade = chamado.cidade or 'N/A'
-                created_by = chamado.created_by_id
-                
-                # Criar notificação se houver criador
-                if created_by:
-                    notif = Notification(
-                        user_id=created_by,
-                        title=f"⚠️ Chamado {codigo} Rejeitado",
-                        message=f"O chamado foi rejeitado por um supervisor.\n\n"
-                                f"📋 Código: {codigo}\n"
-                                f"📅 Data: {data_atend}\n"
-                                f"👤 Técnico: {tecnico_nome}\n"
-                                f"📍 Local: {cidade}\n\n"
-                                f"❌ Motivo: {motivo}",
-                        notification_type='danger'
-                    )
-                    db.session.add(notif)
-                    notified_users.append(created_by)
-                
-                # HARD DELETE
-                db.session.delete(chamado)
-                deleted_count += 1
-                deleted_codes.append(codigo)
-            
-            db.session.commit()
-            
-            # Audit log
-            AuditService.log_change(
-                model_name='Chamado',
-                object_id=str(deleted_codes),
-                action='REJECT_DELETE',
-                changes=f"Hard-deleted {deleted_count} chamados. Motivo: {motivo[:100]}"
-            )
-            
-            return deleted_count
-        except Exception as e:
-            db.session.rollback()
-            raise e
-
-    @staticmethod
-    def get_pendentes_validacao():
-        """Retorna chamados pendentes de validação"""
-        return Chamado.query.options(joinedload(Chamado.tecnico)).filter(
-            Chamado.status_validacao == 'Pendente'
-        ).order_by(Chamado.data_atendimento.desc()).all()
 
     @staticmethod
     def get_grouped_by_batch(filters=None):
@@ -386,6 +302,7 @@ class ChamadoService:
         Útil para visualização e geração de links JQL.
         """
         from collections import defaultdict
+        from decimal import Decimal
         
         # Eager load tecnico
         query = Chamado.query.options(joinedload(Chamado.tecnico)).filter(Chamado.batch_id.isnot(None))
@@ -415,7 +332,7 @@ class ChamadoService:
                     'cidade': primeiro.cidade,
                     'tipo_resolucao': primeiro.tipo_resolucao,
                     'chamados': chamados_list,
-                    'total_receita': sum(float(c.valor_receita_total or 0) for c in chamados_list),
+                    'total_receita': sum(Decimal(str(c.valor_receita_total or '0.00')) for c in chamados_list),
                     'codigos_fsa': [c.codigo_chamado for c in chamados_list if c.codigo_chamado]
                 })
         
@@ -430,6 +347,7 @@ class ChamadoService:
         Agrupados por batch_id, com dados pré-formatados para o frontend.
         """
         from collections import defaultdict
+        from decimal import Decimal
         
         # Busca apenas pendentes
         chamados = Chamado.query.options(joinedload(Chamado.tecnico)).filter(
@@ -458,22 +376,39 @@ class ChamadoService:
             # Preparar lista de chamados para o modal
             chamados_detalhe = []
             codigos_jira = []
-            valor_total = 0.0
+            valor_total = Decimal('0.00')
+            horas_total = Decimal('0.00')
             
             for c in chamados_list:
                 # User Request: Show Cost (Technician Payment) instead of Revenue
-                valor_custo = float(c.custo_atribuido or 0)
+                # NOW DECIMAL
+                valor_custo = Decimal(str(c.custo_atribuido or '0.00'))
                 valor_total += valor_custo
+                
+                horas = Decimal(str(c.horas_trabalhadas or '0.00'))
+                horas_total += horas
                 
                 if c.codigo_chamado:
                     codigos_jira.append(c.codigo_chamado)
+                
+                # Handle hora_inicio/hora_fim - can be time object or string
+                hora_inicio_str = None
+                hora_fim_str = None
+                if c.hora_inicio:
+                    hora_inicio_str = c.hora_inicio.strftime('%H:%M') if hasattr(c.hora_inicio, 'strftime') else str(c.hora_inicio)[:5]
+                if c.hora_fim:
+                    hora_fim_str = c.hora_fim.strftime('%H:%M') if hasattr(c.hora_fim, 'strftime') else str(c.hora_fim)[:5]
                 
                 chamados_detalhe.append({
                     'id': c.id,
                     'codigo': c.codigo_chamado or f'ID-{c.id}',
                     'tipo': c.tipo_servico or 'N/A',
-                    'valor': valor_custo, # Agora reflete o custo técnico
-                    'peca': c.peca_usada or '-'
+                    'valor': float(valor_custo), # Frontend expects float usually
+                    'horas': float(horas),
+                    'hora_inicio': hora_inicio_str,
+                    'hora_fim': hora_fim_str,
+                    'peca': c.peca_usada or '-',
+                    'obs': c.observacoes or '' 
                 })
             
             result.append({
@@ -485,7 +420,8 @@ class ChamadoService:
                 'cliente': cliente or 'Não identificado',
                 'cidade': primeiro.cidade or 'N/A',
                 'qnt_chamados': len(chamados_list),
-                'valor_total': valor_total,
+                'valor_total': float(valor_total), # Frontend display
+                'horas_total': float(horas_total),
                 'chamados_lista': chamados_detalhe,
                 'jira_codes': ','.join(codigos_jira),
                 'chamados_ids': [c.id for c in chamados_list]
@@ -496,224 +432,278 @@ class ChamadoService:
         return result
 
     @staticmethod
-    def aprovar_batch(batch_id, user_id):
-        """Aprova todos os chamados de um lote"""
-        try:
-            chamados = Chamado.query.filter_by(
-                batch_id=batch_id,
-                status_validacao='Pendente'
-            ).all()
-            
-            count = 0
-            for c in chamados:
-                c.status_validacao = 'Aprovado'
-                c.data_validacao = datetime.utcnow()
-                c.validado_por_id = user_id
-                
-                # Automating Ledger Credit
-                from .financeiro_service import FinanceiroService
-                FinanceiroService.registrar_credito_servico(c)
-                
-                count += 1
-            
-            db.session.commit()
-            
-            AuditService.log_change(
-                model_name='Chamado',
-                object_id=batch_id,
-                action='APPROVE_BATCH',
-                changes=f"Approved {count} chamados in batch"
-            )
-            return count
-        except Exception as e:
-            db.session.rollback()
-            raise e
-
-    @staticmethod
-    def rejeitar_batch(batch_id, user_id, motivo):
-        """Rejeita e deleta todos os chamados de um lote, notificando criadores"""
-        from src.models import Notification
+    def update(id, data, user_id=None):
+        from decimal import Decimal
+        chamado = ChamadoService.get_by_id(id)
         
-        try:
-            chamados = Chamado.query.filter_by(
-                batch_id=batch_id,
-                status_validacao='Pendente'
-            ).all()
-            
-            deleted_count = 0
-            deleted_codes = []
-            
-            for chamado in chamados:
-                # Capturar dados antes de deletar
-                codigo = chamado.codigo_chamado or f"ID-{chamado.id}"
-                data_atend = chamado.data_atendimento.strftime('%d/%m/%Y') if chamado.data_atendimento else 'N/A'
-                tecnico_nome = chamado.tecnico.nome if chamado.tecnico else 'N/A'
-                cidade = chamado.cidade or 'N/A'
-                created_by = chamado.created_by_id
-                
-                # Criar notificação se houver criador
-                if created_by:
-                    notif = Notification(
-                        user_id=created_by,
-                        title=f"⚠️ Chamado {codigo} Rejeitado",
-                        message=f"O chamado foi rejeitado por um supervisor.\n\n"
-                                f"📋 Código: {codigo}\n"
-                                f"📅 Data: {data_atend}\n"
-                                f"👤 Técnico: {tecnico_nome}\n"
-                                f"📍 Local: {cidade}\n\n"
-                                f"❌ Motivo: {motivo}",
-                        notification_type='danger'
-                    )
-                    db.session.add(notif)
-                
-                # HARD DELETE
-                db.session.delete(chamado)
-                deleted_count += 1
-                deleted_codes.append(codigo)
-            
-            db.session.commit()
-            
-            AuditService.log_change(
-                model_name='Chamado',
-                object_id=batch_id,
-                action='REJECT_BATCH_DELETE',
-                changes=f"Hard-deleted {deleted_count} chamados. Motivo: {motivo[:100]}"
-            )
-            
-            return deleted_count
-        except Exception as e:
-            db.session.rollback()
-            raise e
-
-    @staticmethod
-    def get_by_id(id):
-        return Chamado.query.get_or_404(id)
-
-    @staticmethod
-    def create(data):
-        # Legacy/Single Create Wrapper adapting to new model
-        # Just create a single item list and call create_multiplo
-        fsa_data = {
-            'codigo_chamado': data.get('codigo_chamado'),
-            'tipo_resolucao': data.get('tipo_resolucao'),
-            'peca_usada': data.get('peca_usada'),
-            'fornecedor_peca': data.get('fornecedor_peca'),
-            'custo_peca': data.get('custo_peca')
-        }
-        logistica = {
-            'tecnico_id': data.get('tecnico_id'),
-            'data_atendimento': data.get('data_atendimento'),
-            'cidade': data.get('cidade') or data.get('loja') or 'Indefinido' # Fallback
-        }
-        return ChamadoService.create_multiplo(logistica, [fsa_data])[0]
-
-    @staticmethod
-    def update(id, data):
-        try:
-            chamado = ChamadoService.get_by_id(id)
-            
-            # Capture old state for audit
-            old_data = {
-                'status': chamado.status_chamado,
-                'valor_receita': float(chamado.valor_receita_servico or 0),
-                'loja': chamado.loja
-            }
-            
-            horario_inicio = data.get('horario_inicio')
-            horario_saida = data.get('horario_saida')
-            
-            chamado.tecnico_id = int(data['tecnico_id'])
-            chamado.codigo_chamado = data.get('codigo_chamado', '')
-            chamado.loja = data.get('loja', '')
-            chamado.data_atendimento = datetime.strptime(data['data_atendimento'], '%Y-%m-%d').date()
-            chamado.horario_inicio = datetime.strptime(horario_inicio, '%H:%M').time() if horario_inicio else None
-            chamado.horario_saida = datetime.strptime(horario_saida, '%H:%M').time() if horario_saida else None
-            chamado.fsa_codes = data.get('fsa_codes', '')
-            chamado.tipo_servico = data['tipo_servico']
-            chamado.tipo_resolucao = data.get('tipo_resolucao', 'Resolvido')
-            chamado.status_chamado = data.get('status_chamado', 'Pendente')
-            chamado.endereco = data.get('endereco', '')
-            chamado.observacoes = data.get('observacoes', '')
-            
-            # Financeiro Updates - Preserve existing values if not in payload
-            if 'valor_receita_servico' in data:
-                rec_servico = float(data.get('valor_receita_servico') or 0.0)
-                chamado.valor_receita_servico = rec_servico
-            else:
-                rec_servico = float(chamado.valor_receita_servico or 0.0)
-                
-            if 'valor_receita_peca' in data:
-                rec_peca = float(data.get('valor_receita_peca') or 0.0)
-                chamado.valor_receita_peca = rec_peca
-            else:
-                rec_peca = float(chamado.valor_receita_peca or 0.0)
-            
-            # Update Related Fields if provided
-            if 'peca_usada' in data: chamado.peca_usada = data.get('peca_usada')
-            if 'custo_peca' in data: chamado.custo_peca = float(data.get('custo_peca') or 0.0)
-            if 'fornecedor_peca' in data: chamado.fornecedor_peca = data.get('fornecedor_peca')
-            
-            chamado.valor_receita_total = rec_servico + rec_peca
-            chamado.valor = chamado.valor_receita_total
-            
-            # Calculate changes
-            changes = {}
-            new_data = {
+        # Capture old state for audit
+        old_data = {
             'status': chamado.status_chamado,
-            'valor_receita': float(chamado.valor_receita_servico),
-            'loja': chamado.loja
-            }
-            
-            for k, v in new_data.items():
-                if v != old_data[k]:
-                    changes[k] = {'old': old_data[k], 'new': v}
-            
-            if changes:
-                AuditService.log_change(
-                    model_name='Chamado',
-                    object_id=chamado.id,
-                    action='UPDATE',
-                    changes=changes
-                )
-            
-            db.session.commit()
-            return chamado
-        except Exception as e:
-            db.session.rollback()
-            raise e
+            'valor_receita': float(chamado.valor_receita_servico or 0),
+            'loja': chamado.loja,
+            'horas': float(chamado.horas_trabalhadas or 0),
+            'custo': float(chamado.custo_atribuido or 0),
+            'observacoes': chamado.observacoes
+        }
+        
+        horario_inicio = data.get('horario_inicio')
+        horario_saida = data.get('horario_saida')
+        
+        if 'tecnico_id' in data: chamado.tecnico_id = int(data['tecnico_id'])
+        if 'codigo_chamado' in data: chamado.codigo_chamado = data.get('codigo_chamado', '')
+        if 'loja' in data: chamado.loja = data.get('loja', '')
+        if 'data_atendimento' in data: chamado.data_atendimento = datetime.strptime(data['data_atendimento'], '%Y-%m-%d').date()
+        if horario_inicio: chamado.horario_inicio = datetime.strptime(horario_inicio, '%H:%M').time()
+        if horario_saida: chamado.horario_saida = datetime.strptime(horario_saida, '%H:%M').time()
+        if 'fsa_codes' in data: chamado.fsa_codes = data.get('fsa_codes', '')
+        if 'tipo_servico' in data: chamado.tipo_servico = data['tipo_servico']
+        from src.utils.domain import normalize_status
+        if 'tipo_resolucao' in data: chamado.tipo_resolucao = data.get('tipo_resolucao', 'Resolvido')
+        if 'status_chamado' in data: chamado.status_chamado = normalize_status(data.get('status_chamado', 'Pendente'))
+        if 'endereco' in data: chamado.endereco = data.get('endereco', '')
+        if 'observacoes' in data: chamado.observacoes = data.get('observacoes', '')
+        
+        def to_d(val): return Decimal(str(val or '0.00'))
 
-    @staticmethod
-    def update_status(id, status):
-        try:
-            chamado = ChamadoService.get_by_id(id)
-            chamado.status_chamado = status
-            db.session.commit()
-            return chamado
-        except Exception as e:
-            db.session.rollback()
-            raise e
-
-    @staticmethod
-    def delete(id, user_id):
-        try:
-            chamado = ChamadoService.get_by_id(id)
+        # Financeiro Updates
+        if 'valor_receita_servico' in data:
+            chamado.valor_receita_servico = to_d(data.get('valor_receita_servico'))
             
-            # Security Check
-            if chamado.pago or chamado.pagamento_id:
-                raise ValueError("Não é possível excluir um chamado que já foi pago ou está em lote fechado.")
-                
+        if 'valor_receita_peca' in data:
+            chamado.valor_receita_peca = to_d(data.get('valor_receita_peca'))
+        
+        # Update Related Fields if provided
+        if 'peca_usada' in data: chamado.peca_usada = data.get('peca_usada')
+        if 'custo_peca' in data: chamado.custo_peca = to_d(data.get('custo_peca'))
+        if 'fornecedor_peca' in data: chamado.fornecedor_peca = data.get('fornecedor_peca')
+        
+        # FIX (2026-01): Allow manual override of hours and cost in Decimal
+        if 'horas_trabalhadas' in data:
+             chamado.horas_trabalhadas = to_d(data.get('horas_trabalhadas'))
+        
+        if 'custo_atribuido' in data:
+             chamado.custo_atribuido = to_d(data.get('custo_atribuido'))
+
+        chamado.valor_receita_total = (chamado.valor_receita_servico or Decimal(0)) + (chamado.valor_receita_peca or Decimal(0))
+        chamado.valor = chamado.valor_receita_total
+        
+        # Calculate changes
+        changes = {}
+        new_data = {
+            'status': chamado.status_chamado,
+            'valor_receita': float(chamado.valor_receita_servico or 0),
+            'loja': chamado.loja,
+            'horas': float(chamado.horas_trabalhadas or 0),
+            'custo': float(chamado.custo_atribuido or 0),
+            'observacoes': chamado.observacoes
+        }
+        
+        for k, v in new_data.items():
+            if v != old_data.get(k):
+                changes[k] = {'old': old_data.get(k), 'new': v}
+        
+        if changes:
             AuditService.log_change(
                 model_name='Chamado',
                 object_id=chamado.id,
-                action='DELETE',
-                changes=f"Deleted Chamado {chamado.codigo_chamado or chamado.id}"
+                action='UPDATE',
+                changes=changes,
+                user_id=user_id
             )
+        
+        return chamado
+
+    # Máquina de Estados - Transições Válidas
+    VALID_STATUS_TRANSITIONS = {
+        'Pendente': ['Em Andamento', 'Concluído', 'Cancelado'],
+        'Em Andamento': ['Concluído', 'Cancelado', 'Pendente'],
+        'Concluído': ['SPARE', 'Cancelado'],  # Não pode voltar para Pendente/Em Andamento
+        'SPARE': ['Concluído', 'Cancelado'],
+        'Cancelado': [],  # Estado final, não pode transicionar
+    }
+    
+    @staticmethod
+    def update_status(id, status):
+        """
+        Atualiza status do chamado com validação de transições.
+        Caller deve gerenciar transação.
+        """
+        from src.utils.domain import normalize_status
+        
+        chamado = ChamadoService.get_by_id(id)
+        old_status = chamado.status_chamado
+        
+        # Normalizar status de entrada
+        status = normalize_status(status)
+        
+        # Validar transição
+        valid_transitions = ChamadoService.VALID_STATUS_TRANSITIONS.get(old_status, [])
+        
+        if status not in valid_transitions and status != old_status:
+            raise ValueError(
+                f"Transição inválida: '{old_status}' → '{status}'. "
+                f"Transições permitidas: {valid_transitions}"
+            )
+        
+        # Se já está no mesmo status, não faz nada
+        if status == old_status:
+            return chamado
+        
+        # Impedir mudança de status se chamado já foi pago
+        if chamado.pago or chamado.pagamento_id:
+            raise ValueError(
+                "Não é possível alterar status de chamado que já foi pago ou está em lote."
+            )
+        
+        chamado.status_chamado = status
+        
+        # Audit log
+        AuditService.log_change(
+            model_name='Chamado',
+            object_id=chamado.id,
+            action='STATUS_CHANGE',
+            changes=f"'{old_status}' → '{status}'"
+        )
+        
+        # db.session.commit() # REMOVIDO
+        return chamado
+
+    @staticmethod
+    def delete(id, user_id):
+        """
+        Exclui chamado com SOFT DELETE.
+        
+        REFATORADO (2026-01): Troca HARD DELETE por SOFT DELETE.
+        Motivo: db.session.delete() quebra FK com stock_movements.chamado_id
+        e destrói rastreabilidade de auditoria.
+        
+        O chamado permanece no banco com status_validacao='Excluído'.
+        Caller deve gerenciar transação.
+        """
+        chamado = ChamadoService.get_by_id(id)
+        
+        # Security Check
+        if chamado.pago or chamado.pagamento_id:
+            raise ValueError("Não é possível excluir um chamado que já foi pago ou está em lote fechado.")
             
-            db.session.delete(chamado)
-            db.session.commit()
+        AuditService.log_change(
+            model_name='Chamado',
+            object_id=chamado.id,
+            action='SOFT_DELETE',
+            changes=f"Soft-deleted Chamado {chamado.codigo_chamado or chamado.id}"
+        )
+        
+        batch_id_to_recalc = chamado.batch_id
+
+        # SOFT DELETE - marca como excluído em vez de deletar
+        chamado.status_validacao = 'Excluído'
+        chamado.motivo_rejeicao = 'Excluído pelo usuário'
+        chamado.data_rejeicao = datetime.utcnow()
+        chamado.rejeitado_por_id = user_id
+        
+        # Trigger Batch Recalculation if part of a batch
+        if batch_id_to_recalc:
+            # B2: Flush to ensure 'Excluído' status is visible to recalculation query
+            db.session.flush()
+            ChamadoService.recalculate_batch(batch_id_to_recalc)
+
+        # db.session.commit() # REMOVIDO
+
+    @staticmethod
+    def recalculate_batch(batch_id):
+        """
+        Recalcula custos de todos os chamados ativos de um lote.
+        Necessário quando um item do lote é excluído ou rejeitado.
+        
+        HARDENING P0 (2026-01):
+        - B4: Row-level lock (with_for_update)
+        - B1: Deterministic Primary Selection (Revenue DESC, ID ASC)
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+
+        # 1. Buscar chamados ativos do lote com LOCK
+        # B4: with_for_update evita race condition em recálculo concorrente
+        try:
+            chamados = Chamado.query.filter(
+                Chamado.batch_id == batch_id,
+                Chamado.status_validacao.notin_(['Excluído', 'Rejeitado'])
+            ).with_for_update().all()
         except Exception as e:
-            db.session.rollback()
-            raise e
+            # Fallback for DBs that might not support locking in this context or timeout
+            logger.warning(f"Could not acquire lock for batch {batch_id}: {e}")
+            chamados = Chamado.query.filter(
+                Chamado.batch_id == batch_id,
+                Chamado.status_validacao.notin_(['Excluído', 'Rejeitado'])
+            ).all()
+        
+        if not chamados:
+            return
+
+        # 2. Ordenar para priorizar quem será o "Principal"
+        # B1: Deterministic Sort -> Maior Receita primeiro, Menor ID desempata
+        # Tuple comparison: (100, -1) > (100, -2) => True (because -1 > -2)
+        # Result: ID 1 comes before ID 2 if revenues are equal.
+        from decimal import Decimal
+        chamados.sort(key=lambda x: (x.valor_receita_total or Decimal('0.00'), -x.id), reverse=True)
+        
+        logger.info(f"[BATCH] Recalculating Batch {batch_id}. Items: {len(chamados)}. New Primary: {chamados[0].id}")
+        
+        # 3. Preparar inputs para o PricingService
+        chamados_inputs = []
+        for c in chamados:
+            # Extrair configuração atualizada do serviço/técnico
+            config = PricingService.extract_servico_config(c.catalogo_servico, c.tecnico)
+            
+            # Recalcular também as horas se necessário (Mantenha float para horas, OK)
+            horas = float(c.horas_trabalhadas or 2.0)
+            
+            ci = ChamadoInput(
+                id=c.id,
+                data_atendimento=c.data_atendimento,
+                cidade=c.cidade or c.loja or "INDEFINIDO",
+                loja=c.loja,
+                horas_trabalhadas=horas,
+                servico_config=config,
+                fornecedor_peca=c.fornecedor_peca,
+                custo_peca=float(c.custo_peca or 0), # PricingService uses float internally currently - converting here
+                _original=c
+            )
+            chamados_inputs.append(ci)
+            
+        # 4. Calcular
+        resultados = PricingService.calcular_custos_lote(chamados_inputs)
+        
+        # 5. Aplicar atualizações
+        for c in chamados:
+            res = resultados.get(c.id)
+            if res:
+                # Atualizar campos financeiros calculados
+                # PricingService returns floats, converting to Decimal for storage if needed or letting SQLA handle it
+                # Logic: Models use Numeric(10,2). Assigning float/Decimal is fine, SQLA casts.
+                # However, for consistency we trust SQLA's casting of float unless we refactor PricingService to use Decimal entirely.
+                # Given strict instruction: "avoid float() for decision... ensure precision".
+                # The 'results' from PricingService are float. We can't fix Services float usage right now without larger refactor.
+                # BUT we fixed the SORTING above to use Decimal (x.valor_receita_total is Numeric).
+                
+                c.custo_atribuido = res.custo_total
+                c.valor_receita_servico = res.receita_servico
+                # Nota: valor_receita_peca mantém o original pois depende de ContratoItem que não recalculamos aqui
+                # Mas recalculamos o total com base no novo serviço
+                
+                total_peca = c.valor_receita_peca or Decimal('0.00')
+                total_servico = Decimal(str(res.receita_total)) # Convert float result to Decimal for safe addition
+                
+                c.valor_receita_total = total_servico + total_peca
+                
+                # Atualizar flags
+                c.is_adicional = res.is_adicional
+                # c.valor_horas_extras = res.custo_horas_extras # Se tiver campo no model
+                
+                # Legacy support
+                c.valor = c.valor_receita_total
+
+
 
     @staticmethod
     def get_evolution_stats():
@@ -727,14 +717,22 @@ class ChamadoService:
         # Truncate to first day of that month
         start_date = six_months_ago.replace(day=1)
         
+        # Dialect-specific date formatting
+        bind = db.session.get_bind()
+        if 'sqlite' in bind.dialect.name:
+            mes_col = func.strftime('%Y-%m', Chamado.data_atendimento)
+        else:
+            # PostgreSQL assumes data_atendimento is date/timestamp
+            mes_col = func.to_char(Chamado.data_atendimento, 'YYYY-MM')
+        
         results = db.session.query(
-            func.strftime('%Y-%m', Chamado.data_atendimento).label('mes'),
+            mes_col.label('mes'),
             func.sum(Chamado.valor).label('total_valor'),
             func.count(Chamado.id).label('total_qtd')
         ).filter(
             Chamado.data_atendimento >= start_date,
             Chamado.status_chamado == 'Concluído'
-        ).group_by('mes').order_by('mes').all()
+        ).group_by(mes_col).order_by(mes_col).all()
         
         # Format for Chart.js
         labels = []

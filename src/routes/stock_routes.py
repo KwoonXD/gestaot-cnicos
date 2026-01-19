@@ -15,14 +15,44 @@ stock_bp = Blueprint('stock', __name__)
 @login_required
 @admin_required
 def controle_estoque():
-    # 1. Carrega itens (Gerais - sem cliente específico ou todos se preferir)
-    # Ajuste: Mostra itens gerais (cliente_id=None) para o almoxarifado central
-    itens = ItemLPU.query.filter_by(cliente_id=None).order_by(ItemLPU.nome).all()
+    # Parâmetros de Filtro
+    search = request.args.get('search', '').strip()
+    filter_tecnico_id = request.args.get('tecnico_id')
+    filter_item_id = request.args.get('item_id')
 
-    # 2. Carrega Técnicos (CORRIGIDO: page=None para retornar lista)
-    tecnicos = TecnicoService.get_all({'status': 'Ativo'}, page=None)
+    # 1. Carrega TODAS as listas para os dropdowns (sem filtro)
+    all_itens = ItemLPU.query.filter_by(cliente_id=None).order_by(ItemLPU.nome).all()
+    all_tecnicos = TecnicoService.get_all({'status': 'Ativo'}, page=None)
 
-    # 3. Matriz de Estoque
+    # 2. Define listas Filtradas para a Tabela
+    filtered_itens = all_itens
+    filtered_tecnicos = all_tecnicos
+
+    # Lógica de Busca Inteligente (Item OU Técnico)
+    if search:
+        # Verifica matches em ambos
+        items_match = [i for i in all_itens if search.lower() in i.nome.lower()]
+        tecnicos_match = [t for t in all_tecnicos if search.lower() in t.nome.lower() or search.lower() in t.cidade.lower()]
+
+        if items_match and not tecnicos_match:
+            # Usuário buscou Item -> Filtra colunas, mantém linhas
+            filtered_itens = items_match
+        elif tecnicos_match and not items_match:
+            # Usuário buscou Técnico -> Filtra linhas, mantém colunas
+            filtered_tecnicos = tecnicos_match
+        else:
+            # Ambíguo ou Match em ambos -> Filtra ambos ("E" lógico)
+            filtered_itens = items_match
+            filtered_tecnicos = tecnicos_match
+
+    # Filtros Específicos (Dropdowns) - Sobreescrevem a busca inteligente
+    if filter_item_id:
+        filtered_itens = [i for i in all_itens if str(i.id) == str(filter_item_id)]
+    
+    if filter_tecnico_id:
+        filtered_tecnicos = [t for t in all_tecnicos if str(t.id) == str(filter_tecnico_id)]
+
+    # 3. Matriz de Estoque (Carrega tudo para processar em memória - otimização futura: filtrar na query)
     stock_data = TecnicoStock.query.all()
     matrix = {}
     for s in stock_data:
@@ -30,12 +60,14 @@ def controle_estoque():
             matrix[s.tecnico_id] = {}
         matrix[s.tecnico_id][s.item_lpu_id] = s.quantidade
 
-    # 4. Contagem de solicitações pendentes (para badge no menu)
+    # 4. Contagem de solicitações pendentes
     pendentes_reposicao = SolicitacaoReposicao.query.filter_by(status='Pendente').count()
 
     return render_template('stock_control.html',
-        itens=itens,
-        tecnicos=tecnicos,
+        itens=filtered_itens,           # Colunas da Tabela (Filtradas)
+        tecnicos=filtered_tecnicos,     # Linhas da Tabela (Filtradas)
+        all_itens=all_itens,            # Para o Dropdown
+        all_tecnicos=all_tecnicos,      # Para o Dropdown
         matrix=matrix,
         pendentes_reposicao=pendentes_reposicao
     )
@@ -79,7 +111,10 @@ def movimentar_estoque():
             StockService.ajustar_saldo(tecnico_id, item_id, qtd, current_user.id, obs)
             flash(f'⚠️ Saldo ajustado para {qtd}un.', 'warning')
 
+        db.session.commit()
+
     except Exception as e:
+        db.session.rollback()
         flash(f'Erro na movimentação: {str(e)}', 'danger')
 
     return redirect(url_for('stock.controle_estoque'))

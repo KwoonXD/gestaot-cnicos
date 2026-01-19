@@ -110,16 +110,17 @@ class ImportService:
 
         stats = {'total': 0, 'created': 0, 'updated': 0, 'errors': 0}
         
-        for _, row in df.iterrows():
+        for index, row in df.iterrows():
             stats['total'] += 1
             try:
                 nome = str(row[col_nome]).strip()
                 raw_doc = row[col_doc]
                 documento = ImportService.clean_cpf_cnpj(raw_doc)
                 
-                if not nome or not documento:
-                    stats['errors'] += 1
-                    continue
+                if not nome:
+                    raise ValueError(f"Erro na linha {index + 2}: Nome não pode ser vazio.")
+                if not documento:
+                    raise ValueError(f"Erro na linha {index + 2}: Documento (CPF/CNPJ) não pode ser vazio ou inválido.")
 
                 # Optional fields
                 contato = str(row[col_tel]).strip() if col_tel and pd.notna(row[col_tel]) else ''
@@ -155,16 +156,14 @@ class ImportService:
                     stats['created'] += 1
                     
             except Exception as e:
-                print(f"Erro na linha {stats['total']}: {e}")
-                stats['errors'] += 1
+                # C1: Standardize contract - Raise exception to trigger rollback in caller
+                raise ValueError(f"Erro na linha {index + 2}: {str(e)}")
         
-        try:
-            db.session.commit()
-            return {
-                'success': True, 
-                'message': f"Importação concluída! Novos: {stats['created']}, Atualizados: {stats['updated']}, Ignorados/Erros: {stats['errors']}",
-                'stats': stats
-            }
-        except Exception as e:
-            db.session.rollback()
-            return {'success': False, 'message': f'Erro ao salvar no banco: {str(e)}'}
+        # Transação agora é gerenciada pela rota (Unit of Work)
+        # Retorno de sucesso implica que nenhuma exceção ocorreu
+        
+        return {
+            'success': True, 
+            'message': f"Importação concluída com sucesso! Novos: {stats['created']}, Atualizados: {stats['updated']}",
+            'stats': stats
+        }

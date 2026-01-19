@@ -138,19 +138,29 @@ def gerar_pagamento():
     OTIMIZADO: Usa get_tecnicos_com_metricas() para evitar N+1 queries.
     """
     if request.method == 'POST':
-        pagamento, error = FinanceiroService.gerar_pagamento(request.form)
-        if error:
-            # Em caso de erro, recarregamos a lista filtrada
-            result = TecnicoService.get_tecnicos_com_metricas(
-                filters={'status': 'Ativo'},
-                page=None
-            )
-            tecnicos_display = [
-                m for m in result['items']
-                if m.tecnico.tecnico_principal_id is None and m.total_a_pagar_agregado > 0
-            ]
-            return render_template('pagamento_gerar.html', tecnicos=tecnicos_display, error=error)
-        return redirect(url_for('financeiro.pagamentos'))
+        from ..models import db
+        try:
+            pagamento, error = FinanceiroService.gerar_pagamento(request.form)
+            if error:
+                db.session.rollback()
+                # Em caso de erro, recarregamos a lista filtrada
+                result = TecnicoService.get_tecnicos_com_metricas(
+                    filters={'status': 'Ativo'},
+                    page=None
+                )
+                tecnicos_display = [
+                    m for m in result['items']
+                    if m.tecnico.tecnico_principal_id is None and m.total_a_pagar_agregado > 0
+                ]
+                return render_template('pagamento_gerar.html', tecnicos=tecnicos_display, error=error)
+            
+            db.session.commit()
+            return redirect(url_for('financeiro.pagamentos'))
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Erro ao gerar pagamento: {str(e)}', 'danger')
+            return redirect(url_for('financeiro.pagamentos'))
 
     # GET: Listar apenas CHEFES que tem valores a receber (proprio ou de subs)
     result = TecnicoService.get_tecnicos_com_metricas(
@@ -187,7 +197,15 @@ def marcar_como_pago(id):
             file.save(file_path)
             pagamento.comprovante_path = f"uploads/comprovantes/{filename}"
     
-    FinanceiroService.marcar_como_pago(id, observacoes)
+    try:
+        FinanceiroService.marcar_como_pago(id, observacoes)
+        from ..models import db
+        db.session.commit()
+    except Exception as e:
+        from ..models import db
+        db.session.rollback()
+        flash(f'Erro ao marcar como pago: {str(e)}', 'danger')
+        
     return redirect(url_for('financeiro.pagamentos'))
 
 @financeiro_bp.route('/fechamento', methods=['GET', 'POST'])
@@ -198,6 +216,7 @@ def fechamento_lote():
     OTIMIZADO: Usa query SQL agregada para evitar N+1.
     """
     from sqlalchemy import func, case, and_
+    from ..models import db
 
     if request.method == 'POST':
         tecnicos_ids = request.form.getlist('tecnicos_ids')
@@ -214,8 +233,14 @@ def fechamento_lote():
             'periodo_fim': periodo_fim
         }
 
-        FinanceiroService.gerar_pagamento_lote(dados_lote)
-        flash(f'O processamento de {len(tecnicos_ids)} tecnicos foi iniciado em segundo plano. Atualize a pagina em instantes.', 'info')
+        try:
+            FinanceiroService.gerar_pagamento_lote(dados_lote)
+            db.session.commit()
+            flash(f'O processamento de {len(tecnicos_ids)} tecnicos foi realizado com sucesso.', 'info')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Erro no fechamento em lote: {str(e)}', 'danger')
+            
         return redirect(url_for('financeiro.pagamentos'))
 
     periodo_inicio = request.args.get('inicio', '')
@@ -242,6 +267,7 @@ def fechamento_lote():
         ).filter(
             Tecnico.status == 'Ativo',
             Chamado.status_chamado == 'Concluído',
+            Chamado.status_validacao == 'Aprovado',  # P0: Gate unificado
             Chamado.pago == False,
             Chamado.pagamento_id == None,
             Chamado.data_atendimento >= data_inicio,
@@ -291,7 +317,8 @@ def fechamento_cliente():
             CatalogoServico.cliente_id == cliente_id,
             db.extract('month', Chamado.data_atendimento) == mes,
             db.extract('year', Chamado.data_atendimento) == ano,
-            Chamado.status_chamado == 'Concluído'
+            Chamado.status_chamado == 'Concluído',
+            Chamado.status_validacao == 'Aprovado'  # P0: Gate unificado
         ).options(joinedload(Chamado.tecnico), joinedload(Chamado.catalogo_servico))
         
         chamados = query.order_by(Chamado.data_atendimento).all()

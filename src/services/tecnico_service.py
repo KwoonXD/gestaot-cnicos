@@ -88,8 +88,14 @@ class TecnicoSchema(Schema):
     nome = fields.Str(required=True, validate=validate.Length(min=3))
     documento = fields.Str(allow_none=True)
     contato = fields.Str(required=True)
+    cep = fields.Str(allow_none=True)  # CEP
+    logradouro = fields.Str(allow_none=True)  # Rua, Av...
+    numero = fields.Str(allow_none=True)  # Número do endereço
+    complemento = fields.Str(allow_none=True)  # Apt, sala, etc
+    bairro = fields.Str(allow_none=True)  # Bairro
     cidade = fields.Str(required=True)
     estado = fields.Str(required=True, validate=validate.Length(equal=2))
+    observacoes = fields.Str(allow_none=True)  # Notas sobre o técnico
     status = fields.Str(load_default='Ativo')
     valor_por_atendimento = fields.Float(load_default=120.00)
     valor_adicional_loja = fields.Float(load_default=20.00)
@@ -173,13 +179,10 @@ class TecnicoService:
         ).label('total_concluidos')
 
         # Total nao pagos
+        # Total nao pagos (VALIDADOS E PENDENTES DE PAGAMENTO)
         total_nao_pagos = func.sum(
             case(
-                (
-                    (Chamado.status_chamado.in_(['Concluído', 'SPARE'])) &
-                    (Chamado.pago == False),
-                    1
-                ),
+                (pend_cond, 1),
                 else_=0
             )
         ).label('total_nao_pagos')
@@ -396,7 +399,7 @@ class TecnicoService:
 
         # Injetar no objeto para compatibilidade
         tecnico.total_a_pagar_cache = metricas['total_a_pagar']
-        tecnico.total_agregado = metricas['total_agregado']
+        tecnico._total_agregado_cache = metricas['total_agregado']  # Use private attr (property uses this)
         tecnico._metricas_detalhe = metricas
 
         return tecnico
@@ -464,7 +467,7 @@ class TecnicoService:
 
         tecnico = Tecnico(**val_data)
         db.session.add(tecnico)
-        db.session.commit()
+        # db.session.commit() # REMOVIDO (P0.2): Caller deve commitar
         return tecnico
 
     @staticmethod
@@ -479,7 +482,7 @@ class TecnicoService:
         for key, value in val_data.items():
             setattr(tecnico, key, value)
             
-        db.session.commit()
+        # db.session.commit() # REMOVIDO (P0.2): Caller deve commitar
         return tecnico
 
     @staticmethod
@@ -493,6 +496,22 @@ class TecnicoService:
         if tecnico.chamados.count() > 0:
              raise ValueError("Este técnico possui chamados vinculados. Reatribua os chamados ou use 'Inativar'.")
 
+        # Check: Sub-Tecnicos
+        if tecnico.sub_tecnicos:
+             raise ValueError("Este técnico possui sub-técnicos vinculados. Desvincule-os antes de excluir.")
+
+        # Check: Stock (Block if has items, delete if empty)
+        if tecnico.estoque:
+            if any(item.quantidade > 0 for item in tecnico.estoque):
+                raise ValueError("Este técnico possui estoque. Realize a devolução dos itens antes de excluir.")
+            # Cleanup zero-quantity stock records to avoid IntegrityError
+            for item in tecnico.estoque:
+                db.session.delete(item)
+
+        # Check: Solicitations (History)
+        if tecnico.solicitacoes_reposicao:
+             raise ValueError("Este técnico possui histórico de solicitações de reposição. Use 'Inativar'.")
+
         # Audit
         from .audit_service import AuditService
         AuditService.log_change(
@@ -503,7 +522,7 @@ class TecnicoService:
         )
         
         db.session.delete(tecnico)
-        db.session.commit()
+        # db.session.commit() # REMOVIDO (P0.2): Caller deve commitar
 
     @staticmethod
     def get_stats():

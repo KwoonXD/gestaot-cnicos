@@ -15,9 +15,21 @@
             </h2>
             <p class="text-muted small mb-0">Valide os atendimentos antes de liberar para o Financeiro.</p>
         </div>
-        <a href="{{ url_for('operacional.criar_chamado') }}" class="btn btn-primary">
-            <i class="bi bi-plus-lg me-1"></i> Novo Atendimento
-        </a>
+        <div class="d-flex gap-2">
+            <div class="dropdown">
+                <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    <i class="bi bi-sort-down me-1"></i> Ordenar
+                </button>
+                <ul class="dropdown-menu">
+                    <li><a class="dropdown-item" href="#" onclick="sortBatches('date')">Data (Mais recente)</a></li>
+                    <li><a class="dropdown-item" href="#" onclick="sortBatches('technician')">Técnico (A-Z)</a></li>
+                    <li><a class="dropdown-item" href="#" onclick="sortBatches('value')">Valor (Maior-Menor)</a></li>
+                </ul>
+            </div>
+            <a href="{{ url_for('operacional.criar_chamado') }}" class="btn btn-primary">
+                <i class="bi bi-plus-lg me-1"></i> Novo Atendimento
+            </a>
+        </div>
     </div>
 
     {% if batches %}
@@ -35,6 +47,11 @@
                             </small>
                         </div>
                         <span class="badge bg-primary rounded-pill">{{ batch.qnt_chamados }} FSA</span>
+                    </div>
+                    <div class="mb-2">
+                        <span class="badge bg-light text-dark border">
+                            <i class="bi bi-clock me-1"></i>{{ batch.horas_total }} hrs
+                        </span>
                     </div>
 
                     <div class="d-flex flex-column gap-1 mb-3">
@@ -77,7 +94,7 @@
 
 <!-- Modal de Validação -->
 <div class="modal fade" id="modalValidacao" tabindex="-1" data-bs-backdrop="static">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-xl">
         <div class="modal-content">
             <div class="modal-header bg-light">
                 <h5 class="modal-title" id="modalTitle">
@@ -139,10 +156,18 @@
                     <table class="table table-sm table-bordered mb-0">
                         <thead class="bg-light">
                             <tr>
-                                <th>Código FSA</th>
-                                <th>Tipo</th>
-                                <th>Peça</th>
-                                <th class="text-end">Custo Téc.</th>
+                                <th style="cursor: pointer;" onclick="sortModalTable('codigo')">Código FSA <i
+                                        class="bi bi-arrow-down-up small"></i></th>
+                                <th style="cursor: pointer;" onclick="sortModalTable('tipo')">Tipo <i
+                                        class="bi bi-arrow-down-up small"></i></th>
+                                <th style="cursor: pointer;" onclick="sortModalTable('peca')">Peça <i
+                                        class="bi bi-arrow-down-up small"></i></th>
+                                <th class="text-center" style="width: 25%;">Obs</th>
+                                <th class="text-end" style="cursor: pointer;" onclick="sortModalTable('horas')">Horas <i
+                                        class="bi bi-arrow-down-up small"></i></th>
+                                <th class="text-end" style="cursor: pointer;" onclick="sortModalTable('valor')">Custo
+                                    Téc. <i class="bi bi-arrow-down-up small"></i></th>
+                                <th style="width: 50px;"></th>
                             </tr>
                         </thead>
                         <tbody id="modalTableBody">
@@ -150,8 +175,10 @@
                         </tbody>
                         <tfoot class="bg-light">
                             <tr>
-                                <td colspan="3" class="text-end fw-bold">Total:</td>
+                                <td colspan="4" class="text-end fw-bold">Total:</td>
+                                <td class="text-end fw-bold" id="modalTotalHoras">0.0h</td>
                                 <td class="text-end fw-bold text-success" id="modalTotal">R$ 0,00</td>
+                                <td></td>
                             </tr>
                         </tfoot>
                     </table>
@@ -201,6 +228,41 @@
                         </div>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Edição de Chamado (Nested) -->
+<div class="modal fade" id="modalEditarChamado" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title fw-bold">Editar Chamado</h6>
+                <button type="button" class="btn-close btn-sm" onclick="closeEditModal()"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editChamadoId">
+                <input type="hidden" id="editOriginalBatchId">
+
+                <div class="mb-2">
+                    <label class="form-label small fw-bold">Horas Trabalhadas</label>
+                    <input type="number" class="form-control form-control-sm" id="editHoras" step="0.1" min="0">
+                </div>
+
+                <div class="mb-2">
+                    <label class="form-label small fw-bold">Custo Atribuído (R$)</label>
+                    <input type="number" class="form-control form-control-sm" id="editValor" step="0.01" min="0">
+                </div>
+
+                <div class="mb-2">
+                    <label class="form-label small fw-bold">Observações</label>
+                    <textarea class="form-control form-control-sm" id="editObs" rows="3"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer py-1">
+                <button type="button" class="btn btn-sm btn-secondary" onclick="closeEditModal()">Cancelar</button>
+                <button type="button" class="btn btn-sm btn-primary" onclick="saveEditChamado()">Salvar</button>
             </div>
         </div>
     </div>
@@ -270,32 +332,14 @@
         document.getElementById('jiraCodesPreview').textContent = batchData.jira_codes || 'Sem códigos';
 
         // 3. Preencher tabela de serviços
-        const tbody = document.getElementById('modalTableBody');
-        tbody.innerHTML = ''; // Limpa tabela antiga
+        // 3. Preencher tabela de serviços
+        renderBatchTable(batchData);
 
-        let total = 0;
-        if (batchData.chamados_lista && batchData.chamados_lista.length > 0) {
-            batchData.chamados_lista.forEach(item => {
-                total += item.valor;
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                <td>
-                    <a href="https://delfia.atlassian.net/browse/${item.codigo}" target="_blank" 
-                       class="text-decoration-none fw-bold">
-                        ${item.codigo} <i class="bi bi-box-arrow-up-right" style="font-size: 0.7rem;"></i>
-                    </a>
-                </td>
-                <td>${item.tipo}</td>
-                <td>${item.peca}</td>
-                <td class="text-end">R$ ${item.valor.toFixed(2)}</td>
-            `;
-                tbody.appendChild(row);
-            });
-        } else {
-            tbody.innerHTML = '<tr><td colspan="4" class="text-center">Nenhum chamado neste lote.</td></tr>';
-        }
-
-        document.getElementById('modalTotal').textContent = `R$ ${total.toFixed(2)}`;
+        // Calculate Total Hours for Modal Header (if kept separate or integrated in render?)
+        // Render updates the footer totals. But we also have a header total? No, just footer.
+        // Wait, look at previous code: document.getElementById('modalTotalHoras') was updated.
+        // renderBatchTable updates 'modalTotal' and 'modalTotalHoras'.
+        // So we can just call renderBatchTable.
 
         // 4. Resetar UI dos botões
         toggleRejectMode(false);
@@ -346,6 +390,81 @@
             prompt("Copie o link manualmente:", text);
         }
         document.body.removeChild(textarea);
+    }
+
+    // --- Funções de Edição ---
+
+    function openEditModal(id, horas, valor, obs, batchId) {
+        document.getElementById('editChamadoId').value = id;
+        document.getElementById('editOriginalBatchId').value = batchId; // Para refresh
+        document.getElementById('editHoras').value = horas;
+        document.getElementById('editValor').value = valor;
+        document.getElementById('editObs').value = obs && obs !== 'null' ? obs : '';
+
+        // Hide Validation Modal temporarily (or just stack them if supported)
+        // Bootstrap supports stacked modals but backdrop handling can be tricky.
+        // Let's just show it on top. Z-index handles usually.
+        const editModal = new bootstrap.Modal(document.getElementById('modalEditarChamado'));
+        editModal.show();
+    }
+
+    function closeEditModal() {
+        const el = document.getElementById('modalEditarChamado');
+        const modal = bootstrap.Modal.getInstance(el);
+        if (modal) modal.hide();
+    }
+
+    async function saveEditChamado() {
+        const id = document.getElementById('editChamadoId').value;
+        const horas = document.getElementById('editHoras').value;
+        const valor = document.getElementById('editValor').value;
+        const obs = document.getElementById('editObs').value;
+        const batchId = document.getElementById('editOriginalBatchId').value; // NOT used for save, but for refresh context logic if needed
+
+        try {
+            const formData = new FormData();
+            formData.append('chamado_id', id); // We need a route for this! Or reuse update?
+            // Reuse generic update endpoint? Operational routes don't have generic update exposed nicely for JSON.
+            // Let's assume we need to create/use a dedicated endpoint or 'update_chamado' with restricted fields.
+            // Actually, let's use the 'novo_chamado' POST logic? No, that's full form.
+            // We'll call a new endpoint: /api/chamados/<id>/update_val
+
+            // Wait! Use existing API route? /api/chamados/<id> [PUT/POST]?
+            // Let's use the standard update mechanism route if available, or fetch to a new helper in operational.
+
+            // Implementation: We will use a fetch to a new endpoint we will create/verify in routes.
+            // For now, let's assume /api/chamados/<id> exists for Partial Update via POST (legacy style) or PUT.
+            // Looking at api_routes... it has /api/chamados/<id> but getting details.
+            // Operational Routes has novo_chamado...
+            // Let's create `update_chamado_inline` in logic.
+
+            // Temporary: We will hit a new route `operacional.atualizar_chamado_inline`
+            // Need to add this to backend!
+
+            const response = await fetch('/chamados/atualizar_inline', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id: id,
+                    horas_trabalhadas: horas,
+                    custo_atribuido: valor,
+                    observacoes: obs
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                closeEditModal();
+                alert('Atualizado com sucesso! Recarregando...');
+                window.location.reload(); // Simplest way to refresh batch data
+            } else {
+                alert('Erro ao atualizar: ' + data.message);
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Erro de conexão.');
+        }
     }
 
     function showToastFeedback() {
@@ -460,6 +579,154 @@
 
     function submitRejection() {
         submitAction('rejeitar');
+    }
+
+    // --- Sorting Logic ---
+    let currentSortDir = 'asc';
+    let currentBatchData = null;
+
+    function sortBatches(criteria) {
+        const container = document.querySelector('.row.g-4');
+        if (!container) return; // No batches
+
+        const cards = Array.from(container.children);
+
+        cards.sort((a, b) => {
+            const btnA = a.querySelector('.validation-trigger');
+            const btnB = b.querySelector('.validation-trigger');
+
+            // Safe parsing
+            let dA, dB;
+            try {
+                dA = JSON.parse(btnA.getAttribute('data-batch'));
+                dB = JSON.parse(btnB.getAttribute('data-batch'));
+            } catch (e) { return 0; }
+
+            if (criteria === 'date') {
+                // DD/MM/YYYY
+                const [d1, m1, y1] = dA.data.split('/');
+                const [d2, m2, y2] = dB.data.split('/');
+                return new Date(y2, m2 - 1, d2) - new Date(y1, m1 - 1, d1); // Descending (Newest first)
+            }
+            if (criteria === 'technician') {
+                return dA.tecnico_nome.localeCompare(dB.tecnico_nome);
+            }
+            if (criteria === 'value') {
+                return dB.valor_total - dA.valor_total; // Descending
+            }
+            return 0;
+        });
+
+        // Re-append to sort
+        container.innerHTML = '';
+        cards.forEach(c => container.appendChild(c));
+    }
+
+    function sortModalTable(key) {
+        // We rely on currentBatch global which is set in openValidationModal (renamed to currentBatchData here for clarity, but verify)
+        // Existing code used `currentBatch`. Let's use that.
+        if (!currentBatch || !currentBatch.chamados_lista) return;
+
+        currentSortDir = currentSortDir === 'asc' ? 'desc' : 'asc';
+
+        currentBatch.chamados_lista.sort((a, b) => {
+            let valA = a[key] !== undefined && a[key] !== null ? a[key] : '';
+            let valB = b[key] !== undefined && b[key] !== null ? b[key] : '';
+
+            // Numeric check
+            const isNumeric = (key === 'valor' || key === 'horas');
+
+            if (isNumeric) {
+                return currentSortDir === 'asc' ? valA - valB : valB - valA;
+            }
+
+            // String
+            valA = valA.toString().toLowerCase();
+            valB = valB.toString().toLowerCase();
+
+            if (valA < valB) return currentSortDir === 'asc' ? -1 : 1;
+            if (valA > valB) return currentSortDir === 'asc' ? 1 : -1;
+            return 0;
+        });
+
+        // Re-render table
+        renderBatchTable(currentBatch);
+    }
+
+    // Extracted render logic for reuse
+    function renderBatchTable(batchData) {
+        const tbody = document.getElementById('modalTableBody');
+        tbody.innerHTML = '';
+
+        let total = 0;
+        let totalHoras = 0;
+        if (batchData.chamados_lista && batchData.chamados_lista.length > 0) {
+            batchData.chamados_lista.forEach(item => {
+                total += item.valor;
+                totalHoras += parseFloat(item.horas || 0);
+
+                let obsDisplay = '-';
+                if (item.obs) {
+                    // Expandable text capability
+                    const shortText = item.obs.length > 40 ? item.obs.substring(0, 40) + '...' : item.obs;
+                    const fullText = item.obs.replace(/"/g, '&quot;');
+
+                    if (item.obs.length > 40) {
+                        obsDisplay = `
+                            <div class="small" style="cursor: pointer;" onclick="toggleObs(this, '${fullText.replace(/'/g, "\\'")}')" title="Clique para expandir">
+                                <i class="bi bi-chat-left-text text-primary me-1"></i>
+                                <span class="obs-content">${shortText}</span>
+                            </div>`;
+                    } else {
+                        obsDisplay = `<small><i class="bi bi-chat-left-text text-muted me-1"></i>${item.obs}</small>`;
+                    }
+                }
+
+                // Format hours display with time range
+                let horasDisplay = parseFloat(item.horas).toFixed(1) + 'h';
+                if (item.hora_inicio || item.hora_fim) {
+                    const timeRange = `${item.hora_inicio || '--:--'} - ${item.hora_fim || '--:--'}`;
+                    horasDisplay = `<div>${horasDisplay}</div><small class="text-muted">${timeRange}</small>`;
+                }
+
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                <td>
+                    <a href="https://delfia.atlassian.net/browse/${item.codigo}" target="_blank" 
+                       class="text-decoration-none fw-bold">
+                        ${item.codigo} <i class="bi bi-box-arrow-up-right" style="font-size: 0.7rem;"></i>
+                    </a>
+                </td>
+                <td>${item.tipo}</td>
+                <td>${item.peca}</td>
+                <td>${obsDisplay}</td>
+                <td class="text-end">${horasDisplay}</td>
+                <td class="text-end">R$ ${item.valor.toFixed(2)}</td>
+                <td class="text-end">
+                    <button class="btn btn-sm btn-link p-0 text-primary" 
+                        onclick="openEditModal(${item.id}, ${item.horas}, ${item.valor}, '${(item.obs || '').replace(/'/g, "\\'")}', '${batchData.batch_id}')">
+                        <i class="bi bi-pencil-square"></i>
+                    </button>
+                </td>
+            `;
+                tbody.appendChild(row);
+            });
+        } else {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center">Nenhum chamado neste lote.</td></tr>';
+        }
+
+        // Update footer totals
+        document.getElementById('modalTotalHoras').textContent = totalHoras.toFixed(1) + 'h';
+        document.getElementById('modalTotal').textContent = 'R$ ' + total.toFixed(2).replace('.', ',');
+    }
+
+    function toggleObs(el, fullText) {
+        const span = el.querySelector('.obs-content');
+        if (span.textContent.endsWith('...')) {
+            span.textContent = fullText;
+        } else {
+            span.textContent = fullText.substring(0, 40) + '...';
+        }
     }
 </script>
 {% endblock %}

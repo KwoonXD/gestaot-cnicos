@@ -9,15 +9,16 @@ class TagService:
             tecnico_id=data['tecnico_id']
         )
         db.session.add(tag)
-        db.session.commit()
+        # db.session.commit() # REMOVIDO (P0.2): Caller deve commitar
         return tag
 
     @staticmethod
     def delete_tag(id):
         tag = Tag.query.get_or_404(id)
+        tecnico_id = tag.tecnico_id
         db.session.delete(tag)
-        db.session.commit()
-        return True
+        # db.session.commit() # REMOVIDO (P0.2): Caller deve commitar
+        return tecnico_id
 
     @staticmethod
     def get_by_tecnico(tecnico_id):

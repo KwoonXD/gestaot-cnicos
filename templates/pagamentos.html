@@ -1,10 +1,13 @@
 {% extends 'base.html' %}
 {% block title %}Pagamentos - Gestão de Técnicos{% endblock %}
 {% block content %}
-<div class="page-header d-flex justify-content-between align-items-center">
-    <h1><i class="bi bi-cash-stack"></i> Pagamentos</h1>
+<div class="page-header-modern">
     <div>
-        <!-- Optional: Additional actions if needed -->
+        <h1><i class="bi bi-cash-stack"></i> Pagamentos</h1>
+        <div class="subtitle">Gerencie pagamentos aos técnicos</div>
+    </div>
+    <div class="quick-actions">
+        <!-- Optional actions -->
     </div>
 </div>
 
@@ -295,7 +298,7 @@
 
 <!-- Modal for Payment Details (Unified) -->
 <div class="modal fade" id="paymentModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-xl">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title"><i class="bi bi-cash-stack"></i> Detalhes do Pagamento</h5>
@@ -354,11 +357,19 @@
                         <table class="table table-sm table-bordered">
                             <thead>
                                 <tr>
-                                    <th>Data</th>
+                                    <th style="cursor: pointer;" onclick="sortPaymentModalTable('data')">Data <i
+                                            class="bi bi-arrow-down-up small"></i></th>
                                     <th>Cód. Chamado</th>
                                     <th>Tipo</th>
-                                    <th>Endereço</th>
-                                    <th class="text-end">Valor</th>
+                                    <th style="cursor: pointer;" onclick="sortPaymentModalTable('endereco')">Endereço <i
+                                            class="bi bi-arrow-down-up small"></i></th>
+                                    <th class="text-center" style="width: 25%;">Obs</th>
+                                    <th class="text-end" style="cursor: pointer;"
+                                        onclick="sortPaymentModalTable('horas')">Horas <i
+                                            class="bi bi-arrow-down-up small"></i></th>
+                                    <th class="text-end" style="cursor: pointer;"
+                                        onclick="sortPaymentModalTable('valor')">Valor <i
+                                            class="bi bi-arrow-down-up small"></i></th>
                                 </tr>
                             </thead>
                             <tbody id="modalServicesList">
@@ -395,6 +406,43 @@
         </div>
     </div>
 </div>
+</div>
+
+<!-- Modal de Edição de Chamado (Nested) -->
+<div class="modal fade" id="modalEditarChamado" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title fw-bold">Editar Chamado</h6>
+                <button type="button" class="btn-close btn-sm" onclick="closeEditModal()"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editChamadoId">
+                <input type="hidden" id="editOriginalTecnicoId">
+
+                <div class="mb-2">
+                    <label class="form-label small fw-bold">Horas Trabalhadas</label>
+                    <input type="number" class="form-control form-control-sm" id="editHoras" step="0.1" min="0">
+                </div>
+
+                <div class="mb-2">
+                    <label class="form-label small fw-bold">Custo Atribuído (R$)</label>
+                    <input type="number" class="form-control form-control-sm" id="editValor" step="0.01" min="0">
+                </div>
+
+                <div class="mb-2">
+                    <label class="form-label small fw-bold">Observações</label>
+                    <textarea class="form-control form-control-sm" id="editObs" rows="3"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer py-1">
+                <button type="button" class="btn btn-sm btn-secondary" onclick="closeEditModal()">Cancelar</button>
+                <button type="button" class="btn btn-sm btn-primary" onclick="saveEditChamado()">Salvar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -407,6 +455,10 @@
     const modalActionForm = document.getElementById('modalActionForm');
     const modalProof = document.getElementById('modalProof');
     const btnConfirmPay = document.getElementById('btnConfirmPay');
+
+    // Global State for Sorting
+    let currentPaymentData = null;
+    let currentSortDir = 'asc';
 
     // triggered by clicking "Visualizar e Pagar" (Pending)
     modalEl.addEventListener('show.bs.modal', function (event) {
@@ -429,6 +481,7 @@
         fetch(`/api/pagamentos/${pagamentoId}`)
             .then(res => res.json())
             .then(data => {
+                currentPaymentData = data; // Store for sorting
                 // Populate Header
                 document.getElementById('modalTechName').textContent = data.tecnico.nome;
                 document.getElementById('modalTechBank').textContent = data.tecnico.chave_pagamento || '-';
@@ -484,6 +537,7 @@
         fetch(`/api/tecnicos/${tecnicoId}/pendencias?t=${new Date().getTime()}`)
             .then(response => response.json())
             .then(data => {
+                currentPaymentData = data; // Store for sorting
                 // Populate Header
                 document.getElementById('modalTechName').textContent = data.tecnico.nome;
                 const bankInfo = data.tecnico.chave_pagamento
@@ -517,6 +571,39 @@
             .catch(console.error);
     }
 
+    function sortPaymentModalTable(key) {
+        if (!currentPaymentData || !currentPaymentData.chamados) return;
+
+        currentSortDir = currentSortDir === 'asc' ? 'desc' : 'asc';
+
+        currentPaymentData.chamados.sort((a, b) => {
+            let valA = a[key] !== undefined && a[key] !== null ? a[key] : '';
+            let valB = b[key] !== undefined && b[key] !== null ? b[key] : '';
+
+            // Numeric
+            if (key === 'valor' || key === 'horas') {
+                return currentSortDir === 'asc' ? valA - valB : valB - valA;
+            }
+            // Date (DD/MM/YYYY)
+            if (key === 'data') {
+                const [d1, m1, y1] = valA.split('/');
+                const [d2, m2, y2] = valB.split('/');
+                const dateA = new Date(y1, m1 - 1, d1);
+                const dateB = new Date(y2, m2 - 1, d2);
+                return currentSortDir === 'asc' ? dateA - dateB : dateB - dateA;
+            }
+
+            // String
+            valA = valA.toString().toLowerCase();
+            valB = valB.toString().toLowerCase();
+            if (valA < valB) return currentSortDir === 'asc' ? -1 : 1;
+            if (valA > valB) return currentSortDir === 'asc' ? 1 : -1;
+            return 0;
+        });
+
+        renderTable(currentPaymentData.chamados);
+    }
+
     function renderTable(chamados) {
         const tbody = document.getElementById('modalServicesList');
         tbody.innerHTML = '';
@@ -524,17 +611,114 @@
             let displayCode = c.codigo;
             if (c.fsa_codes) displayCode += `<br><small class="text-muted">${c.fsa_codes}</small>`;
 
+            let obsDisplay = '-';
+            if (c.obs) {
+                // Expandable text capability
+                const shortText = c.obs.length > 40 ? c.obs.substring(0, 40) + '...' : c.obs;
+                const fullText = c.obs.replace(/"/g, '&quot;');
+
+                if (c.obs.length > 40) {
+                    obsDisplay = `
+                        <div class="small" style="cursor: pointer;" onclick="toggleObs(this, '${fullText.replace(/'/g, "\\'")}')" title="Clique para expandir">
+                            <i class="bi bi-chat-left-text text-primary me-1"></i>
+                            <span class="obs-content">${shortText}</span>
+                        </div>`;
+                } else {
+                    obsDisplay = `<small><i class="bi bi-chat-left-text text-muted me-1"></i>${c.obs}</small>`;
+                }
+            }
+
+            // Format hours display with time range
+            let horasDisplay = c.horas ? parseFloat(c.horas).toFixed(1) + 'h' : '-';
+            if (c.hora_inicio || c.hora_fim) {
+                const timeRange = `${c.hora_inicio || '--:--'} - ${c.hora_fim || '--:--'}`;
+                horasDisplay = `<div>${horasDisplay}</div><small class="text-muted">${timeRange}</small>`;
+            }
+
             const row = `
                 <tr>
                     <td>${c.data}</td>
                     <td>${displayCode}</td>
                     <td>${c.tipo}</td>
                     <td class="small text-muted text-truncate" style="max-width: 200px;">${c.endereco}</td>
-                    <td class="text-end">R$ ${c.valor || c.valor_pago}</td> 
+                    <td class="text-center">${obsDisplay}</td>
+                    <td class="text-end">${horasDisplay}</td>
+                    <td class="text-end">R$ ${parseFloat(c.valor || c.valor_pago).toFixed(2)}</td>
+                    <td class="text-end">
+                        <button class="btn btn-sm btn-link p-0 text-primary" 
+                            onclick="openEditModal(${c.id || 0}, ${c.horas || 0}, ${c.valor || 0}, '${(c.obs || '').replace(/'/g, "\\'")}')">
+                            <i class="bi bi-pencil-square"></i>
+                        </button>
+                    </td> 
                 </tr>
             `;
             tbody.innerHTML += row;
         });
+    }
+
+    function toggleObs(el, fullText) {
+        const span = el.querySelector('.obs-content');
+        if (span.textContent.endsWith('...')) {
+            span.textContent = fullText;
+        } else {
+            span.textContent = fullText.substring(0, 40) + '...';
+        }
+    }
+
+    // --- Funções de Edição (Copiado de atendimentos.html) ---
+    function openEditModal(id, horas, valor, obs) {
+        if (!id) return;
+        document.getElementById('editChamadoId').value = id;
+        document.getElementById('editHoras').value = horas;
+        document.getElementById('editValor').value = valor;
+        document.getElementById('editObs').value = obs && obs !== 'undefined' ? obs : '';
+
+        const editModal = new bootstrap.Modal(document.getElementById('modalEditarChamado'));
+        editModal.show();
+    }
+
+    function closeEditModal() {
+        const el = document.getElementById('modalEditarChamado');
+        const modal = bootstrap.Modal.getInstance(el);
+        if (modal) modal.hide();
+    }
+
+    async function saveEditChamado() {
+        const id = document.getElementById('editChamadoId').value;
+        const horas = document.getElementById('editHoras').value;
+        const valor = document.getElementById('editValor').value;
+        const obs = document.getElementById('editObs').value;
+
+        try {
+            const response = await fetch('/chamados/atualizar_inline', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id: id,
+                    horas_trabalhadas: horas,
+                    custo_atribuido: valor,
+                    observacoes: obs
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                closeEditModal();
+                alert('Atualizado com sucesso! Recarregando...');
+
+                // Refresh logic
+                const tecnicoId = document.getElementById('formTecnicoId').value;
+                if (tecnicoId) loadPendingData(tecnicoId);
+                else location.reload();
+
+            } else {
+                alert('Erro ao atualizar: ' + data.message);
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Erro de conexão.');
+        }
     }
 </script>
 {% endblock %}

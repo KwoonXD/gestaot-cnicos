@@ -35,14 +35,14 @@ class SavedViewService:
             query_string=query_string
         )
         db.session.add(view)
-        db.session.commit()
+        # db.session.commit() # REMOVIDO (P0.2): Caller deve commitar
         return view
 
     @staticmethod
     def delete_view(id):
         view = SavedView.query.get_or_404(id)
         db.session.delete(view)
-        db.session.commit()
+        # db.session.commit() # REMOVIDO (P0.2): Caller deve commitar
         return True
 
     @staticmethod

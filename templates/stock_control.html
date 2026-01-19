@@ -39,19 +39,19 @@
 {% block content %}
 <div class="container-fluid py-4" x-data="stockControl()">
 
-    <div class="actions-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+    <div class="page-header-modern">
         <div>
-            <h2 class="h4 fw-bold text-gray-800 mb-1"><i class="bi bi-box-seam me-2"></i>Almoxarifado</h2>
-            <p class="text-muted small mb-0">Gestão de ativos e materiais em posse de terceiros.</p>
+            <h1><i class="bi bi-box-seam-fill"></i> Almoxarifado</h1>
+            <div class="subtitle">Gestão de ativos e materiais em posse de terceiros</div>
         </div>
 
-        <div class="d-flex gap-2">
+        <div class="quick-actions">
             <a href="{{ url_for('stock.relatorio_materiais') }}" class="btn btn-outline-info">
-                <i class="bi bi-graph-up me-2"></i>Relatório
+                <i class="bi bi-graph-up"></i> Relatório
             </a>
 
             <a href="{{ url_for('stock.listar_solicitacoes') }}" class="btn btn-outline-warning position-relative">
-                <i class="bi bi-inbox me-2"></i>Solicitações
+                <i class="bi bi-inbox"></i> Solicitações
                 {% if pendentes_reposicao > 0 %}
                 <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
                     {{ pendentes_reposicao }}
@@ -60,330 +60,388 @@
             </a>
 
             <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#catalogoModal">
-                <i class="bi bi-list-check me-2"></i>Gerenciar Catálogo
+                <i class="bi bi-list-check"></i> Catálogo
             </button>
 
             <button class="btn btn-primary shadow-sm" @click="openModal()">
-                <i class="bi bi-arrow-left-right me-2"></i>Nova Movimentação
+                <i class="bi bi-arrow-left-right"></i> Nova Movimentação
             </button>
         </div>
     </div>
 
-    <div class="card shadow-sm border-0 overflow-hidden">
-        <div class="table-responsive" style="max-height: 70vh;">
-            <table class="table table-bordered align-middle mb-0 text-nowrap" style="font-size: 0.85rem;">
-                <thead class="text-secondary text-uppercase small fw-bold text-center sticky-col-header">
-                    <tr>
-                        <th class="text-start ps-3 sticky-col-first shadow-sm" style="min-width: 200px; z-index: 30;">
-                            Técnico</th>
-                        {% for item in itens %}
-                        <th style="min-width: 80px;" title="{{ item.nome }}">{{ item.nome|truncate(15) }}</th>
-                        {% else %}
-                        <th class="fw-normal text-muted">Nenhum item cadastrado</th>
-                        {% endfor %}
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for tec in tecnicos %}
-                    <tr>
-                        <td class="fw-bold text-dark sticky-col-first bg-white border-end shadow-sm">
-                            <div class="d-flex flex-column px-2">
-                                <span>{{ tec.nome }}</span>
-                                <small class="text-muted fw-normal" style="font-size: 0.7rem;">{{ tec.cidade }}</small>
-                            </div>
-                        </td>
+</div>
 
-                        {% for item in itens %}
-                        {% set qtd = matrix.get(tec.id, {}).get(item.id, 0) %}
-                        {% if qtd > 0 %}
-                        <td class="text-center cursor-pointer hover-bg transition-colors"
-                            @click="openModal('{{ tec.id }}', '{{ item.id }}', {{ qtd }})" title="Clique para ajustar">
-                            <span class="badge bg-primary bg-opacity-10 text-primary fw-bold px-3 py-2 rounded-pill">
-                                {{ qtd }}
-                            </span>
-                        </td>
-                        {% else %}
-                        <td class="text-center cursor-pointer hover-bg transition-colors"
-                            @click="openModal('{{ tec.id }}', '{{ item.id }}', 0)" title="Clique para ajustar">
-                            <span class="text-muted opacity-25 px-3 py-2">-</span>
-                        </td>
-                        {% endif %}
-                        {% else %}
-                        <td class="text-center text-muted bg-light">Cadastre itens no catálogo</td>
-                        {% endfor %}
-                    </tr>
-                    {% endfor %}
-                </tbody>
-                <tfoot class="bg-light fw-bold text-center small text-muted">
-                    <tr>
-                        <td class="text-end pe-3 sticky-col-first bg-light">TOTAL EM RUA</td>
-                        {% for item in itens %}
-                        <td>{{ matrix.values() | map(attribute=item.id) | map('default', 0) | sum }}</td>
-                        {% endfor %}
-                    </tr>
-                </tfoot>
-            </table>
-        </div>
-    </div>
-
-    <!-- Modal Movimentacao -->
-    <div class="modal fade" id="movimentacaoModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content border-0 shadow-lg">
-                <div class="modal-header bg-light border-bottom-0">
-                    <h5 class="modal-title fw-bold" x-text="modalTitle">Movimentar Estoque</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+<!-- Filter Bar -->
+<div class="card shadow-sm mb-4 border-0">
+    <div class="card-body py-3">
+        <form method="GET" action="{{ url_for('stock.controle_estoque') }}" class="row g-3 align-items-center">
+            <!-- Search -->
+            <div class="col-md-4">
+                <div class="input-group">
+                    <span class="input-group-text bg-white text-muted border-end-0"><i class="bi bi-search"></i></span>
+                    <input type="text" name="search" class="form-control border-start-0 ps-0"
+                        placeholder="Nome do técnico ou item..." value="{{ request.args.get('search', '') }}">
                 </div>
+            </div>
 
-                <form action="{{ url_for('stock.movimentar_estoque') }}" method="POST" @submit="isSaving = true">
-                    <div class="modal-body p-4">
-                        <!-- Type Switcher -->
-                        <div class="d-flex justify-content-center mb-4">
-                            <div class="btn-group bg-light rounded-pill p-1" role="group">
-                                <button type="button" class="btn btn-sm rounded-pill fw-bold px-3 transition-all"
-                                    :class="tipo === 'ENVIO' ? 'btn-white shadow-sm text-success' : 'text-muted border-0'"
-                                    @click="tipo = 'ENVIO'">
-                                    <i class="bi bi-box-arrow-right me-1"></i> Enviar
-                                </button>
-                                <button type="button" class="btn btn-sm rounded-pill fw-bold px-3 transition-all"
-                                    :class="tipo === 'DEVOLUCAO' ? 'btn-white shadow-sm text-warning' : 'text-muted border-0'"
-                                    @click="tipo = 'DEVOLUCAO'">
-                                    <i class="bi bi-box-arrow-in-left me-1"></i> Devolver
-                                </button>
-                                <button type="button" class="btn btn-sm rounded-pill fw-bold px-3 transition-all"
-                                    :class="tipo === 'AJUSTE' ? 'btn-white shadow-sm text-secondary' : 'text-muted border-0'"
-                                    @click="tipo = 'AJUSTE'">
-                                    <i class="bi bi-sliders me-1"></i> Ajustar
-                                </button>
-                            </div>
+            <!-- Technician Filter -->
+            <div class="col-md-3">
+                <select name="tecnico_id" class="form-select" onchange="this.form.submit()">
+                    <option value="">Todos os Técnicos</option>
+                    {% for t in all_tecnicos %}
+                    <option value="{{ t.id }}" {{ 'selected' if request.args.get('tecnico_id')==t.id|string else '' }}>
+                        {{ t.nome }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Item Filter -->
+            <div class="col-md-3">
+                <select name="item_id" class="form-select" onchange="this.form.submit()">
+                    <option value="">Todos os Itens</option>
+                    {% for item in all_itens %}
+                    <option value="{{ item.id }}" {{ 'selected' if request.args.get('item_id')==item.id|string else ''
+                        }}>{{ item.nome }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Clear Filters -->
+            <div class="col-md-2 text-end">
+                <button type="submit" class="btn btn-primary btn-sm d-none d-md-inline-block rounded-pill px-3">
+                    <i class="bi bi-funnel"></i> Filtrar
+                </button>
+                {% if request.args.get('search') or request.args.get('tecnico_id') or request.args.get('item_id') %}
+                <a href="{{ url_for('stock.controle_estoque') }}"
+                    class="btn btn-link text-decoration-none text-danger small ms-2" title="Limpar Filtros">
+                    <i class="bi bi-x-circle"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 overflow-hidden">
+    <div class="table-responsive" style="max-height: 70vh;">
+        <table class="table table-bordered align-middle mb-0 text-nowrap" style="font-size: 0.85rem;">
+            <thead class="text-secondary text-uppercase small fw-bold text-center sticky-col-header">
+                <tr>
+                    <th class="text-start ps-3 sticky-col-first shadow-sm" style="min-width: 200px; z-index: 30;">
+                        Técnico</th>
+                    {% for item in itens %}
+                    <th style="min-width: 80px;" title="{{ item.nome }}">{{ item.nome|truncate(15) }}</th>
+                    {% else %}
+                    <th class="fw-normal text-muted">Nenhum item cadastrado</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for tec in tecnicos %}
+                <tr>
+                    <td class="fw-bold text-dark sticky-col-first bg-white border-end shadow-sm">
+                        <div class="d-flex flex-column px-2">
+                            <span>{{ tec.nome }}</span>
+                            <small class="text-muted fw-normal" style="font-size: 0.7rem;">{{ tec.cidade }}</small>
                         </div>
-                        <input type="hidden" name="tipo_movimento" x-model="tipo">
+                    </td>
 
-                        <!-- Technician Select -->
-                        <div class="mb-4">
-                            <label class="form-label text-uppercase small fw-bold text-muted mb-1">Técnico</label>
-                            <select name="tecnico_id" id="tecnicoSelect" class="form-control" required
-                                autocomplete="off">
-                                <option value="">Selecione o técnico...</option>
-                                {% for t in tecnicos %}
-                                <option value="{{ t.id }}">{{ t.nome }}</option>
+                    {% for item in itens %}
+                    {% set qtd = matrix.get(tec.id, {}).get(item.id, 0) %}
+                    {% if qtd > 0 %}
+                    <td class="text-center cursor-pointer hover-bg transition-colors"
+                        @click="openModal('{{ tec.id }}', '{{ item.id }}', {{ qtd }})" title="Clique para ajustar">
+                        <span class="badge bg-primary bg-opacity-10 text-primary fw-bold px-3 py-2 rounded-pill">
+                            {{ qtd }}
+                        </span>
+                    </td>
+                    {% else %}
+                    <td class="text-center cursor-pointer hover-bg transition-colors"
+                        @click="openModal('{{ tec.id }}', '{{ item.id }}', 0)" title="Clique para ajustar">
+                        <span class="text-muted opacity-25 px-3 py-2">-</span>
+                    </td>
+                    {% endif %}
+                    {% else %}
+                    <td class="text-center text-muted bg-light">Cadastre itens no catálogo</td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot class="bg-light fw-bold text-center small text-muted">
+                <tr>
+                    <td class="text-end pe-3 sticky-col-first bg-light">TOTAL EM RUA</td>
+                    {% for item in itens %}
+                    <td>{{ matrix.values() | map(attribute=item.id) | map('default', 0) | sum }}</td>
+                    {% endfor %}
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</div>
+
+<!-- Modal Movimentacao -->
+<div class="modal fade" id="movimentacaoModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-light border-bottom-0">
+                <h5 class="modal-title fw-bold" x-text="modalTitle">Movimentar Estoque</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <form action="{{ url_for('stock.movimentar_estoque') }}" method="POST" @submit="isSaving = true">
+                <div class="modal-body p-4">
+                    <!-- Type Switcher -->
+                    <div class="d-flex justify-content-center mb-4">
+                        <div class="btn-group bg-light rounded-pill p-1" role="group">
+                            <button type="button" class="btn btn-sm rounded-pill fw-bold px-3 transition-all"
+                                :class="tipo === 'ENVIO' ? 'btn-white shadow-sm text-success' : 'text-muted border-0'"
+                                @click="tipo = 'ENVIO'">
+                                <i class="bi bi-box-arrow-right me-1"></i> Enviar
+                            </button>
+                            <button type="button" class="btn btn-sm rounded-pill fw-bold px-3 transition-all"
+                                :class="tipo === 'DEVOLUCAO' ? 'btn-white shadow-sm text-warning' : 'text-muted border-0'"
+                                @click="tipo = 'DEVOLUCAO'">
+                                <i class="bi bi-box-arrow-in-left me-1"></i> Devolver
+                            </button>
+                            <button type="button" class="btn btn-sm rounded-pill fw-bold px-3 transition-all"
+                                :class="tipo === 'AJUSTE' ? 'btn-white shadow-sm text-secondary' : 'text-muted border-0'"
+                                @click="tipo = 'AJUSTE'">
+                                <i class="bi bi-sliders me-1"></i> Ajustar
+                            </button>
+                        </div>
+                    </div>
+                    <input type="hidden" name="tipo_movimento" x-model="tipo">
+
+                    <!-- Technician Select -->
+                    <div class="mb-4">
+                        <label class="form-label text-uppercase small fw-bold text-muted mb-1">Técnico</label>
+                        <select name="tecnico_id" id="tecnicoSelect" class="form-control" required autocomplete="off">
+                            <option value="">Selecione o técnico...</option>
+                            {% for t in tecnicos %}
+                            <option value="{{ t.id }}">{{ t.nome }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text small text-muted" x-show="tipo === 'ENVIO'"><i
+                                class="bi bi-info-circle me-1"></i>Quem receberá o material?</div>
+                        <div class="form-text small text-muted" x-show="tipo === 'DEVOLUCAO'"><i
+                                class="bi bi-info-circle me-1"></i>Quem está devolvendo?</div>
+                    </div>
+
+                    <!-- Item & Qty -->
+                    <div class="row g-3 mb-3">
+                        <div class="col-8">
+                            <label class="form-label text-uppercase small fw-bold text-muted mb-1">Item</label>
+                            <select name="item_id" class="form-select py-2" x-model="itemId" required>
+                                <option value="">Selecione o item...</option>
+                                {% for item in itens %}
+                                <option value="{{ item.id }}" data-custo="{{ item.valor_custo or 0 }}">{{ item.nome
+                                    }}</option>
                                 {% endfor %}
                             </select>
-                            <div class="form-text small text-muted" x-show="tipo === 'ENVIO'"><i
-                                    class="bi bi-info-circle me-1"></i>Quem receberá o material?</div>
-                            <div class="form-text small text-muted" x-show="tipo === 'DEVOLUCAO'"><i
-                                    class="bi bi-info-circle me-1"></i>Quem está devolvendo?</div>
                         </div>
-
-                        <!-- Item & Qty -->
-                        <div class="row g-3 mb-3">
-                            <div class="col-8">
-                                <label class="form-label text-uppercase small fw-bold text-muted mb-1">Item</label>
-                                <select name="item_id" class="form-select py-2" x-model="itemId" required>
-                                    <option value="">Selecione o item...</option>
-                                    {% for item in itens %}
-                                    <option value="{{ item.id }}" data-custo="{{ item.valor_custo or 0 }}">{{ item.nome }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div class="col-4">
-                                <label class="form-label text-uppercase small fw-bold text-muted mb-1">Qtd</label>
-                                <div class="input-group">
-                                    <button class="btn btn-outline-secondary" type="button"
-                                        @click="qty > 1 ? qty-- : null"><i class="bi bi-dash"></i></button>
-                                    <input type="number" name="quantidade" class="form-control text-center fw-bold"
-                                        min="1" x-model="qty" required>
-                                    <button class="btn btn-outline-secondary" type="button" @click="qty++"><i
-                                            class="bi bi-plus"></i></button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Custo de Aquisição (apenas para ENVIO) -->
-                        <div class="mb-3" x-show="tipo === 'ENVIO'" x-transition>
-                            <label class="form-label text-uppercase small fw-bold text-danger mb-1">
-                                <i class="bi bi-cash-coin me-1"></i>Custo Unitário de Compra (R$)
-                            </label>
+                        <div class="col-4">
+                            <label class="form-label text-uppercase small fw-bold text-muted mb-1">Qtd</label>
                             <div class="input-group">
-                                <span class="input-group-text bg-danger text-white">R$</span>
-                                <input type="number" name="custo_aquisicao" class="form-control"
-                                    step="0.01" min="0" x-model="custoAquisicao"
-                                    placeholder="Valor pago por unidade" required>
+                                <button class="btn btn-outline-secondary" type="button"
+                                    @click="qty > 1 ? qty-- : null"><i class="bi bi-dash"></i></button>
+                                <input type="number" name="quantidade" class="form-control text-center fw-bold" min="1"
+                                    x-model="qty" required>
+                                <button class="btn btn-outline-secondary" type="button" @click="qty++"><i
+                                        class="bi bi-plus"></i></button>
                             </div>
-                            <div class="form-text small text-muted">
-                                <i class="bi bi-calculator me-1"></i>
-                                <span x-show="custoAtual > 0">
-                                    Custo atual: <strong class="text-danger">R$ <span x-text="custoAtual.toFixed(2)"></span></strong>
-                                    <span x-show="custoAquisicao && custoAquisicao != custoAtual" class="ms-2">
-                                        → Novo custo médio será recalculado automaticamente
-                                    </span>
-                                </span>
-                                <span x-show="custoAtual <= 0">Primeira entrada - define o custo base</span>
-                            </div>
-                        </div>
-
-                        <!-- Current Stock Indicator -->
-                        <div class="alert bg-primary bg-opacity-10 border-0 d-flex align-items-center justify-content-between py-2 px-3 rounded-3 mb-3"
-                            x-show="itemId && tecnicoId" x-transition>
-                            <span class="small text-primary fw-bold"><i class="bi bi-box-seam me-2"></i>Saldo
-                                Atual</span>
-                            <span class="fs-5 fw-bold text-primary" x-text="currentStock + ' un'"></span>
-                        </div>
-
-                        <!-- Observation -->
-                        <div class="mb-0">
-                            <label class="form-label text-uppercase small fw-bold text-muted mb-1">Observação <span
-                                    class="fw-normal text-muted opacity-50">(Opcional)</span></label>
-                            <textarea name="observacao" class="form-control bg-light" rows="2"
-                                placeholder="Ex: Reposição mensal..."></textarea>
                         </div>
                     </div>
 
-                    <div class="modal-footer border-top-0 pt-0 pb-4 px-4">
-                        <button type="button" class="btn btn-ghost-secondary" data-bs-dismiss="modal">Cancelar</button>
-                        <button type="submit" class="btn btn-primary px-4" :disabled="isSaving">
-                            <span x-show="isSaving" class="spinner-border spinner-border-sm me-2"></span> Confirmar
-                        </button>
+                    <!-- Custo de Aquisição (apenas para ENVIO) -->
+                    <div class="mb-3" x-show="tipo === 'ENVIO'" x-transition>
+                        <label class="form-label text-uppercase small fw-bold text-danger mb-1">
+                            <i class="bi bi-cash-coin me-1"></i>Custo Unitário de Compra (R$)
+                        </label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-danger text-white">R$</span>
+                            <input type="number" name="custo_aquisicao" class="form-control" step="0.01" min="0"
+                                x-model="custoAquisicao" placeholder="Valor pago por unidade" required>
+                        </div>
+                        <div class="form-text small text-muted">
+                            <i class="bi bi-calculator me-1"></i>
+                            <span x-show="custoAtual > 0">
+                                Custo atual: <strong class="text-danger">R$ <span
+                                        x-text="custoAtual.toFixed(2)"></span></strong>
+                                <span x-show="custoAquisicao && custoAquisicao != custoAtual" class="ms-2">
+                                    → Novo custo médio será recalculado automaticamente
+                                </span>
+                            </span>
+                            <span x-show="custoAtual <= 0">Primeira entrada - define o custo base</span>
+                        </div>
+                    </div>
+
+                    <!-- Current Stock Indicator -->
+                    <div class="alert bg-primary bg-opacity-10 border-0 d-flex align-items-center justify-content-between py-2 px-3 rounded-3 mb-3"
+                        x-show="itemId && tecnicoId" x-transition>
+                        <span class="small text-primary fw-bold"><i class="bi bi-box-seam me-2"></i>Saldo
+                            Atual</span>
+                        <span class="fs-5 fw-bold text-primary" x-text="currentStock + ' un'"></span>
+                    </div>
+
+                    <!-- Observation -->
+                    <div class="mb-0">
+                        <label class="form-label text-uppercase small fw-bold text-muted mb-1">Observação <span
+                                class="fw-normal text-muted opacity-50">(Opcional)</span></label>
+                        <textarea name="observacao" class="form-control bg-light" rows="2"
+                            placeholder="Ex: Reposição mensal..."></textarea>
+                    </div>
+                </div>
+
+                <div class="modal-footer border-top-0 pt-0 pb-4 px-4">
+                    <button type="button" class="btn btn-ghost-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary px-4" :disabled="isSaving">
+                        <span x-show="isSaving" class="spinner-border spinner-border-sm me-2"></span> Confirmar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Catálogo (Apenas Custo - Preço de Venda definido no Contrato) -->
+<div class="modal fade" id="catalogoModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title fw-bold"><i class="bi bi-box-seam me-2"></i>Catálogo de Materiais</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Regra de Negócio -->
+                <div class="alert alert-info small py-2 mb-3">
+                    <i class="bi bi-info-circle me-1"></i>
+                    <strong>Almoxarifado:</strong> Cadastre aqui as peças com seu <strong>custo de
+                        aquisição</strong>.
+                    O preço de venda é definido em cada <strong>Contrato</strong>.
+                </div>
+
+                <!-- Formulário de Novo Item -->
+                <form action="{{ url_for('stock.adicionar_item') }}" method="POST"
+                    class="card bg-light border-0 p-3 mb-4">
+                    <h6 class="text-muted small text-uppercase fw-bold mb-3">
+                        <i class="bi bi-plus-circle me-1"></i>Cadastrar Nova Peça
+                    </h6>
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-7">
+                            <label class="form-label small mb-1">Nome do Material</label>
+                            <input type="text" name="nome" class="form-control" placeholder="Ex: Cabo de Rede Cat6..."
+                                required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Custo de Aquisição (R$)</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-secondary text-white">
+                                    <i class="bi bi-cash-stack"></i>
+                                </span>
+                                <input type="number" name="valor_custo" class="form-control" placeholder="0.00"
+                                    step="0.01" min="0">
+                            </div>
+                        </div>
+                        <div class="col-md-1">
+                            <button type="submit" class="btn btn-primary w-100" title="Adicionar">
+                                <i class="bi bi-plus-lg"></i>
+                            </button>
+                        </div>
                     </div>
                 </form>
-            </div>
-        </div>
-    </div>
 
-    <!-- Modal Catálogo (Apenas Custo - Preço de Venda definido no Contrato) -->
-    <div class="modal fade" id="catalogoModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header bg-light">
-                    <h5 class="modal-title fw-bold"><i class="bi bi-box-seam me-2"></i>Catálogo de Materiais</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <!-- Regra de Negócio -->
-                    <div class="alert alert-info small py-2 mb-3">
-                        <i class="bi bi-info-circle me-1"></i>
-                        <strong>Almoxarifado:</strong> Cadastre aqui as peças com seu <strong>custo de aquisição</strong>.
-                        O preço de venda é definido em cada <strong>Contrato</strong>.
-                    </div>
+                <!-- Lista de Itens -->
+                <h6 class="text-muted small text-uppercase fw-bold mb-3 border-bottom pb-2">
+                    <i class="bi bi-list-ul me-1"></i>Peças Cadastradas
+                </h6>
 
-                    <!-- Formulário de Novo Item -->
-                    <form action="{{ url_for('stock.adicionar_item') }}" method="POST" class="card bg-light border-0 p-3 mb-4">
-                        <h6 class="text-muted small text-uppercase fw-bold mb-3">
-                            <i class="bi bi-plus-circle me-1"></i>Cadastrar Nova Peça
-                        </h6>
-                        <div class="row g-2 align-items-end">
-                            <div class="col-md-7">
-                                <label class="form-label small mb-1">Nome do Material</label>
-                                <input type="text" name="nome" class="form-control" placeholder="Ex: Cabo de Rede Cat6..." required>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label small mb-1">Custo de Aquisição (R$)</label>
-                                <div class="input-group">
-                                    <span class="input-group-text bg-secondary text-white">
-                                        <i class="bi bi-cash-stack"></i>
-                                    </span>
-                                    <input type="number" name="valor_custo" class="form-control" placeholder="0.00" step="0.01" min="0">
-                                </div>
-                            </div>
-                            <div class="col-md-1">
-                                <button type="submit" class="btn btn-primary w-100" title="Adicionar">
-                                    <i class="bi bi-plus-lg"></i>
-                                </button>
-                            </div>
-                        </div>
-                    </form>
-
-                    <!-- Lista de Itens -->
-                    <h6 class="text-muted small text-uppercase fw-bold mb-3 border-bottom pb-2">
-                        <i class="bi bi-list-ul me-1"></i>Peças Cadastradas
-                    </h6>
-
-                    <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
-                        <table class="table table-hover align-middle mb-0" style="font-size: 0.9rem;">
-                            <thead class="table-light sticky-top">
-                                <tr>
-                                    <th>Nome do Material</th>
-                                    <th class="text-center" style="width: 150px;">
-                                        <span class="text-secondary"><i class="bi bi-cash-stack me-1"></i>Custo Médio</span>
-                                    </th>
-                                    <th class="text-center" style="width: 100px;">Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for item in itens %}
-                                <tr>
-                                    <form action="{{ url_for('stock.atualizar_item', item_id=item.id) }}" method="POST" class="item-form">
-                                        <td>
-                                            <input type="text" name="nome" value="{{ item.nome }}"
-                                                class="form-control form-control-sm border-0 bg-transparent fw-medium"
-                                                style="min-width: 200px;">
-                                        </td>
-                                        <td>
-                                            <div class="input-group input-group-sm">
-                                                <span class="input-group-text">R$</span>
-                                                <input type="number" name="valor_custo"
-                                                    value="{{ '%.2f'|format(item.valor_custo or 0) }}"
-                                                    class="form-control text-center fw-bold"
-                                                    step="0.01" min="0">
-                                            </div>
-                                        </td>
-                                        <td class="text-center">
-                                            <div class="btn-group btn-group-sm">
-                                                <button type="submit" class="btn btn-outline-primary" title="Salvar">
-                                                    <i class="bi bi-check-lg"></i>
-                                                </button>
-                                    </form>
-                                                <form action="{{ url_for('stock.deletar_item', item_id=item.id) }}" method="POST"
-                                                    style="display: inline;"
-                                                    onsubmit="return confirm('Excluir {{ item.nome }}?');">
-                                                    <button type="submit" class="btn btn-outline-danger" title="Excluir">
-                                                        <i class="bi bi-trash"></i>
-                                                    </button>
-                                                </form>
-                                            </div>
-                                        </td>
-                                </tr>
-                                {% else %}
-                                <tr>
-                                    <td colspan="3" class="text-center text-muted py-4">
-                                        <i class="bi bi-inbox fs-1 d-block mb-2 opacity-25"></i>
-                                        Nenhuma peça cadastrada
+                <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
+                    <table class="table table-hover align-middle mb-0" style="font-size: 0.9rem;">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th>Nome do Material</th>
+                                <th class="text-center" style="width: 150px;">
+                                    <span class="text-secondary"><i class="bi bi-cash-stack me-1"></i>Custo
+                                        Médio</span>
+                                </th>
+                                <th class="text-center" style="width: 100px;">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in itens %}
+                            <tr>
+                                <form action="{{ url_for('stock.atualizar_item', item_id=item.id) }}" method="POST"
+                                    class="item-form">
+                                    <td>
+                                        <input type="text" name="nome" value="{{ item.nome }}"
+                                            class="form-control form-control-sm border-0 bg-transparent fw-medium"
+                                            style="min-width: 200px;">
                                     </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
+                                    <td>
+                                        <div class="input-group input-group-sm">
+                                            <span class="input-group-text">R$</span>
+                                            <input type="number" name="valor_custo"
+                                                value="{{ '%.2f'|format(item.valor_custo or 0) }}"
+                                                class="form-control text-center fw-bold" step="0.01" min="0">
+                                        </div>
+                                    </td>
+                                    <td class="text-center">
+                                        <div class="btn-group btn-group-sm">
+                                            <button type="submit" class="btn btn-outline-primary" title="Salvar">
+                                                <i class="bi bi-check-lg"></i>
+                                            </button>
+                                </form>
+                                <form action="{{ url_for('stock.deletar_item', item_id=item.id) }}" method="POST"
+                                    style="display: inline;" onsubmit="return confirm('Excluir {{ item.nome }}?');">
+                                    <button type="submit" class="btn btn-outline-danger" title="Excluir">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                </div>
+                </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="3" class="text-center text-muted py-4">
+                        <i class="bi bi-inbox fs-1 d-block mb-2 opacity-25"></i>
+                        Nenhuma peça cadastrada
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+                </table>
+            </div>
 
-                    <!-- Resumo do Catálogo -->
-                    {% if itens %}
-                    <div class="card bg-secondary bg-opacity-10 border-0 mt-3">
-                        <div class="card-body py-2">
-                            <div class="row text-center small">
-                                <div class="col">
-                                    <span class="text-muted">Total de Materiais</span>
-                                    <div class="fw-bold fs-5">{{ itens|length }}</div>
-                                </div>
-                                <div class="col">
-                                    <span class="text-muted">Custo Médio Global</span>
-                                    <div class="fw-bold fs-5">
-                                        R$ {{ "%.2f"|format(itens|map(attribute='valor_custo')|select('number')|list|sum / itens|length if itens else 0) }}
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="text-center mt-2">
-                                <small class="text-muted">
-                                    <i class="bi bi-arrow-right me-1"></i>
-                                    Preços de venda são definidos em <strong>Admin → Contratos → LPU</strong>
-                                </small>
+            <!-- Resumo do Catálogo -->
+            {% if itens %}
+            <div class="card bg-secondary bg-opacity-10 border-0 mt-3">
+                <div class="card-body py-2">
+                    <div class="row text-center small">
+                        <div class="col">
+                            <span class="text-muted">Total de Materiais</span>
+                            <div class="fw-bold fs-5">{{ itens|length }}</div>
+                        </div>
+                        <div class="col">
+                            <span class="text-muted">Custo Médio Global</span>
+                            <div class="fw-bold fs-5">
+                                R$ {{ "%.2f"|format(itens|map(attribute='valor_custo')|select('number')|list|sum /
+                                itens|length if itens else 0) }}
                             </div>
                         </div>
                     </div>
-                    {% endif %}
+                    <div class="text-center mt-2">
+                        <small class="text-muted">
+                            <i class="bi bi-arrow-right me-1"></i>
+                            Preços de venda são definidos em <strong>Admin → Contratos → LPU</strong>
+                        </small>
+                    </div>
                 </div>
             </div>
+            {% endif %}
         </div>
     </div>
+</div>
+</div>
 
 </div>
 {% endblock %}

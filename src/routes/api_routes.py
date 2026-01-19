@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request, url_for
 from flask_login import login_required
+from ..decorators import admin_required  # P1: Access control
 from ..services.chamado_service import ChamadoService
 from ..services.report_service import ReportService
 from ..models import Cliente, Chamado, Tecnico, db, TecnicoStock, ItemLPU, Pagamento
@@ -106,6 +107,7 @@ def top_tecnicos_volume():
 
 @api_bp.route('/tecnicos/<int:id>/pendencias')
 @login_required
+@admin_required  # P1: Dados financeiros sensíveis
 def tecnicos_pendencias(id):
     """
     Retorna os detalhes de pendências financeiras de um técnico específico.
@@ -115,32 +117,49 @@ def tecnicos_pendencias(id):
         tecnico = Tecnico.query.get_or_404(id)
         
         # Filtra chamados pendentes seguindo a regra rigorosa do Financeiro
-        chamados = Chamado.query.filter(
+        base_query = Chamado.query.filter(
             Chamado.tecnico_id == id,
             Chamado.status_chamado.in_(['Concluído', 'SPARE']),
             Chamado.status_validacao == 'Aprovado',
             Chamado.pago == False,
             Chamado.pagamento_id == None
-        ).order_by(Chamado.data_atendimento).all()
+        )
+        
+        # 1. Calcular total via Agregação (Fonte da Verdade)
+        # Reusing base_query to ensure total matches list
+        total_pendente = base_query.with_entities(func.coalesce(func.sum(Chamado.custo_atribuido), 0)).scalar()
+        
+        # Garantir float para JSON
+        total_pendente = float(total_pendente) if total_pendente else 0.0
+        
+        # 2. Buscar Lista (Mesma base)
+        chamados = base_query.order_by(Chamado.data_atendimento).all()
         
         chamados_data = []
         
-        # Use o Saldo do Ledger como fonte da verdade para o pagamento
-        # Isso garante que bônus, descontos ou ajustes manuais sejam incluídos
-        total_pendente = float(tecnico.total_a_pagar or 0.0)
-        
         for c in chamados:
             valor = float(c.custo_atribuido or 0.0)
-            # Não somamos mais manualmente para evitar desync com o Ledger
-            # total_pendente += valor 
+            
+            # Handle hora_inicio/hora_fim - can be time object or string
+            hora_inicio_str = None
+            hora_fim_str = None
+            if c.hora_inicio:
+                hora_inicio_str = c.hora_inicio.strftime('%H:%M') if hasattr(c.hora_inicio, 'strftime') else str(c.hora_inicio)[:5]
+            if c.hora_fim:
+                hora_fim_str = c.hora_fim.strftime('%H:%M') if hasattr(c.hora_fim, 'strftime') else str(c.hora_fim)[:5]
             
             chamados_data.append({
+                'id': c.id, # Needed for potential future editing
                 'data': c.data_atendimento.strftime('%d/%m/%Y'),
                 'codigo': c.codigo_chamado or f"ID: {c.id}",
                 'fsa_codes': c.fsa_codes or '',
                 'tipo': c.tipo_servico or 'N/A',
                 'endereco': f"{c.cidade or ''}",
-                'valor': valor
+                'horas': float(c.horas_trabalhadas or 0),
+                'hora_inicio': hora_inicio_str,
+                'hora_fim': hora_fim_str,
+                'valor': valor,
+                'obs': c.observacoes or '' 
             })
             
         return jsonify({
@@ -178,6 +197,7 @@ def analisar_importacao():
 # --- Feature B: Endpoint de Estoque ---
 @api_bp.route('/estoque/tecnico/<int:id>', methods=['GET'])
 @login_required
+@admin_required  # P1: Dados de estoque sensíveis
 def get_estoque_tecnico(id):
     """
     Retorna o saldo de peças que está com o técnico.
@@ -194,6 +214,7 @@ def get_estoque_tecnico(id):
 
 @api_bp.route('/pagamentos/<int:id>')
 @login_required
+@admin_required  # P1: Dados financeiros sensíveis
 def get_pagamento_detalhes(id):
     """
     Retorna detalhes completos de um pagamento histórico.
@@ -209,13 +230,27 @@ def get_pagamento_detalhes(id):
 
         chamados_data = []
         for c in chamados:
+            # Handle hora_inicio/hora_fim - can be time object or string
+            hora_inicio_str = None
+            hora_fim_str = None
+            if c.hora_inicio:
+                hora_inicio_str = c.hora_inicio.strftime('%H:%M') if hasattr(c.hora_inicio, 'strftime') else str(c.hora_inicio)[:5]
+            if c.hora_fim:
+                hora_fim_str = c.hora_fim.strftime('%H:%M') if hasattr(c.hora_fim, 'strftime') else str(c.hora_fim)[:5]
+            
             chamados_data.append({
+                'id': c.id,
                 'data': c.data_atendimento.strftime('%d/%m/%Y'),
                 'codigo': c.codigo_chamado or f"ID: {c.id}",
                 'fsa_codes': c.fsa_codes or '',
                 'tipo': c.tipo_servico,
                 'endereco': f"{c.cidade or ''}",
+                'horas': float(c.horas_trabalhadas or 0),
+                'hora_inicio': hora_inicio_str,
+                'hora_fim': hora_fim_str,
+                'valor': float(c.custo_atribuido or 0),
                 'valor_pago': float(c.custo_atribuido or c.valor),
+                'obs': c.observacoes or '',
                 'status': c.status_chamado
             })
 

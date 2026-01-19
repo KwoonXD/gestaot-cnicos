@@ -1,0 +1,56 @@
+# Relatório de Auditoria (Resolvido)
+
+**Data:** 17/01/2026
+**Status:** ✅ P0 Concluído / Estabilizado
+
+## 1. Status Atual (P0)
+
+| Item | Status | Observação |
+|------|--------|------------|
+| **Governança (Validação)** | ✅ Implementado | Rotas protegidas com `@admin_required`. Operador não acessa inbox. |
+| **Gate Financeiro** | ✅ Implementado | Pagamentos e Fechamento filtram estritamente `status_validacao == 'Aprovado'`. |
+| **Soft Delete** | ✅ Implementado | Entidades não são removidas fisicamente. Status muda para 'Excluído' ou 'Rejeitado'. |
+| **Atomicidade Estoque** | ✅ Implementado | `_update_stock` não commita. Transação gerida pelo orquestrador. Saldo negativo bloqueado. |
+| **Pricing Zero** | ✅ Implementado | Retorna 0.00 mas gera `Notification` para Admin/Financeiro. Fim da "perda silenciosa". |
+
+## 2. Evidências
+
+### P0.1 - Governança
+- **Arquivo:** `src/routes/operacional_routes.py`
+- **Rotas:** `/atendimentos` (GET) e `/atendimentos/validar` (POST)
+- **Evidência:** Decorator `@admin_required` aplicado em ambas. Lógica de inbox separada da operação comum.
+
+### P0.2 - Gate Unificado
+- **Arquivo:** `src/services/financeiro_service.py` -> `gerar_pagamento()`
+- **Arquivo:** `src/routes/financeiro_routes.py` -> `fechamento_lote()`
+- **Evidência:** Query filter `Chamado.status_validacao == 'Aprovado'` presente em todos os pontos de conversão financeira.
+
+### P0.3 - Soft Delete & Integridade
+- **Arquivo:** `src/services/chamado_service.py`
+- **Função:** `delete()` e `rejeitar_chamados()`
+- **Evidência:** Uso de `status_validacao = 'Excluído'` e `'Rejeitado'`. Ausência de `db.session.delete()`.
+
+### P0.4 - Estoque
+- **Arquivo:** `src/services/stock_service.py`
+- **Função:** `_update_stock()`
+- **Evidência:** `db.session.flush()` usado no lugar de commit. Check `if novo_saldo < 0: raise ValueError`.
+
+### P0.5 - Pricing
+- **Arquivo:** `src/services/pricing_service.py`
+- **Função:** `get_valor_peca()`
+- **Evidência:** Bloco `try/except` criando `Notification` para role Admin/Financeiro quando preço não encontrado (0.0).
+
+## 3. Riscos de Deploy (Migrations)
+
+### Migration `a006_add_status_constraints`
+Esta migration é **CRÍTICA**.
+
+- **O que faz:** Adiciona `CHECK CONSTRAINTS` nos campos `status_chamado` e `status_validacao`.
+- **Risco:** Se o código tentar inserir um status novo (ex: "Cancelado pelo Cliente") sem atualizar a constraint, o banco rejeitará (Internal Server Error 500).
+- **Dependência:** O Soft Delete usa o status `'Excluído'`, que foi adicionado à whitelist da constraint nesta migration. Sem ela, o delete falhará.
+
+**Recomendação:** Rodar `flask db upgrade` imediatamente após deploy.
+
+## 4. Correções em Relação ao Relatório Anterior
+- O relatório original apontava risco de `IntegrityError` no delete. **Resolvido** com Soft Delete.
+- O relatório indicava falta de validação de transição. **Resolvido** com Máquina de Estados em `chamado_service.py`.

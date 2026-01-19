@@ -1,6 +1,16 @@
 from ..models import db, Tecnico, ItemLPU, TecnicoStock, StockMovement, User, Notification
 from datetime import datetime
 from sqlalchemy import func
+from decimal import Decimal, ROUND_HALF_UP
+
+# Helper para formatar valores monetarios como string
+def _format_money(value):
+    """Converte valor para string com 2 casas decimais."""
+    if value is None:
+        return '0.00'
+    if isinstance(value, Decimal):
+        return str(value.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+    return str(Decimal(str(value)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
 
 class StockService:
     @staticmethod
@@ -9,78 +19,176 @@ class StockService:
         return stock.quantidade if stock else 0
 
     @staticmethod
-    def _update_stock(tecnico_id, item_id, delta, user_id, tipo, obs=None, custo_unitario=None):
-        stock = TecnicoStock.query.filter_by(tecnico_id=tecnico_id, item_lpu_id=item_id).first()
-        if not stock:
-            stock = TecnicoStock(tecnico_id=tecnico_id, item_lpu_id=item_id, quantidade=0)
-            db.session.add(stock)
+    def _update_stock(tecnico_id, item_id, delta, user_id, tipo, obs=None, custo_unitario=None, chamado_id=None):
+        """
+        Atualiza estoque do técnico e registra movimento.
+        
+        REFATORADO (2026-01): 
+        1. Row locking para evitar race condition (saldo negativo).
+        2. Retry on creation para evitar IntegrityError (creation race).
+        3. Suporte a chamado_id para rastreabilidade unificada.
+        
+        Args:
+            tecnico_id: ID do técnico
+            item_id: ID do ItemLPU
+            delta: Quantidade (positivo = entrada, negativo = saída)
+            user_id: ID do usuário que está fazendo a operação
+            tipo: Tipo de movimento (ENVIO, DEVOLUCAO, USO, AJUSTE)
+            obs: Observação opcional
+            custo_unitario: Custo unitário para auditoria
+            chamado_id: ID do chamado vinculado (opcional)
+            
+        Returns:
+            TecnicoStock atualizado
+            
+        Raises:
+            ValueError: Se saldo resultante for negativo
+        """
+        MAX_RETRIES = 3
+        for attempt in range(MAX_RETRIES):
+            try:
+                # 1. Tentar buscar com LOCK
+                stock = TecnicoStock.query.filter_by(tecnico_id=tecnico_id, item_lpu_id=item_id).with_for_update().first()
+                
+                if not stock:
+                    # Se não existe, cria (insert)
+                    # Pode falhar com IntegrityError se outra thread criar neste exato momento
+                    try:
+                        # Criar savepoint para isolar falha do INSERT
+                        db.session.begin_nested() 
+                        stock = TecnicoStock(tecnico_id=tecnico_id, item_lpu_id=item_id, quantidade=0)
+                        db.session.add(stock)
+                        db.session.flush() # Força INSERT
+                        # Se passou aqui, insert ok. COMMIT do savepoint ocorre automaticamente no exit do begin_nested (sucesso)
+                    except Exception:
+                        # Se falhou (duplicate key), rollback do savepoint e retry loop
+                        db.session.rollback() # Rollback do savepoint
+                        if attempt < MAX_RETRIES - 1:
+                            continue # Tenta de novo (agora deve achar no SELECT)
+                        raise # Se excedeu retries, explode
+                        
+                # 2. Calcular novo saldo
+                novo_saldo = stock.quantidade + delta
+                
+                # 3. Validação: Não permitir saldo negativo
+                if novo_saldo < 0:
+                    item = ItemLPU.query.get(item_id)
+                    item_nome = item.nome if item else f"ID-{item_id}"
+                    raise ValueError(
+                        f"Saldo insuficiente: {item_nome} ficaria com {novo_saldo}. "
+                        f"Saldo atual: {stock.quantidade}, Solicitado: {abs(delta)}"
+                    )
+                
+                stock.quantidade = novo_saldo
 
-        stock.quantidade += delta
+                # 4. Log Movimento
+                mov = StockMovement(
+                    item_lpu_id=item_id,
+                    tipo_movimento=tipo,
+                    quantidade=abs(delta),
+                    custo_unitario=custo_unitario,
+                    observacao=obs,
+                    created_by_id=user_id,
+                    chamado_id=chamado_id # Novo campo suportado
+                )
 
-        # Log Movimento (com custo para auditoria)
-        mov = StockMovement(
-            item_lpu_id=item_id,
-            tipo_movimento=tipo,
-            quantidade=abs(delta),
-            custo_unitario=custo_unitario,
-            observacao=obs,
-            created_by_id=user_id
-        )
+                if delta > 0: # Entrada (ENVIO, DEVOLUCAO SEDE->TEC, AJUSTE POSITIVO)
+                    mov.destino_tecnico_id = tecnico_id
+                else: # Saída (USO, DEVOLUCAO TEC->SEDE, AJUSTE NEGATIVO)
+                    mov.origem_tecnico_id = tecnico_id
 
-        if delta > 0: # Entrada no técnico (ENVIO ou AJUSTE positivo)
-            mov.destino_tecnico_id = tecnico_id
-        else: # Saída do técnico (DEVOLUCAO ou AJUSTE negativo)
-            mov.origem_tecnico_id = tecnico_id
-
-        db.session.add(mov)
-        db.session.commit()
-        return stock
+                db.session.add(mov)
+                
+                # Check alertas apenas se baixou estoque
+                if delta < 0:
+                    StockService.verificar_estoque_baixo(tecnico_id, item_id)
+                
+                db.session.flush() # Garante IDs
+                return stock
+                
+            except Exception as e:
+                # Se for o ValueError de saldo, propaga imediatamente
+                if isinstance(e, ValueError):
+                    raise e
+                # Outros erros (DB), se estamos no loop de retry e não for a ultima tentativa...
+                # Mas para update normal, não deveríamos ter erro de concorrência com row-lock,
+                # exceto Deadlock. Vamos apenas propagar se não for o caso específico de criação.
+                raise e
 
     @staticmethod
     def transferir_sede_para_tecnico(tecnico_id, item_id, qtd, user_id, obs=None, custo_aquisicao=None):
         """
         Sede envia para técnico (Aumenta saldo do técnico).
-
-        Se custo_aquisicao for informado, recalcula o Custo Médio Ponderado:
-        Novo Custo = ((Qtd Atual * Custo Atual) + (Qtd Entrada * Custo Entrada)) / (Qtd Atual + Qtd Entrada)
         """
-        # Calcular custo médio ponderado se custo informado
-        if custo_aquisicao is not None and custo_aquisicao > 0:
-            item = ItemLPU.query.get(item_id)
-            if item:
-                # Buscar quantidade total atual em todos os técnicos
-                qtd_atual_total = db.session.query(func.sum(TecnicoStock.quantidade)).filter(
-                    TecnicoStock.item_lpu_id == item_id,
-                    TecnicoStock.quantidade > 0
-                ).scalar() or 0
+        try:
+            # Calcular custo médio ponderado se custo informado
+            if custo_aquisicao is not None and custo_aquisicao > 0:
+                item = ItemLPU.query.get(item_id)
+                if item:
+                    # Travar ItemLPU para update seguro do custo médio?
+                    # Por enquanto, assumindo baixo risco de colisão em atualização de mestre de itens.
+                    qtd_atual_total = db.session.query(func.sum(TecnicoStock.quantidade)).filter(
+                        TecnicoStock.item_lpu_id == item_id,
+                        TecnicoStock.quantidade > 0
+                    ).scalar() or 0
 
-                custo_atual = float(item.valor_custo or 0)
+                    custo_atual = Decimal(str(item.valor_custo or 0))
 
-                # Cálculo de Custo Médio Ponderado
-                valor_total_atual = qtd_atual_total * custo_atual
-                valor_total_entrada = qtd * custo_aquisicao
-                nova_quantidade = qtd_atual_total + qtd
+                    valor_total_atual = Decimal(str(qtd_atual_total)) * custo_atual
+                    valor_total_entrada = Decimal(str(qtd)) * Decimal(str(custo_aquisicao))
+                    nova_quantidade = qtd_atual_total + qtd
 
-                if nova_quantidade > 0:
-                    novo_custo_medio = (valor_total_atual + valor_total_entrada) / nova_quantidade
-                    item.valor_custo = round(novo_custo_medio, 2)
+                    if nova_quantidade > 0:
+                        novo_custo_medio = (valor_total_atual + valor_total_entrada) / Decimal(str(nova_quantidade))
+                        item.valor_custo = novo_custo_medio.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
-        return StockService._update_stock(tecnico_id, item_id, qtd, user_id, 'ENVIO', obs, custo_aquisicao)
+            result = StockService._update_stock(
+                tecnico_id, item_id, qtd, user_id, 'ENVIO', obs, custo_aquisicao
+            )
+            return result
+        except Exception as e:
+            raise e
 
     @staticmethod
     def devolver_tecnico_para_sede(tecnico_id, item_id, qtd, user_id, obs=None):
         """Técnico devolve para sede (Diminui saldo do técnico)"""
-        return StockService._update_stock(tecnico_id, item_id, -qtd, user_id, 'DEVOLUCAO', obs)
+        try:
+            result = StockService._update_stock(
+                tecnico_id, item_id, -qtd, user_id, 'DEVOLUCAO', obs
+            )
+            return result
+        except Exception as e:
+            raise e
 
     @staticmethod
     def ajustar_saldo(tecnico_id, item_id, nova_qtd, user_id, obs=None):
         """Define o saldo exato (Para inventário/correção)"""
-        stock = TecnicoStock.query.filter_by(tecnico_id=tecnico_id, item_lpu_id=item_id).first()
-        atual = stock.quantidade if stock else 0
-        delta = nova_qtd - atual
-        
-        if delta != 0:
-            return StockService._update_stock(tecnico_id, item_id, delta, user_id, 'AJUSTE', obs)
+        try:
+            # Precisa buscar saldo atual sob lock para calcular delta correto
+            # O _update_stock faz lock, mas aqui precisamos saber o delta ANTES.
+            # Risco: Se saldo mudar entre leitura e update_stock.
+            # Solução: Implementar AJUSTE ABSOLUTO no _update_stock?
+            # Por simplicidade/prazo:
+            # Vamos usar uma transação pequena aqui.
+            
+            stock = TecnicoStock.query.filter_by(tecnico_id=tecnico_id, item_lpu_id=item_id).with_for_update().first()
+            atual = stock.quantidade if stock else 0
+            delta = nova_qtd - atual
+            
+            if delta != 0:
+                # Passamos delta. Como já travamos a linha, o _update_stock vai travar de novo?
+                # Sim, Reentrant lock no Postgres? Não, with_for_update na mesma txn é ok.
+                # MAS, _update_stock faz nova query.
+                # Melhor confiar no _update_stock e aceitar um pequeno race no cálculo do delta (ajuste é raro).
+                # OU: Passa o delta calculado.
+                
+                result = StockService._update_stock(
+                    tecnico_id, item_id, delta, user_id, 'AJUSTE', obs
+                )
+                return result
+            return stock
+        except Exception as e:
+            raise e
 
     @staticmethod
     def get_stock_by_tecnico(tecnico_id):
@@ -93,77 +201,39 @@ class StockService:
     @staticmethod
     def registrar_uso_chamado(tecnico_id, item_id, chamado_id, user_id, quantidade=1):
         """
-        Registra uso de peça em chamado com rastreabilidade completa.
-
-        Fluxo:
-        1. Valida existência do item
-        2. Verifica saldo do técnico
-        3. Decrementa TecnicoStock
-        4. Cria StockMovement vinculado ao chamado
-        5. Retorna custo da peça para preenchimento do chamado
-
-        Args:
-            tecnico_id: ID do técnico que usou a peça
-            item_id: ID do ItemLPU utilizado
-            chamado_id: ID do chamado onde a peça foi usada
-            user_id: ID do usuário que registrou (auditoria)
-            quantidade: Quantidade utilizada (default: 1)
-
-        Returns:
-            float: Custo total da peça (valor_custo * quantidade)
-
-        Raises:
-            ValueError: Se item não existe ou saldo insuficiente
+        Registra uso de peça em chamado com rastreabilidade completa e LOCK.
+        
+        REFATORADO (2026-01): Delega para _update_stock para garantir atomicidade
+        e prevenir race condition de saldo negativo.
         """
-        # 1. Buscar item
+        # 1. Obter custo unitário para registro correto (auditoria)
         item = ItemLPU.query.get(item_id)
         if not item:
-            raise ValueError(f"Item com ID {item_id} não encontrado no catálogo.")
-
-        # 2. Verificar saldo
-        stock = TecnicoStock.query.filter_by(
+            raise ValueError(f"Item com ID {item_id} não encontrado.")
+        
+        custo_unitario = Decimal(str(item.valor_custo or 0))
+        
+        # 2. Executar baixa via método centralizado (com Lock e Rastreio)
+        StockService._update_stock(
             tecnico_id=tecnico_id,
-            item_lpu_id=item_id
-        ).first()
-
-        saldo_atual = stock.quantidade if stock else 0
-
-        if saldo_atual < quantidade:
-            raise ValueError(
-                f"Saldo insuficiente de '{item.nome}'. "
-                f"Disponível: {saldo_atual}, Solicitado: {quantidade}"
-            )
-
-        # 3. Decrementar estoque
-        stock.quantidade -= quantidade
-
-        # 4. Criar movimentação vinculada ao chamado
-        mov = StockMovement(
-            item_lpu_id=item_id,
-            origem_tecnico_id=tecnico_id,
-            chamado_id=chamado_id,
-            quantidade=quantidade,
-            tipo_movimento='USO',
-            observacao=f"Uso em chamado #{chamado_id}",
-            created_by_id=user_id
+            item_id=item_id,
+            delta=-quantidade, # Saída
+            user_id=user_id,
+            tipo='USO',
+            obs=f"Uso em chamado #{chamado_id}",
+            custo_unitario=custo_unitario, # Passa Decimal
+            chamado_id=chamado_id
         )
-        db.session.add(mov)
 
-        # 5. Calcular custo
-        custo_unitario = float(item.valor_custo or 0.0)
-        custo_total = custo_unitario * quantidade
-
-        # 6. Verificar se estoque ficou baixo e criar alerta se necessário
-        StockService.verificar_estoque_baixo(tecnico_id, item_id)
-
-        # Não faz commit aqui - deixa para o chamado_service gerenciar a transação
+        # 3. Retorna custo total para o ChamadoService usar
+        custo_total = custo_unitario * Decimal(str(quantidade))
         return custo_total
 
     @staticmethod
     def get_custo_item(item_id):
-        """Retorna o custo de um item (para cálculos externos)."""
+        """Retorna o custo de um item como Decimal."""
         item = ItemLPU.query.get(item_id)
-        return float(item.valor_custo or 0.0) if item else 0.0
+        return Decimal(str(item.valor_custo or 0)) if item else Decimal('0')
 
     @staticmethod
     def get_movimentacoes_chamado(chamado_id):
@@ -245,7 +315,7 @@ class StockService:
                 'item_id': alerta.item_lpu_id,
                 'item_nome': alerta.item_lpu.nome if alerta.item_lpu else 'N/A',
                 'quantidade': alerta.quantidade,
-                'valor_custo': float(alerta.item_lpu.valor_custo or 0) if alerta.item_lpu else 0
+                'valor_custo': _format_money(alerta.item_lpu.valor_custo) if alerta.item_lpu else '0.00'
             })
 
         return resultado
@@ -278,6 +348,6 @@ class StockService:
 
         return {
             'total_pecas': int(total_pecas),
-            'valor_imobilizado': float(valor_total),
+            'valor_imobilizado': _format_money(valor_total),
             'alertas_estoque_baixo': alertas
         }

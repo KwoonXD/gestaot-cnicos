@@ -62,80 +62,171 @@ def garantir_custo_atribuido(chamados, tecnico):
 
 # Função isolada (fora da classe) para rodar em background
 def task_processar_lote(tecnicos_ids, inicio_str, fim_str):
+    """
+    Processa pagamentos em lote em background com auditoria (JobRun).
+    
+    WARNING: JOB BOUNDARY - DO NOT CALL FROM WITHIN A TRANSACTION.
+    Esta função gerencia seu próprio ciclo de vida (commit/rollback).
+    Deve ser executada apenas como Task isolada (Background Job).
+    """
+    from flask import current_app
+    from src.models import JobRun
+    import json
+    
+    # Log inicial
     logger.info(f"[LOTE] Iniciando processamento background para {len(tecnicos_ids)} tecnicos.")
     
-    inicio = datetime.strptime(inicio_str, '%Y-%m-%d').date()
-    fim = datetime.strptime(fim_str, '%Y-%m-%d').date()
-    
-    count = 0
-    
+    # Verificar se temos app_context
     try:
-        # Contexto já deve estar ativo se chamado via executor com app_context, 
-        # mas por segurança em threads:
-        # from flask import current_app
-        # if not current_app: ... (Omitindo por simplicidade da task)
+        app = current_app._get_current_object()
+        has_context = True
+    except RuntimeError:
+        has_context = False
+        from src import create_app
+        app = create_app()
+    
+    def _run_task():
+        # 1. Criar JobRun (Audit)
+        job = JobRun(
+            job_name='financeiro_lote',
+            status='RUNNING',
+            total_items=len(tecnicos_ids),
+            metadata_json=json.dumps({
+                'tecnicos_ids': tecnicos_ids,
+                'inicio': inicio_str,
+                'fim': fim_str
+            })
+        )
+        db.session.add(job)
+        db.session.commit() # Commit inicial para gerar ID
         
-        for t_id in tecnicos_ids:
-            tecnico = Tecnico.query.get(t_id)
-            if not tecnico: continue
+        job_id = job.id
+        logger.info(f"[LOTE] JobRun #{job_id} criado.")
+
+        inicio = datetime.strptime(inicio_str, '%Y-%m-%d').date()
+        fim = datetime.strptime(fim_str, '%Y-%m-%d').date()
+        
+        count_success = 0
+        count_error = 0
+        log_messages = []
+        
+        try:
+            for t_id in tecnicos_ids:
+                try:
+                    # Refresh Job status (keep connection alive)
+                    # job = JobRun.query.get(job_id) # Opcional se for muito longo
+
+                    tecnico = Tecnico.query.get(t_id)
+                    if not tecnico: 
+                        log_messages.append(f"Skipped: Tecnico {t_id} not found")
+                        continue
+                        
+                    if tecnico.tecnico_principal_id:
+                        log_messages.append(f"Skipped: Tecnico {t_id} is sub (Subordinated to {tecnico.tecnico_principal_id})")
+                        continue
+
+                    # Gate Unificado: Só processa APROVADOS
+                    chamados_proprios = tecnico.chamados.filter(
+                        Chamado.status_chamado == 'Concluído',
+                        Chamado.status_validacao == 'Aprovado',
+                        Chamado.pago == False,
+                        Chamado.pagamento_id == None,
+                        Chamado.data_atendimento >= inicio,
+                        Chamado.data_atendimento <= fim
+                    ).all()
+                    
+                    chamados_sub = []
+                    for sub in tecnico.sub_tecnicos:
+                        chamados_sub.extend(sub.chamados.filter(
+                            Chamado.status_chamado == 'Concluído',
+                            Chamado.status_validacao == 'Aprovado',
+                            Chamado.pago == False,
+                            Chamado.pagamento_id == None,
+                            Chamado.data_atendimento >= inicio,
+                            Chamado.data_atendimento <= fim
+                        ).all())
+                        
+                    chamados_todos = chamados_proprios + chamados_sub
+                    
+                    if not chamados_todos:
+                        log_messages.append(f"Skipped: Tecnico {tecnico.nome} (ID {t_id}) has no pending approved calls")
+                        continue
+
+                    # Processar Custos (Agrupamento por Lote)
+                    processar_custos_chamados(chamados_todos, tecnico)
+
+                    # P3: INTEGRIDADE - Garantir que todos tenham custo_atribuido
+                    recalc = garantir_custo_atribuido(chamados_todos, tecnico)
+                    if recalc > 0:
+                        log_messages.append(f"Warn: Tecnico {t_id} had {recalc} calls recalculated")
+
+                    pagamento = Pagamento(
+                        tecnico_id=tecnico.id,
+                        periodo_inicio=inicio,
+                        periodo_fim=fim,
+                        valor_por_atendimento=tecnico.valor_por_atendimento,
+                        status_pagamento='Pendente',
+                        observacoes='Processado via Lote (Economia de Escala)'
+                    )
+                    db.session.add(pagamento)
+                    db.session.flush()
+                    
+                    for c in chamados_todos:
+                        c.pagamento_id = pagamento.id
+                        c.pago = False 
+                        db.session.add(c)
+                    
+                    # COMMIT INDIVIDUAL por Tecnico
+                    db.session.commit()
+                    count_success += 1
+                    
+                except Exception as e_inner:
+                    count_error += 1
+                    error_msg = f"Error processing Tecnico {t_id}: {str(e_inner)}"
+                    log_messages.append(error_msg)
+                    logger.error(f"[LOTE] {error_msg}")
+                    db.session.rollback()
+                    continue
+            
+            # Finalizar Job com Sucesso (ou Parcial)
+            job = JobRun.query.get(job_id)
+            job.end_time = datetime.utcnow()
+            job.success_count = count_success
+            job.error_count = count_error
+            
+            if count_error == 0:
+                job.status = 'COMPLETED'
+            elif count_success > 0:
+                job.status = 'PARTIAL_SUCCESS'
+            else:
+                job.status = 'FAILED'
                 
-            if tecnico.tecnico_principal_id:
-                continue
-
-            chamados_proprios = tecnico.chamados.filter(
-                Chamado.status_chamado == 'Concluído',
-                Chamado.status_validacao == 'Aprovado',  # Só aprovados vão para financeiro
-                Chamado.pago == False,
-                Chamado.pagamento_id == None,
-                Chamado.data_atendimento >= inicio,
-                Chamado.data_atendimento <= fim
-            ).all()
+            job.log_text = "\n".join(log_messages)
+            db.session.commit()
             
-            chamados_sub = []
-            for sub in tecnico.sub_tecnicos:
-                chamados_sub.extend(sub.chamados.filter(
-                    Chamado.status_chamado == 'Concluído',
-                    Chamado.status_validacao == 'Aprovado',  # Só aprovados
-                    Chamado.pago == False,
-                    Chamado.pagamento_id == None,
-                    Chamado.data_atendimento >= inicio,
-                    Chamado.data_atendimento <= fim
-                ).all())
-                
-            chamados_todos = chamados_proprios + chamados_sub
-            
-            if not chamados_todos:
-                continue
+            logger.info(f"[LOTE] Job #{job_id} finished: {job.status}. Success: {count_success}, Errors: {count_error}")
 
-            # Processar Custos (Agrupamento por Lote)
-            processar_custos_chamados(chamados_todos, tecnico)
-
-            # P3: INTEGRIDADE - Garantir que todos tenham custo_atribuido
-            garantir_custo_atribuido(chamados_todos, tecnico)
-
-            pagamento = Pagamento(
-                tecnico_id=tecnico.id,
-                periodo_inicio=inicio,
-                periodo_fim=fim,
-                valor_por_atendimento=tecnico.valor_por_atendimento, # Apenas referência
-                status_pagamento='Pendente',
-                observacoes='Processado via Lote (Economia de Escala)'
-            )
-            db.session.add(pagamento)
-            db.session.flush()
+        except Exception as e_fatal:
+            db.session.rollback()
+            logger.exception(f"[LOTE] FATAL Job #{job_id}: {str(e_fatal)}")
             
-            for c in chamados_todos:
-                c.pagamento_id = pagamento.id
-                c.pago = False # Só vira True quando Pagamento mudar status
-            
-            count += 1
-            
-        db.session.commit()
-        logger.info(f"[LOTE] Finalizado com sucesso. {count} pagamentos gerados.")
+            # Tentar salvar status de erro no Job
+            try:
+                job = JobRun.query.get(job_id)
+                job.end_time = datetime.utcnow()
+                job.status = 'CRASHED'
+                job.error_count = count_error + 1
+                job.log_text = (job.log_text or "") + f"\nFATAL CRASH: {str(e_fatal)}"
+                db.session.commit()
+            except:
+                logger.error("Could not update JobRun status after crash.")
 
-    except Exception as e:
-        db.session.rollback()
-        logger.exception(f"[LOTE] Erro durante processamento: {str(e)}")
+    # Executar com contexto apropriado
+    if has_context:
+        _run_task()
+    else:
+        with app.app_context():
+            _run_task()
 
 class FinanceiroService:
     @staticmethod
@@ -146,62 +237,82 @@ class FinanceiroService:
         
         # Último dia do mês
         _, ult_dia = calendar.monthrange(ano, mes)
+    def calcular_projecao_mensal(tecnico_id=None):
+        from decimal import Decimal
+        """
+        Calcula projecao de custos do mes atual (Chamados ja realizados).
+        Retorna totais somados (Custos ja atribuidos).
+        """
+        data_inicio = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         
-        # Média diária (evitar divisão por zero se for dia 1)
-        dia_hoje = hoje.day
-        if dia_hoje == 1:
-            dia_divisor = 1
-        else:
-            dia_divisor = dia_hoje
+        query = Chamado.query.filter(
+            Chamado.data_atendimento >= data_inicio,
+            Chamado.status_chamado == 'Concluído'
+        )
+        
+        if tecnico_id:
+            query = query.filter(Chamado.tecnico_id == tecnico_id)
             
-        # Total gasto neste mês até agora
-        inicio_mes = datetime(ano, mes, 1)
-
-        # REFATORADO: Usando custo_atribuido (campo valor está DEPRECATED)
-        total_atual = db.session.query(func.sum(Chamado.custo_atribuido))\
-            .filter(Chamado.data_atendimento >= inicio_mes)\
-            .filter(Chamado.data_atendimento <= hoje)\
-            .scalar() or 0.0
+        chamados = query.all()
+        
+        total_atual = Decimal('0.00')
+        qnt_atual = 0
+        
+        for c in chamados:
+            # Soma custo ja atribuido (ou 0 se pendente)
+            # Agora usando Decimal para evitar drift de float
+            custo = Decimal(str(c.custo_atribuido or '0.00'))
+            total_atual += custo
+            qnt_atual += 1
             
-        total_atual = float(total_atual)
-        
-        media_diaria = total_atual / dia_divisor
-        projecao = media_diaria * ult_dia
-        
         return {
-            'atual': total_atual,
-            'projecao': projecao,
-            'media_diaria': media_diaria
+            'total_atual': float(total_atual), # Frontend expects float/json
+            'qnt_atual': qnt_atual,
+            'media_por_chamado': float(total_atual / qnt_atual) if qnt_atual > 0 else 0.0
         }
 
     @staticmethod
-    def get_lucro_real_mensal():
-        hoje = datetime.now()
-        mes = hoje.month
-        ano = hoje.year
+    def get_lucro_real_mensal(ano, mes):
+        from decimal import Decimal
+        """
+        Calcula Receita Real (Confirmada) - Custo Real (Pagamentos Gerados).
+        Baseado em Datas de Competência (Atendimento).
+        """
+        from sqlalchemy import extract
         
+        # Filtra chamados do mes
         chamados = Chamado.query.filter(
-            db.extract('month', Chamado.data_atendimento) == mes,
-            db.extract('year', Chamado.data_atendimento) == ano,
+            extract('year', Chamado.data_atendimento) == ano,
+            extract('month', Chamado.data_atendimento) == mes,
             Chamado.status_chamado == 'Concluído'
         ).all()
         
-        receita_servico = sum(float(c.valor_receita_servico or 0) for c in chamados)
-        receita_peca = sum(float(c.valor_receita_peca or 0) for c in chamados)
-        receita_total = receita_servico + receita_peca
+        receita_total = Decimal('0.00')
+        custo_total = Decimal('0.00')
+        qnt = 0
         
-        custo_tecnicos = sum(float(c.custo_atribuido or 0) for c in chamados)
-        custo_pecas_empresa = sum(float(c.custo_peca or 0) for c in chamados if c.fornecedor_peca == 'Empresa')
-        custo_total = custo_tecnicos + custo_pecas_empresa
-        
-        lucro = receita_total - custo_total
-        margem = (lucro / receita_total * 100) if receita_total > 0 else 0.0
+        for c in chamados:
+            # Receita: Soma valor_receita_total (Serviço + Peça)
+            receita = Decimal(str(c.valor_receita_total or '0.00'))
+            
+            # Custo: Soma custo_atribuido (Mão de obra) + custo_peca (Materiais)
+            custo_mo = Decimal(str(c.custo_atribuido or '0.00'))
+            custo_peca = Decimal(str(c.custo_peca or '0.00'))
+            
+            receita_total += receita
+            custo_total += (custo_mo + custo_peca)
+            qnt += 1
+            
+        resultado_liquido = receita_total - custo_total
+        margem = (resultado_liquido / receita_total * 100) if receita_total > 0 else Decimal('0.00')
         
         return {
-            'receita_total': receita_total,
-            'custo_total': custo_total,
-            'lucro': lucro,
-            'margem': margem
+            'periodo': f"{mes}/{ano}",
+            'receita_bruta': float(receita_total),
+            'custo_total': float(custo_total),
+            'lucro_liquido': float(resultado_liquido),
+            'margem_percent': float(round(margem, 1)),
+            'quantidade_chamados': qnt
         }
 
     @staticmethod
@@ -229,6 +340,12 @@ class FinanceiroService:
 
     @staticmethod
     def gerar_pagamento(data):
+        """
+        Gera pagamento para um técnico.
+        
+        REFATORADO (2026-01): Adicionado filtro status_validacao=='Aprovado'
+        para alinhar com task_processar_lote e fechar brecha de governança.
+        """
         tecnico_id = data.get('tecnico_id')
         tecnico = Tecnico.query.get(tecnico_id)
         
@@ -238,8 +355,10 @@ class FinanceiroService:
         if tecnico.tecnico_principal_id is not None:
             return None, f"Este técnico é subordinado a {tecnico.tecnico_principal.nome}. Gere o pagamento para o chefe."
             
+        # P0: UNIFICAR GATE - Exigir status_validacao == 'Aprovado'
         chamados_proprios = tecnico.chamados.filter(
-            Chamado.status_chamado == 'Concluído', 
+            Chamado.status_chamado == 'Concluído',
+            Chamado.status_validacao == 'Aprovado',  # P0: Gate unificado
             Chamado.pago == False,
             Chamado.pagamento_id == None
         ).all()
@@ -247,7 +366,8 @@ class FinanceiroService:
         chamados_sub = []
         for sub in tecnico.sub_tecnicos:
             chamados_sub.extend(sub.chamados.filter(
-                Chamado.status_chamado == 'Concluído', 
+                Chamado.status_chamado == 'Concluído',
+                Chamado.status_validacao == 'Aprovado',  # P0: Gate unificado
                 Chamado.pago == False,
                 Chamado.pagamento_id == None
             ).all())
@@ -255,7 +375,7 @@ class FinanceiroService:
         chamados_todos = chamados_proprios + chamados_sub
         
         if not chamados_todos:
-            return None, "Não há chamados pendentes para este técnico ou afiliados."
+            return None, "Não há chamados APROVADOS pendentes para este técnico ou afiliados."
             
         dates = [c.data_atendimento for c in chamados_todos]
         periodo_inicio = min(dates)
@@ -267,22 +387,28 @@ class FinanceiroService:
         # P3: INTEGRIDADE - Garantir que todos tenham custo_atribuido
         garantir_custo_atribuido(chamados_todos, tecnico)
 
+        # Check for immediate payment flag (handle boolean or string 'on')
+        mark_flag = data.get('mark_as_paid')
+        is_paid = mark_flag in [True, 'on', 'true', '1']
+        
         pagamento = Pagamento(
             tecnico_id=tecnico_id,
             periodo_inicio=periodo_inicio,
             periodo_fim=periodo_fim,
             valor_por_atendimento=tecnico.valor_por_atendimento,
-            status_pagamento='Pendente'
+            status_pagamento='Pago' if is_paid else 'Pendente',
+            data_pagamento=datetime.now() if is_paid else None,
+            observacoes='Gerado manualmente' + (' (Pago Imediatamente)' if is_paid else '')
         )
         
         db.session.add(pagamento)
         db.session.flush() 
         
         for c in chamados_todos:
-            c.pago = False 
+            c.pago = is_paid 
             c.pagamento_id = pagamento.id
             
-        db.session.commit()
+        # db.session.commit() # REMOVIDO: Caller deve commitar
         return pagamento, None
 
     @staticmethod
@@ -297,7 +423,7 @@ class FinanceiroService:
         for chamado in pagamento.chamados_incluidos:
             chamado.pago = True
             
-        db.session.commit()
+        # db.session.commit() # REMOVIDO (P0.2): Caller deve commitar
         return pagamento
 
     @staticmethod
@@ -369,7 +495,7 @@ class FinanceiroService:
         chamado.custo_atribuido = custo_calculado
 
         # NOTE: Ledger (Lancamento) removed. Payment is calculated on demand via Chamado.custo_atribuido.
-        db.session.commit()
+        # db.session.commit() # REMOVIDO (P0.2): Caller deve commitar
         return None
 
     @staticmethod

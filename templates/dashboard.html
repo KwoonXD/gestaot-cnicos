@@ -27,21 +27,23 @@
     {% endif %}
 
     <!-- Header com Periodo -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="page-header-modern">
         <div>
-            <h4 class="fw-bold text-dark mb-1">Dashboard Estrategico</h4>
-            <p class="text-secondary mb-0">
-                Periodo: <strong>{{ kpis.periodo.label }}</strong>
-                <span class="text-secondary ms-2">|</span>
-                <span class="ms-2">{{ kpis.financeiro.volume_chamados }} chamados concluidos</span>
-            </p>
+            <h1><i class="bi bi-speedometer2"></i> Dashboard Estratégico</h1>
+            <div class="subtitle">
+                Período: <strong>{{ kpis.periodo.label }}</strong>
+                <span class="mx-2">|</span>
+                {{ kpis.financeiro.volume_chamados }} chamados concluídos
+            </div>
         </div>
-        {% if alertas_estoque %}
-        <div class="badge bg-danger bg-opacity-10 text-danger px-3 py-2">
-            <i class="bi bi-box-seam me-1"></i>
-            {{ alertas_estoque|length }} item(ns) em estoque critico
+        <div class="quick-actions">
+            {% if alertas_estoque %}
+            <span class="badge bg-danger bg-opacity-10 text-danger px-3 py-2">
+                <i class="bi bi-box-seam me-1"></i>
+                {{ alertas_estoque|length }} item(ns) crítico
+            </span>
+            {% endif %}
         </div>
-        {% endif %}
     </div>
 
     <!-- ===================================================================== -->
@@ -50,16 +52,19 @@
     <div class="row g-4 mb-4">
         <!-- Card 1: Lucro Liquido & Margem -->
         <div class="col-md-6 col-lg-3">
-            <div class="card bg-white shadow-sm border-0 h-100 border-start border-4 {{ 'border-danger' if kpis.alertas.margem_critica else ('border-warning' if kpis.alertas.margem_baixa else 'border-success') }}">
+            <div
+                class="card bg-white shadow-sm border-0 h-100 border-start border-4 {{ 'border-danger' if kpis.alertas.margem_critica else ('border-warning' if kpis.alertas.margem_baixa else 'border-success') }}">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-start mb-2">
                         <span class="text-secondary text-uppercase small fw-bold">Lucro Liquido</span>
-                        <span class="badge {{ 'bg-danger' if kpis.alertas.margem_critica else ('bg-warning text-dark' if kpis.alertas.margem_baixa else 'bg-success') }}">
+                        <span
+                            class="badge {{ 'bg-danger' if kpis.alertas.margem_critica else ('bg-warning text-dark' if kpis.alertas.margem_baixa else 'bg-success') }}">
                             {{ kpis.financeiro.margem_percent }}%
                         </span>
                     </div>
                     <div class="d-flex align-items-baseline">
-                        <span class="h2 fw-bold {{ 'text-danger' if kpis.financeiro.lucro_liquido < 0 else 'text-dark' }} mb-0">
+                        <span
+                            class="h2 fw-bold {{ 'text-danger' if kpis.financeiro.lucro_liquido < 0 else 'text-dark' }} mb-0">
                             R$ {{ "{:,.0f}".format(kpis.financeiro.lucro_liquido).replace(',', '.') }}
                         </span>
                     </div>
@@ -86,7 +91,9 @@
                         </span>
                     </div>
                     <small class="text-secondary">
-                        Ticket medio: <strong class="text-dark">R$ {{ "{:,.2f}".format(kpis.financeiro.ticket_medio).replace(',', 'X').replace('.', ',').replace('X', '.') }}</strong>
+                        Ticket medio: <strong class="text-dark">R$ {{
+                            "{:,.2f}".format(kpis.financeiro.ticket_medio).replace(',', 'X').replace('.',
+                            ',').replace('X', '.') }}</strong>
                     </small>
                 </div>
             </div>
@@ -106,10 +113,12 @@
                     </div>
                     <div class="d-flex gap-3 mt-1">
                         <small class="text-secondary">
-                            <i class="bi bi-person-fill me-1"></i>Servicos: R$ {{ "{:,.0f}".format(kpis.financeiro.custo_servicos).replace(',', '.') }}
+                            <i class="bi bi-person-fill me-1"></i>Servicos: R$ {{
+                            "{:,.0f}".format(kpis.financeiro.custo_servicos).replace(',', '.') }}
                         </small>
                         <small class="text-secondary">
-                            <i class="bi bi-box me-1"></i>Pecas: R$ {{ "{:,.0f}".format(kpis.financeiro.custo_pecas).replace(',', '.') }}
+                            <i class="bi bi-box me-1"></i>Pecas: R$ {{
+                            "{:,.0f}".format(kpis.financeiro.custo_pecas).replace(',', '.') }}
                         </small>
                     </div>
                 </div>
@@ -118,11 +127,13 @@
 
         <!-- Card 4: Backlog Financeiro -->
         <div class="col-md-6 col-lg-3">
-            <div class="card bg-white shadow-sm border-0 h-100 border-start border-4 {{ 'border-danger' if kpis.backlog.valor > 5000 else 'border-info' }}">
+            <div
+                class="card bg-white shadow-sm border-0 h-100 border-start border-4 {{ 'border-danger' if kpis.backlog.valor > 5000 else 'border-info' }}">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-start mb-2">
                         <span class="text-secondary text-uppercase small fw-bold">Backlog Financeiro</span>
-                        <span class="badge {{ 'bg-danger' if kpis.backlog.valor > 5000 else 'bg-info' }} bg-opacity-10 {{ 'text-danger' if kpis.backlog.valor > 5000 else 'text-info' }}">
+                        <span
+                            class="badge {{ 'bg-danger' if kpis.backlog.valor > 5000 else 'bg-info' }} bg-opacity-10 {{ 'text-danger' if kpis.backlog.valor > 5000 else 'text-info' }}">
                             {{ kpis.backlog.quantidade }} pendentes
                         </span>
                     </div>
@@ -157,9 +168,12 @@
                     {% if kpis.top_tecnicos %}
                     <div class="list-group list-group-flush">
                         {% for tec in kpis.top_tecnicos[:3] %}
-                        <div class="list-group-item bg-white border-0 border-bottom d-flex justify-content-between align-items-center px-4 py-3">
+                        <div
+                            class="list-group-item bg-white border-0 border-bottom d-flex justify-content-between align-items-center px-4 py-3">
                             <div class="d-flex align-items-center">
-                                <span class="badge rounded-pill {{ 'bg-warning text-dark' if loop.index == 1 else ('bg-secondary' if loop.index == 2 else 'bg-dark bg-opacity-25 text-dark') }} me-3" style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;">
+                                <span
+                                    class="badge rounded-pill {{ 'bg-warning text-dark' if loop.index == 1 else ('bg-secondary' if loop.index == 2 else 'bg-dark bg-opacity-25 text-dark') }} me-3"
+                                    style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;">
                                     {{ loop.index }}
                                 </span>
                                 <div>
@@ -168,10 +182,12 @@
                                 </div>
                             </div>
                             <div class="text-end">
-                                <div class="fw-bold {{ 'text-success' if tec.margem_percent > 30 else ('text-warning' if tec.margem_percent > 15 else 'text-danger') }}">
+                                <div
+                                    class="fw-bold {{ 'text-success' if tec.margem_percent > 30 else ('text-warning' if tec.margem_percent > 15 else 'text-danger') }}">
                                     {{ tec.margem_percent }}%
                                 </div>
-                                <small class="text-secondary">R$ {{ "{:,.0f}".format(tec.lucro_total).replace(',', '.') }}</small>
+                                <small class="text-secondary">R$ {{ "{:,.0f}".format(tec.lucro_total).replace(',', '.')
+                                    }}</small>
                             </div>
                         </div>
                         {% endfor %}
@@ -214,7 +230,8 @@
                         </div>
                     </div>
                     <div class="d-flex justify-content-between text-secondary small">
-                        <span>Representa <strong class="text-dark">{{ kpis.ofensor_estoque.percent_do_total }}%</strong> do custo total com pecas</span>
+                        <span>Representa <strong class="text-dark">{{ kpis.ofensor_estoque.percent_do_total }}%</strong>
+                            do custo total com pecas</span>
                         <a href="{{ url_for('stock.controle_estoque') }}" class="text-primary text-decoration-none">
                             Ver estoque <i class="bi bi-arrow-right"></i>
                         </a>
@@ -318,136 +335,136 @@
 <!-- ========================================================================= -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-// Dados e Grafico
-let evolucaoChart = null;
-let dadosEvolucao = null;
+    // Dados e Grafico
+    let evolucaoChart = null;
+    let dadosEvolucao = null;
 
-async function carregarEvolucao() {
-    try {
-        const response = await fetch('/api/dashboard/evolucao-margem');
-        dadosEvolucao = await response.json();
-        renderizarGrafico();
-    } catch (error) {
-        console.error('Erro ao carregar dados:', error);
-    }
-}
-
-function renderizarGrafico() {
-    const ctx = document.getElementById('evolucaoChart').getContext('2d');
-
-    if (evolucaoChart) {
-        evolucaoChart.destroy();
+    async function carregarEvolucao() {
+        try {
+            const response = await fetch('/api/dashboard/evolucao-margem');
+            dadosEvolucao = await response.json();
+            renderizarGrafico();
+        } catch (error) {
+            console.error('Erro ao carregar dados:', error);
+        }
     }
 
-    const isLucro = document.getElementById('chartLucro').checked;
+    function renderizarGrafico() {
+        const ctx = document.getElementById('evolucaoChart').getContext('2d');
 
-    if (isLucro) {
-        // Grafico de Lucro (Area)
-        evolucaoChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: dadosEvolucao.labels,
-                datasets: [{
-                    label: 'Lucro (R$)',
-                    data: dadosEvolucao.margem,
-                    borderColor: '#10b981',
-                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                    fill: true,
-                    tension: 0.4,
-                    borderWidth: 3
-                }, {
-                    label: 'Margem (%)',
-                    data: dadosEvolucao.margem_percent,
-                    borderColor: '#6366f1',
-                    backgroundColor: 'transparent',
-                    borderDash: [5, 5],
-                    yAxisID: 'y1',
-                    tension: 0.4,
-                    borderWidth: 2
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: { mode: 'index', intersect: false },
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: { usePointStyle: true, padding: 20 }
-                    }
+        if (evolucaoChart) {
+            evolucaoChart.destroy();
+        }
+
+        const isLucro = document.getElementById('chartLucro').checked;
+
+        if (isLucro) {
+            // Grafico de Lucro (Area)
+            evolucaoChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: dadosEvolucao.labels,
+                    datasets: [{
+                        label: 'Lucro (R$)',
+                        data: dadosEvolucao.margem,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        borderWidth: 3
+                    }, {
+                        label: 'Margem (%)',
+                        data: dadosEvolucao.margem_percent,
+                        borderColor: '#6366f1',
+                        backgroundColor: 'transparent',
+                        borderDash: [5, 5],
+                        yAxisID: 'y1',
+                        tension: 0.4,
+                        borderWidth: 2
+                    }]
                 },
-                scales: {
-                    y: {
-                        type: 'linear',
-                        display: true,
-                        position: 'left',
-                        grid: { color: 'rgba(0,0,0,0.05)' },
-                        ticks: {
-                            callback: v => 'R$ ' + v.toLocaleString('pt-BR')
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { usePointStyle: true, padding: 20 }
                         }
                     },
-                    y1: {
-                        type: 'linear',
-                        display: true,
-                        position: 'right',
-                        grid: { drawOnChartArea: false },
-                        ticks: { callback: v => v + '%' }
-                    },
-                    x: {
-                        grid: { display: false }
+                    scales: {
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            grid: { color: 'rgba(0,0,0,0.05)' },
+                            ticks: {
+                                callback: v => 'R$ ' + v.toLocaleString('pt-BR')
+                            }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            grid: { drawOnChartArea: false },
+                            ticks: { callback: v => v + '%' }
+                        },
+                        x: {
+                            grid: { display: false }
+                        }
                     }
                 }
-            }
-        });
-    } else {
-        // Grafico Comparativo (Barras)
-        evolucaoChart = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: dadosEvolucao.labels,
-                datasets: [{
-                    label: 'Receita',
-                    data: dadosEvolucao.receita,
-                    backgroundColor: 'rgba(59, 130, 246, 0.8)',
-                    borderRadius: 4
-                }, {
-                    label: 'Custo',
-                    data: dadosEvolucao.custo,
-                    backgroundColor: 'rgba(239, 68, 68, 0.8)',
-                    borderRadius: 4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: { usePointStyle: true, padding: 20 }
-                    }
+            });
+        } else {
+            // Grafico Comparativo (Barras)
+            evolucaoChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: dadosEvolucao.labels,
+                    datasets: [{
+                        label: 'Receita',
+                        data: dadosEvolucao.receita,
+                        backgroundColor: 'rgba(59, 130, 246, 0.8)',
+                        borderRadius: 4
+                    }, {
+                        label: 'Custo',
+                        data: dadosEvolucao.custo,
+                        backgroundColor: 'rgba(239, 68, 68, 0.8)',
+                        borderRadius: 4
+                    }]
                 },
-                scales: {
-                    y: {
-                        grid: { color: 'rgba(0,0,0,0.05)' },
-                        ticks: {
-                            callback: v => 'R$ ' + v.toLocaleString('pt-BR')
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { usePointStyle: true, padding: 20 }
                         }
                     },
-                    x: {
-                        grid: { display: false }
+                    scales: {
+                        y: {
+                            grid: { color: 'rgba(0,0,0,0.05)' },
+                            ticks: {
+                                callback: v => 'R$ ' + v.toLocaleString('pt-BR')
+                            }
+                        },
+                        x: {
+                            grid: { display: false }
+                        }
                     }
                 }
-            }
-        });
+            });
+        }
     }
-}
 
-// Event Listeners
-document.querySelectorAll('input[name="chartView"]').forEach(radio => {
-    radio.addEventListener('change', renderizarGrafico);
-});
+    // Event Listeners
+    document.querySelectorAll('input[name="chartView"]').forEach(radio => {
+        radio.addEventListener('change', renderizarGrafico);
+    });
 
-// Init
-document.addEventListener('DOMContentLoaded', carregarEvolucao);
+    // Init
+    document.addEventListener('DOMContentLoaded', carregarEvolucao);
 </script>
 {% endblock %}

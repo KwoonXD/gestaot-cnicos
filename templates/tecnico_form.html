@@ -41,27 +41,40 @@
                         <div class="col-md-4">
                             <label class="form-label">CEP</label>
                             <input type="text" name="cep" id="cep" class="form-control" maxlength="9"
-                                placeholder="00000-000">
+                                value="{{ tecnico.cep if tecnico and tecnico.cep else '' }}" placeholder="00000-000">
                             <small class="text-muted">Digite o CEP para buscar o endereço automaticamente</small>
                         </div>
                         <div class="col-md-8">
                             <!-- Spacer or empty col -->
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-5">
                             <label class="form-label">Endereço (Logradouro)</label>
                             <input type="text" name="logradouro" id="logradouro" class="form-control"
+                                value="{{ tecnico.logradouro if tecnico and tecnico.logradouro else '' }}"
                                 placeholder="Rua, Av...">
                         </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Bairro</label>
-                            <input type="text" name="bairro" id="bairro" class="form-control" placeholder="Bairro">
+                        <div class="col-md-2">
+                            <label class="form-label">Número</label>
+                            <input type="text" name="numero" id="numero" class="form-control"
+                                value="{{ tecnico.numero if tecnico and tecnico.numero else '' }}" placeholder="Nº">
                         </div>
-                        <div class="col-md-8">
+                        <div class="col-md-5">
+                            <label class="form-label">Complemento</label>
+                            <input type="text" name="complemento" id="complemento" class="form-control"
+                                value="{{ tecnico.complemento if tecnico and tecnico.complemento else '' }}"
+                                placeholder="Apt, Sala, Bloco...">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Bairro</label>
+                            <input type="text" name="bairro" id="bairro" class="form-control"
+                                value="{{ tecnico.bairro if tecnico and tecnico.bairro else '' }}" placeholder="Bairro">
+                        </div>
+                        <div class="col-md-5">
                             <label class="form-label">Cidade *</label>
                             <input type="text" name="cidade" id="cidade" class="form-control" required
                                 value="{{ tecnico.cidade if tecnico else '' }}" placeholder="Nome da cidade">
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <label class="form-label">Estado *</label>
                             <select name="estado" id="estado" class="form-select" required>
                                 <option value="">Selecione...</option>
@@ -70,6 +83,15 @@
                                     }}</option>
                                 {% endfor %}
                             </select>
+                        </div>
+                    </div>
+
+                    <hr class="my-4">
+                    <h6 class="text-muted mb-3"><i class="bi bi-sticky"></i> Observações</h6>
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <textarea name="observacoes" class="form-control" rows="3"
+                                placeholder="Notas internas sobre o técnico (não visível para o técnico)...">{{ tecnico.observacoes if tecnico and tecnico.observacoes else '' }}</textarea>
                         </div>
                     </div>
 

@@ -30,12 +30,18 @@ def importar_tecnicos():
             return redirect(request.url)
 
         if file:
-            result = ImportService.importar_tecnicos(file)
-            if result['success']:
-                flash(result['message'], 'success')
-                return redirect(url_for('operacional.tecnicos'))
-            else:
-                flash(result['message'], 'danger')
+            try:
+                result = ImportService.importar_tecnicos(file)
+                if result['success']:
+                    db.session.commit()
+                    flash(result['message'], 'success')
+                    return redirect(url_for('operacional.tecnicos'))
+                else:
+                    db.session.rollback()
+                    flash(result['message'], 'danger')
+            except Exception as e:
+                db.session.rollback()
+                flash(f'Erro na importação: {str(e)}', 'danger')
                 
     return render_template('importar_tecnicos.html')
 
@@ -188,11 +194,13 @@ def exportar_tecnicos():
 def novo_tecnico():
     if request.method == 'POST':
         try:
-            TecnicoService.create(request.form)
+            TecnicoService.create(request.form.to_dict())
+            db.session.commit()  # P0.2: Boundary commit
             # Task 4: Feedback de Usuário
             flash('Técnico cadastrado com sucesso!', 'success')
             return redirect(url_for('operacional.tecnicos'))
         except Exception as e:
+            db.session.rollback()  # P0.2: Boundary rollback
             flash(f'Erro ao cadastrar técnico: {str(e)}', 'danger')
     
     tecnicos_principais = TecnicoService.get_all({'status': 'Ativo'}, page=None)
@@ -220,6 +228,7 @@ def tecnico_detalhes(id):
         func.sum(case(
             (
                 (Chamado.status_chamado.in_(['Concluído', 'SPARE'])) & 
+                (Chamado.status_validacao == 'Aprovado') &  # P0: Gate unificado
                 (Chamado.pago == False) & 
                 (Chamado.pagamento_id == None) &
                 (val_term > 0), # Apenas chamados com valor > 0 contam como 'Pendente Financeiro'
@@ -230,6 +239,7 @@ def tecnico_detalhes(id):
         func.sum(case(
             (
                 (Chamado.status_chamado.in_(['Concluído', 'SPARE'])) & 
+                (Chamado.status_validacao == 'Aprovado') &  # P0: Gate unificado
                 (Chamado.pago == False) & 
                 (Chamado.pagamento_id == None) &
                 (val_term > 0),
@@ -273,9 +283,11 @@ def editar_tecnico(id):
     if request.method == 'POST':
         try:
             TecnicoService.update(id, request.form.to_dict())
+            db.session.commit()  # P0.2: Boundary commit
             flash('Dados do técnico atualizados com sucesso!', 'success')
             return redirect(url_for('operacional.tecnico_detalhes', id=id))
         except Exception as e:
+            db.session.rollback()  # P0.2: Boundary rollback
             flash(f'Erro ao atualizar técnico: {str(e)}', 'danger')
     
     tecnicos_principais = TecnicoService.get_all({'status': 'Ativo'}, page=None)
@@ -289,6 +301,8 @@ def editar_tecnico(id):
         tecnicos_principais=tecnicos_principais
     )
 
+
+
 @operacional_bp.route('/chamados')
 @login_required
 def chamados():
@@ -296,10 +310,22 @@ def chamados():
     filters = {
         'tecnico_id': request.args.get('tecnico', ''),
         'status': request.args.get('status', ''),
+        'status_validacao': request.args.get('status_validacao', ''), # Default handled below
         'tipo': request.args.get('tipo', ''),
         'pago': request.args.get('pago', ''),
         'search': request.args.get('search', '')
     }
+    
+    # Default to "Inbox mode" if not searching specifically
+    # User Request: "na aba chamados deveria ser apenas ... pendente de ser validado"
+    # Show Pendente/Rejeitado by default. Hide Aprovado/Excluído.
+    view_mode = request.args.get('view', 'inbox')
+    
+    if not filters['status_validacao']:
+        if view_mode == 'all':
+            filters['status_validacao'] = [] # No filter
+        else:
+             filters['status_validacao'] = ['Pendente', 'Rejeitado']
     
     pagination = ChamadoService.get_all(filters, page=page, per_page=50) # 50 por página
     chamados_list = pagination.items
@@ -330,17 +356,21 @@ def salvar_view():
     try:
         data = request.get_json()
         SavedViewService.save_view(current_user.id, data.get('page_route'), data.get('name'), data.get('query_string'))
+        db.session.commit()  # P0.2: Boundary commit
         return {'status': 'success'}
     except Exception as e:
+        db.session.rollback()  # P0.2: Boundary rollback
         return {'status': 'error', 'message': str(e)}, 400
 
 @operacional_bp.route('/api/views/<int:id>/delete', methods=['POST'])
 @login_required
 def deletar_view(id):
     try:
-        SavedViewService.delete_view(id, current_user.id)
+        SavedViewService.delete_view(id)
+        db.session.commit()  # P0.2: Boundary commit
         return {'status': 'success'}
     except Exception as e:
+        db.session.rollback()  # P0.2: Boundary rollback
         return {'status': 'error', 'message': str(e)}, 400
 
 @operacional_bp.route('/chamados/criar/multiplo', methods=['POST'])
@@ -356,11 +386,14 @@ def criar_chamado_multiplo_api():
             return jsonify({'error': 'Dados incompletos'}), 400
             
         ChamadoService.create_multiplo(logistica, fsas)
+        db.session.commit()
         
         return jsonify({'message': 'Atendimento registrado com sucesso!'}), 201
     except ValueError as e:
+        db.session.rollback()
         return jsonify({'error': str(e)}), 400
     except Exception as e:
+        db.session.rollback()
         return jsonify({'error': f'Erro interno: {str(e)}'}), 500
 
 @operacional_bp.route('/chamados/criar', methods=['GET'])
@@ -376,9 +409,11 @@ def novo_chamado():
     if request.method == 'POST':
         try:
             ChamadoService.create(request.form)
+            db.session.commit()
             flash('Chamado registrado com sucesso!', 'success')
             return redirect(url_for('operacional.chamados'))
         except Exception as e:
+            db.session.rollback()
             flash(f'Erro: {str(e)}', 'warning')
 
             # Repopulate form data for template
@@ -406,9 +441,11 @@ def editar_chamado(id):
     if request.method == 'POST':
         try:
             ChamadoService.update(id, request.form)
+            db.session.commit()
             flash('Chamado atualizado com sucesso!', 'success')
             return redirect(url_for('operacional.chamados'))
         except Exception as e:
+            db.session.rollback()
             flash(f'Erro ao atualizar chamado: {str(e)}', 'danger')
 
     tecnicos = TecnicoService.get_all({'status': 'Ativo'}, page=None)
@@ -421,13 +458,15 @@ def editar_chamado(id):
 
 @operacional_bp.route('/chamados/<int:id>/status', methods=['POST'])
 @login_required
+@admin_required  # P0: Restringir mudança de status
 def atualizar_status_chamado(id):
     try:
         ChamadoService.update_status(id, request.form.get('status'))
+        db.session.commit()
         flash('Status do chamado atualizado.', 'info')
     except Exception as e:
-
-            flash(f'Erro ao atualizar status: {str(e)}', 'danger')
+        db.session.rollback()
+        flash(f'Erro ao atualizar status: {str(e)}', 'danger')
     return redirect(url_for('operacional.chamados'))
 
 @operacional_bp.route('/api/chamados/<int:id>', methods=['GET'])
@@ -449,27 +488,54 @@ def get_chamado_api(id):
 
 @operacional_bp.route('/api/chamados/<int:id>/editar-rapido', methods=['POST'])
 @login_required
+@admin_required  # P0: Restringir edição rápida que bypassa regras
 def editar_chamado_rapido(id):
+    """
+    Edição rápida de chamado.
+    
+    REFATORADO (2026-01): Adicionado @admin_required para evitar
+    bypass de regras de negócio por usuários não autorizados.
+    """
+    from ..services.audit_service import AuditService
+    
     try:
         data = request.get_json()
         chamado = ChamadoService.get_by_id(id)
         if not chamado:
             return jsonify({'error': 'Chamado não encontrado'}), 404
-            
-        # Update allowed fields
+        
+        changes = {}
+        
+        # Update allowed fields with tracking
         if 'status' in data:
+            changes['status_chamado'] = {'from': chamado.status_chamado, 'to': data['status']}
             chamado.status_chamado = data['status']
         if 'tecnico_id' in data:
+            changes['tecnico_id'] = {'from': chamado.tecnico_id, 'to': int(data['tecnico_id'])}
             chamado.tecnico_id = int(data['tecnico_id'])
         if 'data_atendimento' in data and data['data_atendimento']:
             from datetime import datetime
-            chamado.data_atendimento = datetime.strptime(data['data_atendimento'], '%Y-%m-%d').date()
+            new_date = datetime.strptime(data['data_atendimento'], '%Y-%m-%d').date()
+            changes['data_atendimento'] = {'from': str(chamado.data_atendimento), 'to': str(new_date)}
+            chamado.data_atendimento = new_date
         if 'fsa_codes' in data:
+            changes['fsa_codes'] = {'from': chamado.fsa_codes, 'to': data['fsa_codes']}
             chamado.fsa_codes = data['fsa_codes']
         if 'observacoes' in data:
+            changes['observacoes'] = {'from': chamado.observacoes[:50] if chamado.observacoes else None, 'to': data['observacoes'][:50] if data['observacoes'] else None}
             chamado.observacoes = data['observacoes']
-            
+        
         db.session.commit()
+        
+        # Audit log
+        if changes:
+            AuditService.log_change(
+                model_name='Chamado',
+                object_id=id,
+                action='QUICK_EDIT',
+                changes=str(changes)
+            )
+        
         return jsonify({'success': True})
     except Exception as e:
         db.session.rollback()
@@ -489,9 +555,11 @@ def criar_tag(id):
         cor = request.form.get('cor', '#3B82F6')
         
         if nome:
-            TagService.create_tag(id, nome, cor)
+            TagService.create_tag({'nome': nome, 'cor': cor, 'tecnico_id': id})
+            db.session.commit()  # P0.2: Boundary commit
             flash('Tag adicionada com sucesso!', 'success')
     except Exception as e:
+        db.session.rollback()  # P0.2: Boundary rollback
         flash(f'Erro ao adicionar tag: {str(e)}', 'danger')
         
     return redirect(url_for('operacional.tecnico_detalhes', id=id))
@@ -501,9 +569,11 @@ def criar_tag(id):
 def deletar_tag(id):
     try:
         tecnico_id = TagService.delete_tag(id)
+        db.session.commit()  # P0.2: Boundary commit
         flash('Tag removida com sucesso!', 'success')
         return redirect(url_for('operacional.tecnico_detalhes', id=tecnico_id))
     except Exception as e:
+        db.session.rollback()  # P0.2: Boundary rollback
         flash(f'Erro ao remover tag: {str(e)}', 'danger')
         return redirect(url_for('operacional.tecnicos'))
 
@@ -512,12 +582,15 @@ def deletar_tag(id):
 @admin_required
 def deletar_chamado(id):
     try:
-        from ..services.chamado_service import ChamadoService # Ensure import inside if needed to avoid circular, but top level is fine usually.
+        from ..services.chamado_service import ChamadoService
         ChamadoService.delete(id, current_user.id)
+        db.session.commit()
         flash('Chamado excluído com sucesso!', 'success')
     except ValueError as e:
+        db.session.rollback()
         flash(str(e), 'danger')
     except Exception as e:
+        db.session.rollback()
         flash(f'Erro ao excluir chamado: {str(e)}', 'danger')
         
     return redirect(url_for('operacional.chamados'))
@@ -529,12 +602,15 @@ def deletar_tecnico(id):
     try:
         from ..services.tecnico_service import TecnicoService
         TecnicoService.delete(id, current_user.id)
+        db.session.commit()  # P0.2: Boundary commit
         flash('Técnico excluído com sucesso!', 'success')
         return redirect(url_for('operacional.tecnicos'))
     except ValueError as e:
+        db.session.rollback()  # P0.2: Boundary rollback
         flash(str(e), 'danger')
         return redirect(url_for('operacional.tecnico_detalhes', id=id))
     except Exception as e:
+        db.session.rollback()  # P0.2: Boundary rollback
         flash(f'Erro ao excluir técnico: {str(e)}', 'danger')
         return redirect(url_for('operacional.tecnicos'))
 
@@ -548,6 +624,7 @@ def deletar_tecnico(id):
 
 @operacional_bp.route('/atendimentos')
 @login_required
+@admin_required  # P0: Apenas admin pode ver inbox de validação
 def atendimentos():
     """Inbox de lotes pendentes de validação"""
     batches = ChamadoService.get_pending_batches()
@@ -556,6 +633,7 @@ def atendimentos():
 
 @operacional_bp.route('/atendimentos/validar', methods=['POST'])
 @login_required
+@admin_required  # P0: Apenas admin pode aprovar/rejeitar lotes
 def validar_atendimento():
     """Aprova ou rejeita um lote inteiro de chamados"""
     is_ajax = request.form.get('ajax') == 'true'
@@ -573,6 +651,7 @@ def validar_atendimento():
         
         if acao == 'aprovar':
             count = ChamadoService.aprovar_batch(batch_id, current_user.id)
+            db.session.commit()
             msg = f'✅ Lote aprovado! {count} chamado(s) liberados para o Financeiro.'
             if is_ajax: return jsonify({'success': True, 'message': msg})
             flash(msg, 'success')
@@ -585,6 +664,7 @@ def validar_atendimento():
                 return redirect(url_for('operacional.atendimentos'))
                 
             count = ChamadoService.rejeitar_batch(batch_id, current_user.id, motivo)
+            db.session.commit()
             msg = f'❌ Lote rejeitado. {count} chamado(s) excluídos e criadores notificados.'
             if is_ajax: return jsonify({'success': True, 'message': msg})
             flash(msg, 'warning')
@@ -592,14 +672,58 @@ def validar_atendimento():
         else:
             msg = 'Ação inválida.'
             if is_ajax: return jsonify({'success': False, 'message': msg}), 400
-            flash(msg, 'danger')
+            response['message'] = 'Ação inválida.'
             
     except Exception as e:
-        msg = f'Erro ao processar validação: {str(e)}'
-        if is_ajax: return jsonify({'success': False, 'message': msg}), 500
-        flash(msg, 'danger')
+        db.session.rollback()
+        response['message'] = f'Erro ao processar validação: {str(e)}'
     
+    if is_ajax:
+        return jsonify(response)
+    
+    flash(response['message'], 'success' if response['success'] else 'danger')
     return redirect(url_for('operacional.atendimentos'))
+
+@operacional_bp.route('/chamados/atualizar_inline', methods=['POST'])
+@login_required
+@admin_required
+def atualizar_chamado_inline():
+    """Allows Admin to edit specific fields of a Chamado during Validation"""
+    from ..models import Chamado, db
+    from ..services.chamado_service import ChamadoService
+    
+    try:
+        data = request.get_json()
+        chamado_id = data.get('id')
+        
+        if not chamado_id:
+            return jsonify({'success': False, 'message': 'ID não fornecido'}), 400
+            
+        chamado = Chamado.query.get(chamado_id)
+        if not chamado:
+             return jsonify({'success': False, 'message': 'Chamado não encontrado'}), 404
+             
+        # Update fields using Service to ensure consistency/logs
+        # Service update usually expects a form-like dict or specific args.
+        # We can pass a dict with only changed fields.
+        
+        # Log changes for audit (Implicit in Service if implemented, else explicit)
+        # ChamadoService.update handles basic logging but expects mapped fields.
+        
+        update_data = {
+            'horas_trabalhadas': data.get('horas_trabalhadas'),
+            'custo_atribuido': data.get('custo_atribuido'),
+            'observacoes': data.get('observacoes')
+        }
+        
+        ChamadoService.update(chamado_id, update_data, user_id=current_user.id)
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': 'Atualizado com sucesso'})
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 
 # =============================================================================
@@ -749,3 +873,5 @@ def exportar_fechamento():
         mimetype="text/csv",
         headers={"Content-disposition": f"attachment; filename={filename}"}
     )
+
+

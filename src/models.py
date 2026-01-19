@@ -3,6 +3,10 @@ import uuid
 from datetime import datetime, date
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
+from decimal import Decimal
+
+# Utilitários de serialização monetária
+from .utils.serialization import money_str, to_decimal
 
 db = SQLAlchemy()
 
@@ -39,8 +43,14 @@ class Tecnico(db.Model):
     nome = db.Column(db.String(200), nullable=False)
     documento = db.Column(db.String(20), unique=True, nullable=True) # CPF/CNPJ
     contato = db.Column(db.String(20), nullable=False)
+    cep = db.Column(db.String(10), nullable=True)  # CEP (00000-000)
+    logradouro = db.Column(db.String(200), nullable=True)  # Rua, Av...
+    numero = db.Column(db.String(20), nullable=True)  # Número do endereço
+    complemento = db.Column(db.String(100), nullable=True)  # Apt, sala, etc
+    bairro = db.Column(db.String(100), nullable=True)  # Bairro
     cidade = db.Column(db.String(100), nullable=False)
     estado = db.Column(db.String(2), nullable=False)
+    observacoes = db.Column(db.Text, nullable=True)  # Notas sobre o técnico
     status = db.Column(db.String(20), default='Ativo')
     valor_por_atendimento = db.Column(db.Numeric(10, 2), default=120.00)
     valor_adicional_loja = db.Column(db.Numeric(10, 2), default=20.00)
@@ -298,9 +308,10 @@ class Tecnico(db.Model):
             'estado': self.estado,
             'localizacao': self.localizacao,
             'status': self.status,
-            'valor_por_atendimento': float(self.valor_por_atendimento or 0),
-            'valor_adicional_loja': float(self.valor_adicional_loja or 0),
-            'valor_hora_adicional': float(self.valor_hora_adicional or 0),
+            # Valores monetários serializados como string para preservar precisão
+            'valor_por_atendimento': money_str(self.valor_por_atendimento),
+            'valor_adicional_loja': money_str(self.valor_adicional_loja),
+            'valor_hora_adicional': money_str(self.valor_hora_adicional),
             'forma_pagamento': self.forma_pagamento,
             'chave_pagamento': self.chave_pagamento,
             'tecnico_principal_id': self.tecnico_principal_id,
@@ -357,7 +368,7 @@ class Chamado(db.Model):
     def tipo_resolucao(self):
         return self.servico_nome # Fallback to service name or empty string
     
-    status_chamado = db.Column(db.String(20), default='Finalizado')
+    status_chamado = db.Column(db.String(20), default='Concluído')
     is_adicional = db.Column(db.Boolean, default=False)
     
     # Horas Trabalhadas (Entrada: hora_inicio/hora_fim, Calculado: horas_trabalhadas)
@@ -379,8 +390,11 @@ class Chamado(db.Model):
 
     # DEPRECATED: Este campo sera removido em versao futura.
     # Use 'custo_atribuido' para custos. Mantido apenas para compatibilidade.
-    # Data de deprecacao: 2026-01-12 | Previsao de remocao: 2026-03-01
-    valor = db.Column(db.Numeric(10, 2), nullable=False, default=0.00)
+    # Data de deprecacao: 2026-01-12 | Previsao de remocao: 2026-03-14
+    # Fase 1 (2026-01-14): Tornado nullable
+    # Fase 2 (2026-02-14): Remover de to_dict() e APIs
+    # Fase 3 (2026-03-14): DROP COLUMN
+    valor = db.Column(db.Numeric(10, 2), nullable=True, default=0.00)
     pago = db.Column(db.Boolean, default=False)
     pagamento_id = db.Column(db.Integer, db.ForeignKey('pagamentos.id'), nullable=True)
     endereco = db.Column(db.Text, nullable=True)
@@ -397,6 +411,12 @@ class Chamado(db.Model):
     validado_por_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     validado_por = db.relationship('User', foreign_keys=[validado_por_id])
     
+    # Campos de Rejeição (Soft Delete)
+    motivo_rejeicao = db.Column(db.Text, nullable=True)
+    data_rejeicao = db.Column(db.DateTime, nullable=True)
+    rejeitado_por_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    rejeitado_por = db.relationship('User', foreign_keys=[rejeitado_por_id])
+    
     # Rastreabilidade
     created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     created_by = db.relationship('User', foreign_keys=[created_by_id])
@@ -411,6 +431,25 @@ class Chamado(db.Model):
         return self.tecnico.localizacao if self.tecnico else None
     
     def to_dict(self):
+        """
+        Serializa chamado para dict.
+        
+        NOTA: Valores monetarios sao serializados como string com 2 casas
+        decimais para preservar precisao (evita arredondamento de float).
+        
+        Campo 'valor' esta DEPRECATED - usar 'custo_atribuido'
+        """
+        from decimal import Decimal, ROUND_HALF_UP
+        TWO_PLACES = Decimal('0.01')
+        
+        def format_money(value):
+            """Formata valor monetario como string com 2 casas decimais."""
+            if value is None:
+                return '0.00'
+            if isinstance(value, Decimal):
+                return str(value.quantize(TWO_PLACES, rounding=ROUND_HALF_UP))
+            return str(Decimal(str(value)).quantize(TWO_PLACES, rounding=ROUND_HALF_UP))
+        
         return {
             'id': self.id,
             'id_chamado': self.id_chamado,
@@ -426,7 +465,12 @@ class Chamado(db.Model):
             'endereco': self.endereco,
             'observacoes': self.observacoes,
             'localizacao': self.localizacao,
-            'valor': float(self.valor) if self.valor else 0.0,
+            # Campo preferido para custos (string para preservar precisão)
+            'custo_atribuido': format_money(self.custo_atribuido),
+            # DEPRECATED: Campo 'valor' sera removido em 2026-03-14
+            # Mantido apenas para compatibilidade com integrações existentes
+            'valor': format_money(self.valor),
+            '_deprecated_fields': ['valor'],  # Sinal para consumidores de API
             'data_criacao': self.data_criacao.isoformat() if self.data_criacao else None
         }
 
@@ -461,7 +505,9 @@ class Pagamento(db.Model):
     @property
     def valor_total(self):
         # REFATORADO: Usando apenas custo_atribuido (campo valor está DEPRECATED)
-        return float(sum((c.custo_atribuido or 0.0) for c in self.chamados_incluidos))
+        # Retorna Decimal para preservar precisão
+        from decimal import Decimal
+        return sum((c.custo_atribuido or Decimal('0.00')) for c in self.chamados_incluidos)
     
     def to_dict(self):
         return {
@@ -473,8 +519,8 @@ class Pagamento(db.Model):
             'periodo_inicio': self.periodo_inicio.isoformat() if self.periodo_inicio else None,
             'periodo_fim': self.periodo_fim.isoformat() if self.periodo_fim else None,
             'numero_chamados': self.numero_chamados,
-            'valor_por_atendimento': float(self.valor_por_atendimento),
-            'valor_total': self.valor_total,
+            'valor_por_atendimento': money_str(self.valor_por_atendimento),
+            'valor_total': money_str(self.valor_total),
             'status_pagamento': self.status_pagamento,
             'data_pagamento': self.data_pagamento.isoformat() if self.data_pagamento else None,
             'observacoes': self.observacoes,
@@ -555,6 +601,44 @@ class Cliente(db.Model):
         }
 
 
+class JobRun(db.Model):
+    """
+    Registro de execução de tarefas em background (Auditoria).
+    Usado para monitorar o processamento financeiro em lote.
+    """
+    __tablename__ = 'job_runs'
+
+    id = db.Column(db.Integer, primary_key=True)
+    job_name = db.Column(db.String(50), nullable=False) # ex: 'financeiro_lote'
+    start_time = db.Column(db.DateTime, default=datetime.utcnow)
+    end_time = db.Column(db.DateTime, nullable=True)
+    status = db.Column(db.String(20), default='RUNNING') # RUNNING, COMPLETED, FAILED, PARTIAL
+    
+    # Métricas
+    total_items = db.Column(db.Integer, default=0)
+    success_count = db.Column(db.Integer, default=0)
+    error_count = db.Column(db.Integer, default=0)
+    
+    # Detalhes (JSON ou Texto)
+    log_text = db.Column(db.Text, nullable=True) # Logs importantes/Erros
+    metadata_json = db.Column(db.Text, nullable=True) # Params de entrada (periodo, etc)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'job_name': self.job_name,
+            'start_time': self.start_time.isoformat() if self.start_time else None,
+            'end_time': self.end_time.isoformat() if self.end_time else None,
+            'duration_seconds': (self.end_time - self.start_time).total_seconds() if self.end_time and self.start_time else None,
+            'status': self.status,
+            'total_items': self.total_items,
+            'success_count': self.success_count,
+            'error_count': self.error_count,
+            'log_text': self.log_text
+        }
+
+
+
 class CatalogoServico(db.Model):
     """
     Catálogo Unificado de Serviços por Cliente.
@@ -564,8 +648,8 @@ class CatalogoServico(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(100), nullable=False)  # Ex: "Zebra - 1ª Visita", "Retorno SPARE"
-    valor_receita = db.Column(db.Float, default=0.0)  # Receita para a empresa (R$)
-    valor_custo_tecnico = db.Column(db.Float, default=0.0) # Custo (quanto paga ao técnico)
+    valor_receita = db.Column(db.Numeric(10, 2), default=0.0)  # Receita para a empresa (R$)
+    valor_custo_tecnico = db.Column(db.Numeric(10, 2), default=0.0) # Custo (quanto paga ao técnico)
     
     cliente_id = db.Column(db.Integer, db.ForeignKey('clientes.id'), nullable=False)
     
@@ -577,12 +661,12 @@ class CatalogoServico(db.Model):
     horas_franquia = db.Column(db.Integer, default=2)     # Até quantas horas o valor base cobre
     
     # Valores Adicionais (para chamados extras no mesmo lote)
-    valor_adicional_receita = db.Column(db.Float, default=0.0)
-    valor_adicional_custo = db.Column(db.Float, default=0.0)
-    
+    valor_adicional_receita = db.Column(db.Numeric(10, 2), default=0.0)
+    valor_adicional_custo = db.Column(db.Numeric(10, 2), default=0.0)
+
     # Horas Extras
-    valor_hora_adicional_receita = db.Column(db.Float, default=0.0)
-    valor_hora_adicional_custo = db.Column(db.Float, default=0.0)
+    valor_hora_adicional_receita = db.Column(db.Numeric(10, 2), default=0.0)
+    valor_hora_adicional_custo = db.Column(db.Numeric(10, 2), default=0.0)
     
     # Status
     ativo = db.Column(db.Boolean, default=True)
@@ -591,16 +675,17 @@ class CatalogoServico(db.Model):
         return {
             'id': self.id,
             'nome': self.nome,
-            'valor': self.valor_receita,
-            'valor_custo_tecnico': self.valor_custo_tecnico,
+            # Valores monetários serializados via money_str para garantir 2 casas
+            'valor': money_str(self.valor_receita),
+            'valor_custo_tecnico': money_str(self.valor_custo_tecnico),
             'exige_peca': self.exige_peca,
             'paga_tecnico': self.paga_tecnico,
             'pagamento_integral': self.pagamento_integral,
             'horas_franquia': self.horas_franquia,
-            'valor_adicional_receita': self.valor_adicional_receita,
-            'valor_adicional_custo': self.valor_adicional_custo,
-            'valor_hora_adicional_receita': self.valor_hora_adicional_receita,
-            'valor_hora_adicional_custo': self.valor_hora_adicional_custo,
+            'valor_adicional_receita': money_str(self.valor_adicional_receita),
+            'valor_adicional_custo': money_str(self.valor_adicional_custo),
+            'valor_hora_adicional_receita': money_str(self.valor_hora_adicional_receita),
+            'valor_hora_adicional_custo': money_str(self.valor_hora_adicional_custo),
             'is_retorno': self.is_retorno
         }
 
@@ -615,22 +700,23 @@ class ItemLPU(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(100), nullable=False)
-    valor_receita = db.Column(db.Float, default=0.0)  # Preço cobrado do cliente
-    valor_custo = db.Column(db.Float, default=0.0)    # Custo de aquisição da peça
+    valor_receita = db.Column(db.Numeric(10, 2), default=0.0)  # Preço cobrado do cliente
+    valor_custo = db.Column(db.Numeric(10, 2), default=0.0)    # Custo de aquisição da peça
     cliente_id = db.Column(db.Integer, db.ForeignKey('clientes.id'), nullable=True)
 
     @property
     def margem(self):
         """Margem bruta da peça (receita - custo)"""
-        return (self.valor_receita or 0.0) - (self.valor_custo or 0.0)
+        return to_decimal(self.valor_receita) - to_decimal(self.valor_custo)
 
     def to_dict(self):
         return {
             'id': self.id,
             'nome': self.nome,
-            'valor': self.valor_receita,
-            'valor_custo': self.valor_custo,
-            'margem': self.margem
+            # Valores monetários serializados via money_str
+            'valor': money_str(self.valor_receita),
+            'valor_custo': money_str(self.valor_custo),
+            'margem': money_str(self.margem)
         }
 
 
@@ -642,12 +728,12 @@ class ItemLPUPrecoHistorico(db.Model):
     item_lpu_id = db.Column(db.Integer, db.ForeignKey('itens_lpu.id'), nullable=False, index=True)
 
     # Valores ANTES da alteração
-    valor_custo_anterior = db.Column(db.Float, nullable=True)
-    valor_receita_anterior = db.Column(db.Float, nullable=True)
+    valor_custo_anterior = db.Column(db.Numeric(10, 2), nullable=True)
+    valor_receita_anterior = db.Column(db.Numeric(10, 2), nullable=True)
 
     # Valores DEPOIS da alteração
-    valor_custo_novo = db.Column(db.Float, nullable=True)
-    valor_receita_novo = db.Column(db.Float, nullable=True)
+    valor_custo_novo = db.Column(db.Numeric(10, 2), nullable=True)
+    valor_receita_novo = db.Column(db.Numeric(10, 2), nullable=True)
 
     # Metadados
     motivo = db.Column(db.String(200), nullable=True)  # Motivo da alteração
@@ -677,12 +763,13 @@ class ItemLPUPrecoHistorico(db.Model):
             'id': self.id,
             'item_lpu_id': self.item_lpu_id,
             'item_nome': self.item_lpu.nome if self.item_lpu else 'N/A',
-            'custo_anterior': self.valor_custo_anterior,
-            'custo_novo': self.valor_custo_novo,
-            'receita_anterior': self.valor_receita_anterior,
-            'receita_novo': self.valor_receita_novo,
-            'variacao_custo': self.variacao_custo,
-            'variacao_receita': self.variacao_receita,
+            # Valores monetários serializados via money_str
+            'custo_anterior': money_str(self.valor_custo_anterior),
+            'custo_novo': money_str(self.valor_custo_novo),
+            'receita_anterior': money_str(self.valor_receita_anterior),
+            'receita_novo': money_str(self.valor_receita_novo),
+            'variacao_custo': round(self.variacao_custo, 2) if self.variacao_custo else None,
+            'variacao_receita': round(self.variacao_receita, 2) if self.variacao_receita else None,
             'motivo': self.motivo,
             'data_alteracao': self.data_alteracao.isoformat() if self.data_alteracao else None,
             'alterado_por': self.alterado_por.username if self.alterado_por else 'Sistema'
@@ -709,8 +796,8 @@ class ContratoItem(db.Model):
     item_lpu_id = db.Column(db.Integer, db.ForeignKey('itens_lpu.id'), nullable=False, index=True)
 
     # Valores de Preco
-    valor_venda = db.Column(db.Float, nullable=False)       # Preco cobrado DESTE cliente
-    valor_repasse = db.Column(db.Float, nullable=True)      # Opcional: repasse ao tecnico (se diferir)
+    valor_venda = db.Column(db.Numeric(10, 2), nullable=False)       # Preco cobrado DESTE cliente
+    valor_repasse = db.Column(db.Numeric(10, 2), nullable=True)      # Opcional: repasse ao tecnico (se diferir)
 
     # Metadados
     ativo = db.Column(db.Boolean, default=True)
@@ -728,28 +815,30 @@ class ContratoItem(db.Model):
     @property
     def margem(self):
         """Margem bruta: valor de venda - custo da peca"""
-        custo = self.item_lpu.valor_custo if self.item_lpu else 0
-        return (self.valor_venda or 0) - custo
+        custo = to_decimal(self.item_lpu.valor_custo) if self.item_lpu else Decimal('0')
+        return to_decimal(self.valor_venda) - custo
 
     @property
     def margem_percent(self):
         """Margem percentual"""
-        if self.valor_venda and self.valor_venda > 0:
-            return (self.margem / self.valor_venda) * 100
-        return 0
+        venda = to_decimal(self.valor_venda)
+        if venda > 0:
+            return (self.margem / venda) * 100
+        return Decimal('0')
 
     def to_dict(self):
         return {
             'id': self.id,
             'cliente_id': self.cliente_id,
-            'cliente_nome': self.cliente.nome if self.cliente else None,
+            'cliente_nome': self.contrato.nome if self.contrato else None,
             'item_lpu_id': self.item_lpu_id,
             'item_nome': self.item_lpu.nome if self.item_lpu else None,
-            'valor_venda': self.valor_venda,
-            'valor_repasse': self.valor_repasse,
-            'valor_custo': self.item_lpu.valor_custo if self.item_lpu else None,
-            'margem': self.margem,
-            'margem_percent': round(self.margem_percent, 1),
+            # Valores monetários serializados via money_str
+            'valor_venda': money_str(self.valor_venda),
+            'valor_repasse': money_str(self.valor_repasse) if self.valor_repasse else None,
+            'valor_custo': money_str(self.item_lpu.valor_custo) if self.item_lpu else None,
+            'margem': money_str(self.margem),
+            'margem_percent': round(float(self.margem_percent), 1) if self.margem_percent else 0.0,
             'ativo': self.ativo
         }
 
@@ -789,13 +878,18 @@ class Notification(db.Model):
 class TecnicoStock(db.Model):
     """Estoque atual na mão do técnico"""
     __tablename__ = 'tecnico_stock'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     tecnico_id = db.Column(db.Integer, db.ForeignKey('tecnicos.id'), nullable=False)
     item_lpu_id = db.Column(db.Integer, db.ForeignKey('itens_lpu.id'), nullable=False)
     quantidade = db.Column(db.Integer, default=0)
     data_atualizacao = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
+    # Constraint: Um técnico não pode ter o mesmo item duas vezes
+    __table_args__ = (
+        db.UniqueConstraint('tecnico_id', 'item_lpu_id', name='uq_tecnico_stock_tecnico_item'),
+    )
+
     tecnico = db.relationship('Tecnico', backref='estoque')
     item_lpu = db.relationship('ItemLPU', backref='estoque_tecnicos')
 
@@ -834,7 +928,7 @@ class StockMovement(db.Model):
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
 
     # Custo unitário no momento da movimentação (para auditoria e cálculo de média ponderada)
-    custo_unitario = db.Column(db.Float, nullable=True)
+    custo_unitario = db.Column(db.Numeric(10, 2), nullable=True)
 
     observacao = db.Column(db.String(200), nullable=True)
     created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
@@ -856,7 +950,8 @@ class StockMovement(db.Model):
             'chamado_id': self.chamado_id,
             'quantidade': self.quantidade,
             'tipo_movimento': self.tipo_movimento,
-            'custo_unitario': self.custo_unitario,
+            # Valor monetário serializado via money_str
+            'custo_unitario': money_str(self.custo_unitario) if self.custo_unitario else None,
             'data_criacao': self.data_criacao.isoformat() if self.data_criacao else None,
             'observacao': self.observacao
         }

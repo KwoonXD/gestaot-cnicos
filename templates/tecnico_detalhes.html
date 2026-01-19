@@ -3,45 +3,87 @@
 {% block title %}{{ tecnico.nome }} - Detalhes{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h1 class="h3 mb-1">{{ tecnico.nome }}</h1>
-        <div class="d-flex gap-2">
-            {% for tag in tecnico.tags %}
-            <span class="badge" style="background-color: {{ tag.cor }};">{{ tag.nome }}</span>
-            {% endfor %}
+<!-- Profile Hero -->
+<div class="profile-hero mb-4">
+    <div class="d-flex align-items-center gap-4 position-relative">
+        <div class="avatar-lg">
+            {{ tecnico.nome[:2]|upper }}
         </div>
-    </div>
-    <div class="btn-group">
-        <a href="{{ url_for('operacional.editar_tecnico', id=tecnico.id) }}" class="btn btn-outline-secondary btn-sm">
-            <i class="bi bi-pencil"></i> Editar
-        </a>
-        {% if (stats.valor_pendente|default(0)) > 0 %}
-        <a href="{{ url_for('financeiro.gerar_pagamento') }}?tecnico={{ tecnico.id }}" class="btn btn-success btn-sm">
-            <i class="bi bi-cash-stack"></i> Pagar R$ {{ "%.2f"|format(stats.valor_pendente|default(0)) }}
-        </a>
-        {% endif %}
+        <div class="flex-grow-1">
+            <div class="d-flex align-items-center gap-2 mb-2">
+                <h1 class="h3 mb-0">{{ tecnico.nome }}</h1>
+                <span class="badge {{ 'bg-success' if tecnico.status == 'Ativo' else 'bg-secondary' }} bg-opacity-75">
+                    {{ tecnico.status }}
+                </span>
+            </div>
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+                <span class="opacity-75">
+                    <i class="bi bi-geo-alt"></i> {{ tecnico.cidade }}/{{ tecnico.estado }}
+                </span>
+                {% for tag in tecnico.tags %}
+                <span class="badge bg-white bg-opacity-25">{{ tag.nome }}</span>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="d-flex gap-2">
+            {% if tecnico.contato %}
+            <a href="https://wa.me/55{{ tecnico.contato|replace('(', '')|replace(')', '')|replace('-', '')|replace(' ', '') }}"
+                target="_blank" class="btn btn-whatsapp btn-sm" title="WhatsApp">
+                <i class="bi bi-whatsapp"></i>
+            </a>
+            {% endif %}
+            <a href="{{ url_for('operacional.editar_tecnico', id=tecnico.id) }}" class="btn btn-light btn-sm">
+                <i class="bi bi-pencil"></i> Editar
+            </a>
+            {% if (stats.valor_pendente|default(0)) > 0 %}
+            <a href="{{ url_for('financeiro.gerar_pagamento') }}?tecnico={{ tecnico.id }}"
+                class="btn btn-warning btn-sm">
+                <i class="bi bi-cash-stack"></i> Pagar
+            </a>
+            {% endif %}
+        </div>
     </div>
 </div>
 
+<!-- KPI Cards -->
 <div class="row g-3 mb-4">
     <div class="col-md-4">
-        <div class="card p-3 border-0 shadow-sm bg-light">
-            <small class="text-muted text-uppercase">Total de Chamados</small>
-            <div class="fs-2 fw-bold">{{ stats.total|default(0) }}</div>
+        <div class="card kpi-card kpi-card-success p-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="kpi-icon">
+                    <i class="bi bi-check-circle"></i>
+                </div>
+                <div>
+                    <div class="kpi-value">{{ stats.total|default(0) }}</div>
+                    <div class="kpi-label">Chamados Realizados</div>
+                </div>
+            </div>
         </div>
     </div>
     <div class="col-md-4">
-        <div class="card p-3 border-0 shadow-sm">
-            <small class="text-muted text-uppercase">Pendente de Pagamento</small>
-            <div class="fs-2 fw-bold text-primary">{{ stats.pendentes_qtd|default(0) }} <small
-                    class="fs-6 text-muted">chamados</small></div>
+        <div class="card kpi-card kpi-card-warning p-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="kpi-icon">
+                    <i class="bi bi-hourglass-split"></i>
+                </div>
+                <div>
+                    <div class="kpi-value">{{ stats.pendentes_qtd|default(0) }}</div>
+                    <div class="kpi-label">Pendentes Pagamento</div>
+                </div>
+            </div>
         </div>
     </div>
     <div class="col-md-4">
-        <div class="card p-3 border-0 shadow-sm bg-primary text-white">
-            <small class="text-uppercase opacity-75">Valor a Pagar</small>
-            <div class="fs-2 fw-bold">R$ {{ "%.2f"|format(stats.valor_pendente|default(0)) }}</div>
+        <div class="card kpi-card kpi-card-primary p-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="kpi-icon">
+                    <i class="bi bi-currency-dollar"></i>
+                </div>
+                <div>
+                    <div class="kpi-value">R$ {{ "%.2f"|format(stats.valor_pendente|default(0)) }}</div>
+                    <div class="kpi-label">Valor a Pagar</div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -102,22 +144,123 @@
             </div>
             {% endif %}
         </div>
+        <!-- Stock Availability Card -->
+        {% if tecnico.estoque and tecnico.estoque|selectattr('quantidade', '>', 0)|list|length > 0 %}
+        <div class="card shadow-sm mt-4">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0 card-title"><i class="bi bi-box-seam"></i> Estoque em Posse</h5>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Item</th>
+                            <th class="text-center">Quantidade</th>
+                            <th class="text-center">Última Atualização</th>
+                            <th class="text-end">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for stock in tecnico.estoque if stock.quantidade > 0 %}
+                        <tr>
+                            <td>
+                                <div class="fw-medium">{{ stock.item_lpu.nome }}</div>
+                                <small class="text-muted">Custo: R$ {{ "%.2f"|format(stock.item_lpu.valor_custo or 0)
+                                    }}</small>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-primary bg-opacity-10 text-primary fs-6">{{ stock.quantidade
+                                    }}</span>
+                            </td>
+                            <td class="text-center small text-muted">
+                                {{ stock.data_atualizacao.strftime('%d/%m/%Y %H:%M') }}
+                            </td>
+                            <td class="text-end">
+                                <form action="{{ url_for('stock.movimentar_estoque') }}" method="POST" class="d-inline">
+                                    <input type="hidden" name="tipo_movimento" value="DEVOLUCAO">
+                                    <input type="hidden" name="tecnico_id" value="{{ tecnico.id }}">
+                                    <input type="hidden" name="item_id" value="{{ stock.item_lpu_id }}">
+                                    <input type="hidden" name="quantidade" value="{{ stock.quantidade }}">
+                                    <input type="hidden" name="observacao" value="Devolução rápida via perfil">
+                                    <button type="submit" class="btn btn-sm btn-outline-warning" title="Devolver tudo"
+                                        onclick="return confirm('Confirmar devolução total deste item?')">
+                                        <i class="bi bi-box-arrow-in-left"></i> Devolver
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
     </div>
+    <!-- End Col-8 -->
 
     <div class="col-lg-4">
         <div class="card shadow-sm mb-4">
             <div class="card-body">
-                <h6 class="fw-bold mb-3">Dados Cadastrais</h6>
+                <h6 class="fw-bold mb-3"><i class="bi bi-person-badge"></i> Dados Cadastrais</h6>
                 <dl class="row mb-0 small">
-                    <dt class="col-4 text-muted">Pix/Banco</dt>
-                    <dd class="col-8 user-select-all">{{ tecnico.chave_pagamento or '-' }}</dd>
+                    <dt class="col-4 text-muted">CPF/CNPJ</dt>
+                    <dd class="col-8">{{ tecnico.documento or '-' }}</dd>
 
                     <dt class="col-4 text-muted">Contato</dt>
                     <dd class="col-8">{{ tecnico.contato }}</dd>
 
+                    <dt class="col-4 text-muted">Status</dt>
+                    <dd class="col-8">
+                        <span class="badge {{ 'bg-success' if tecnico.status == 'Ativo' else 'bg-secondary' }}">{{
+                            tecnico.status }}</span>
+                    </dd>
+
+                    <dt class="col-4 text-muted">Início</dt>
+                    <dd class="col-8">{{ tecnico.data_inicio.strftime('%d/%m/%Y') if tecnico.data_inicio else '-' }}
+                    </dd>
+                </dl>
+
+                <hr>
+
+                <h6 class="fw-bold mb-3"><i class="bi bi-geo-alt"></i> Endereço</h6>
+                <dl class="row mb-0 small">
+                    {% if tecnico.cep %}
+                    <dt class="col-4 text-muted">CEP</dt>
+                    <dd class="col-8">{{ tecnico.cep }}</dd>
+                    {% endif %}
+
+                    {% if tecnico.logradouro %}
+                    <dt class="col-4 text-muted">Endereço</dt>
+                    <dd class="col-8">{{ tecnico.logradouro }}{% if tecnico.numero %}, {{ tecnico.numero }}{% endif %}{%
+                        if tecnico.complemento %} - {{ tecnico.complemento }}{% endif %}</dd>
+                    {% endif %}
+
+                    {% if tecnico.bairro %}
+                    <dt class="col-4 text-muted">Bairro</dt>
+                    <dd class="col-8">{{ tecnico.bairro }}</dd>
+                    {% endif %}
+
                     <dt class="col-4 text-muted">Cidade</dt>
                     <dd class="col-8">{{ tecnico.cidade }}/{{ tecnico.estado }}</dd>
                 </dl>
+
+                <hr>
+
+                <h6 class="fw-bold mb-3"><i class="bi bi-cash"></i> Pagamento</h6>
+                <dl class="row mb-0 small">
+                    <dt class="col-4 text-muted">Forma</dt>
+                    <dd class="col-8">{{ tecnico.forma_pagamento or '-' }}</dd>
+
+                    <dt class="col-4 text-muted">Chave Pix</dt>
+                    <dd class="col-8 user-select-all" style="word-break: break-all;">{{ tecnico.chave_pagamento or '-'
+                        }}</dd>
+                </dl>
+
+                {% if tecnico.observacoes %}
+                <hr>
+                <h6 class="fw-bold mb-2"><i class="bi bi-sticky"></i> Observações</h6>
+                <p class="small text-muted mb-0">{{ tecnico.observacoes }}</p>
+                {% endif %}
 
                 <hr>
 

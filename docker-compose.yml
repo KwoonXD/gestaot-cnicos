@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: gestaot_postgres
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: gestaot
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+volumes:
+  pgdata:

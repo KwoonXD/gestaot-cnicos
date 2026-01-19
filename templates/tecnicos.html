@@ -3,11 +3,14 @@
 {% block title %}Técnicos - Gestão de Técnicos{% endblock %}
 
 {% block content %}
-<div class="page-header d-flex justify-content-between align-items-center">
-    <h1><i class="bi bi-people"></i> Técnicos</h1>
-    <div class="d-flex gap-2">
+<div class="page-header-modern">
+    <div>
+        <h1><i class="bi bi-people-fill"></i> Técnicos</h1>
+        <div class="subtitle">Gerencie sua equipe de campo</div>
+    </div>
+    <div class="quick-actions">
         <a href="{{ url_for('operacional.importar_tecnicos') }}" class="btn btn-outline-success">
-            <i class="bi bi-file-earmark-excel"></i> Importar Excel
+            <i class="bi bi-file-earmark-excel"></i> Importar
         </a>
         <a href="{{ url_for('operacional.novo_tecnico') }}" class="btn btn-primary">
             <i class="bi bi-person-plus"></i> Novo Técnico
@@ -147,28 +150,42 @@
                             </span>
                         </td>
                         <td>
-                            <div class="d-flex flex-column">
-                                <a href="{{ url_for('operacional.tecnico_detalhes', id=tecnico.id) }}"
-                                    class="text-decoration-none fw-bold text-body">
-                                    {{ tecnico.nome }}
-                                </a>
-                                <div class="d-flex gap-1 mt-1">
-                                    {% if tecnico.tags %}
-                                    {% for tag in tecnico.tags %}
-                                    <span class="badge rounded-pill badge-tecnico-tag" style="--tag-bg: {{ tag.cor }};">
-                                        {{ tag.nome }}
-                                    </span>
-                                    {% endfor %}
+                            <div class="tecnico-row">
+                                <div class="avatar-circle">
+                                    {{ tecnico.nome[:2]|upper }}
+                                </div>
+                                <div class="tecnico-info">
+                                    <a href="{{ url_for('operacional.tecnico_detalhes', id=tecnico.id) }}"
+                                        class="tecnico-name">
+                                        {{ tecnico.nome }}
+                                    </a>
+                                    <div class="d-flex gap-1 mt-1 flex-wrap">
+                                        {% if tecnico.tags %}
+                                        {% for tag in tecnico.tags[:3] %}
+                                        <span class="badge rounded-pill badge-tecnico-tag"
+                                            style="--tag-bg: {{ tag.cor }};">
+                                            {{ tag.nome }}
+                                        </span>
+                                        {% endfor %}
+                                        {% if tecnico.tags|length > 3 %}
+                                        <span class="badge rounded-pill bg-secondary">+{{ tecnico.tags|length - 3
+                                            }}</span>
+                                        {% endif %}
+                                        {% endif %}
+                                    </div>
+                                    {% if tecnico.tecnico_principal %}
+                                    <small class="text-muted" style="font-size: 0.7rem;">
+                                        <i class="bi bi-arrow-return-right"></i> {{ tecnico.tecnico_principal.nome }}
+                                    </small>
                                     {% endif %}
                                 </div>
-                                {% if tecnico.tecnico_principal %}
-                                <small class="text-muted" style="font-size: 0.75rem;">
-                                    <i class="bi bi-arrow-return-right"></i> {{ tecnico.tecnico_principal.nome }}
-                                </small>
-                                {% endif %}
                             </div>
                         </td>
-                        <td>{{ tecnico.localizacao }}</td>
+                        <td>
+                            <span class="location-badge">
+                                <i class="bi bi-geo-alt"></i> {{ tecnico.localizacao }}
+                            </span>
+                        </td>
                         <td><small>{{ tecnico.contato }}</small></td>
                         <!-- Using contato as proxy for payment info based on screenshot? wait, model says forma_pagamento is a field, but template used contato in col 4?? Let's stick to template logic but maybe fix label if mismatch. -->
                         <!-- Actually, looking at original template line 80: <td>{{ tecnico.contato }}</td> under Header 'Forma Pagamento'?? That seems like a bug in original code too. Leaving as is to be safe or assuming 'contato' holds meaningful info. Let's start with sticking to previous content but fixing layout. -->
@@ -304,7 +321,7 @@
 
         document.getElementById('modalTecnicoNome').textContent = nome;
         // Construct the URL dynamically to avoid rendering millions of url_fors
-        form.action = '/operacional/tecnicos/' + id + '/delete';
+        form.action = '/tecnicos/' + id + '/delete';
     }
 
     async function saveCurrentView() {
