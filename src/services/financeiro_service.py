@@ -532,3 +532,56 @@ class FinanceiroService:
         
         # Retorna sucesso imediato (0 erros, pois erros serão logados no console/banco depois)
         return len(tecnicos_ids), []
+
+    @staticmethod
+    def calcular_previa_fechamento(data_inicio, data_fim):
+        """
+        Calcula prévia de fechamento por período.
+        
+        REFATORADO (2026-01): Extraído de financeiro_routes.py para eliminar Fat Controller.
+        
+        Args:
+            data_inicio: date - Data inicial do período
+            data_fim: date - Data final do período
+            
+        Returns:
+            List[dict]: Lista de técnicos com valores previstos para fechamento
+        """
+        from sqlalchemy import func
+        from src.models import db
+        
+        # OTIMIZACAO: Query SQL agregada em vez de N+1
+        val_expr = func.coalesce(Chamado.custo_atribuido, 0)
+
+        result = db.session.query(
+            Tecnico.id,
+            Tecnico.nome,
+            func.count(Chamado.id).label('qtd_chamados'),
+            func.sum(val_expr).label('total_previsto')
+        ).join(
+            Chamado, Tecnico.id == Chamado.tecnico_id
+        ).filter(
+            Tecnico.status == 'Ativo',
+            Chamado.status_chamado == 'Concluído',
+            Chamado.status_validacao == 'Aprovado',  # P0: Gate unificado
+            Chamado.pago == False,
+            Chamado.pagamento_id == None,
+            Chamado.data_atendimento >= data_inicio,
+            Chamado.data_atendimento <= data_fim
+        ).group_by(
+            Tecnico.id
+        ).having(
+            func.count(Chamado.id) > 0
+        ).all()
+
+        tecnicos_display = []
+        for row in result:
+            tecnicos_display.append({
+                'id': row[0],
+                'id_tecnico': f"T-{str(row[0]).zfill(3)}",
+                'nome': row[1],
+                'qtd_chamados': row[2],
+                'total_previsto': float(row[3] or 0)
+            })
+
+        return tecnicos_display

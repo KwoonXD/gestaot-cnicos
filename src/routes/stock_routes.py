@@ -15,57 +15,84 @@ stock_bp = Blueprint('stock', __name__)
 @login_required
 @admin_required
 def controle_estoque():
+    """
+    Controle de Estoque com filtros SQLAlchemy nativos.
+    
+    REFATORADO (2026-01): Removida filtragem em memória (list comprehensions).
+    Agora usa ILIKE diretamente no banco para performance.
+    """
     # Parâmetros de Filtro
     search = request.args.get('search', '').strip()
-    filter_tecnico_id = request.args.get('tecnico_id')
-    filter_item_id = request.args.get('item_id')
+    filter_tecnico_id = request.args.get('tecnico_id', type=int)
+    filter_item_id = request.args.get('item_id', type=int)
 
-    # 1. Carrega TODAS as listas para os dropdowns (sem filtro)
+    # 1. Query base para Itens (SEMPRE para dropdowns)
     all_itens = ItemLPU.query.filter_by(cliente_id=None).order_by(ItemLPU.nome).all()
+    
+    # 2. Query base para Técnicos (SEMPRE para dropdowns)
     all_tecnicos = TecnicoService.get_all({'status': 'Ativo'}, page=None)
 
-    # 2. Define listas Filtradas para a Tabela
-    filtered_itens = all_itens
-    filtered_tecnicos = all_tecnicos
-
-    # Lógica de Busca Inteligente (Item OU Técnico)
+    # 3. Queries FILTRADAS para a tabela (usando SQLAlchemy ILIKE)
+    itens_query = ItemLPU.query.filter_by(cliente_id=None)
+    tecnicos_query = Tecnico.query.filter_by(status='Ativo')
+    
+    # Aplicar busca via SQL (ILIKE) - PERFORMANCE FIX
     if search:
-        # Verifica matches em ambos
-        items_match = [i for i in all_itens if search.lower() in i.nome.lower()]
-        tecnicos_match = [t for t in all_tecnicos if search.lower() in t.nome.lower() or search.lower() in t.cidade.lower()]
+        search_pattern = f'%{search}%'
+        itens_query = itens_query.filter(ItemLPU.nome.ilike(search_pattern))
+        tecnicos_query = tecnicos_query.filter(
+            db.or_(
+                Tecnico.nome.ilike(search_pattern),
+                Tecnico.cidade.ilike(search_pattern)
+            )
+        )
 
-        if items_match and not tecnicos_match:
-            # Usuário buscou Item -> Filtra colunas, mantém linhas
-            filtered_itens = items_match
-        elif tecnicos_match and not items_match:
-            # Usuário buscou Técnico -> Filtra linhas, mantém colunas
-            filtered_tecnicos = tecnicos_match
-        else:
-            # Ambíguo ou Match em ambos -> Filtra ambos ("E" lógico)
-            filtered_itens = items_match
-            filtered_tecnicos = tecnicos_match
-
-    # Filtros Específicos (Dropdowns) - Sobreescrevem a busca inteligente
+    # Filtros específicos (dropdowns) - Sobreescrevem busca
     if filter_item_id:
-        filtered_itens = [i for i in all_itens if str(i.id) == str(filter_item_id)]
+        itens_query = ItemLPU.query.filter_by(id=filter_item_id, cliente_id=None)
     
     if filter_tecnico_id:
-        filtered_tecnicos = [t for t in all_tecnicos if str(t.id) == str(filter_tecnico_id)]
+        tecnicos_query = Tecnico.query.filter_by(id=filter_tecnico_id)
 
-    # 3. Matriz de Estoque (Carrega tudo para processar em memória - otimização futura: filtrar na query)
-    stock_data = TecnicoStock.query.all()
+    # Executar queries filtradas
+    filtered_itens = itens_query.order_by(ItemLPU.nome).all()
+    filtered_tecnicos = tecnicos_query.order_by(Tecnico.nome).all()
+
+    # 4. Matriz de Estoque - Filtrar apenas técnicos/itens relevantes
+    # Se temos filtros ativos, limitar a query da matriz
+    matrix_query = TecnicoStock.query
+    
+    if filter_tecnico_id:
+        matrix_query = matrix_query.filter_by(tecnico_id=filter_tecnico_id)
+    
+    if filter_item_id:
+        matrix_query = matrix_query.filter_by(item_lpu_id=filter_item_id)
+    
+    # Se busca por texto, filtrar matriz pelos IDs encontrados
+    if search and not filter_tecnico_id and not filter_item_id:
+        tecnico_ids = [t.id for t in filtered_tecnicos]
+        item_ids = [i.id for i in filtered_itens]
+        if tecnico_ids or item_ids:
+            matrix_query = matrix_query.filter(
+                db.or_(
+                    TecnicoStock.tecnico_id.in_(tecnico_ids) if tecnico_ids else False,
+                    TecnicoStock.item_lpu_id.in_(item_ids) if item_ids else False
+                )
+            )
+    
+    stock_data = matrix_query.all()
     matrix = {}
     for s in stock_data:
         if s.tecnico_id not in matrix:
             matrix[s.tecnico_id] = {}
         matrix[s.tecnico_id][s.item_lpu_id] = s.quantidade
 
-    # 4. Contagem de solicitações pendentes
+    # 5. Contagem de solicitações pendentes
     pendentes_reposicao = SolicitacaoReposicao.query.filter_by(status='Pendente').count()
 
     return render_template('stock_control.html',
-        itens=filtered_itens,           # Colunas da Tabela (Filtradas)
-        tecnicos=filtered_tecnicos,     # Linhas da Tabela (Filtradas)
+        itens=filtered_itens,           # Colunas da Tabela (Filtradas via SQL)
+        tecnicos=filtered_tecnicos,     # Linhas da Tabela (Filtradas via SQL)
         all_itens=all_itens,            # Para o Dropdown
         all_tecnicos=all_tecnicos,      # Para o Dropdown
         matrix=matrix,
@@ -320,7 +347,13 @@ def deletar_item(item_id):
 @login_required
 @admin_required
 def relatorio_materiais():
-    """Dashboard com relatório de custos de materiais."""
+    """
+    Dashboard com relatório de custos de materiais.
+    
+    REFATORADO (2026-01): Queries movidas para StockReportService.
+    """
+    from ..services.stock_report_service import StockReportService
+    
     # Período padrão: último mês
     data_fim = datetime.now().date()
     data_inicio = data_fim - timedelta(days=30)
@@ -331,72 +364,20 @@ def relatorio_materiais():
     if request.args.get('data_fim'):
         data_fim = datetime.strptime(request.args.get('data_fim'), '%Y-%m-%d').date()
 
-    # 1. Total de peças usadas no período (movimentações tipo USO)
-    uso_periodo = db.session.query(
-        func.count(StockMovement.id).label('total_movs'),
-        func.sum(StockMovement.quantidade).label('total_pecas')
-    ).filter(
-        StockMovement.tipo_movimento == 'USO',
-        func.date(StockMovement.data_criacao) >= data_inicio,
-        func.date(StockMovement.data_criacao) <= data_fim
-    ).first()
-
-    # 2. Custo total de peças em chamados no período
-    custo_periodo = db.session.query(
-        func.sum(Chamado.custo_peca).label('custo_total')
-    ).filter(
-        Chamado.data_atendimento >= data_inicio,
-        Chamado.data_atendimento <= data_fim,
-        Chamado.custo_peca > 0
-    ).scalar() or 0
-
-    # 3. Top 5 peças mais usadas
-    top_pecas = db.session.query(
-        ItemLPU.nome,
-        ItemLPU.valor_custo,
-        func.sum(StockMovement.quantidade).label('qtd_usada')
-    ).join(
-        StockMovement, StockMovement.item_lpu_id == ItemLPU.id
-    ).filter(
-        StockMovement.tipo_movimento == 'USO',
-        func.date(StockMovement.data_criacao) >= data_inicio,
-        func.date(StockMovement.data_criacao) <= data_fim
-    ).group_by(ItemLPU.id).order_by(func.sum(StockMovement.quantidade).desc()).limit(5).all()
-
-    # 4. Estoque atual em rua (por técnico)
-    estoque_rua = db.session.query(
-        func.sum(TecnicoStock.quantidade).label('total')
-    ).filter(TecnicoStock.quantidade > 0).scalar() or 0
-
-    # 5. Valor total do estoque em rua
-    valor_estoque_rua = db.session.query(
-        func.sum(TecnicoStock.quantidade * ItemLPU.valor_custo).label('valor')
-    ).join(ItemLPU, TecnicoStock.item_lpu_id == ItemLPU.id).filter(
-        TecnicoStock.quantidade > 0
-    ).scalar() or 0
-
-    # 6. Movimentações recentes
-    movimentacoes_recentes = StockMovement.query.filter(
-        func.date(StockMovement.data_criacao) >= data_inicio
-    ).order_by(StockMovement.data_criacao.desc()).limit(20).all()
-
-    # 7. Alertas de estoque baixo (técnicos com saldo <= 1)
-    alertas_estoque = TecnicoStock.query.filter(
-        TecnicoStock.quantidade <= 1,
-        TecnicoStock.quantidade > 0
-    ).all()
+    # Delegar queries para o Service
+    report = StockReportService.get_relatorio_periodo(data_inicio, data_fim)
 
     return render_template('stock_report.html',
-        data_inicio=data_inicio,
-        data_fim=data_fim,
-        total_movs=uso_periodo.total_movs or 0,
-        total_pecas=uso_periodo.total_pecas or 0,
-        custo_periodo=float(custo_periodo),
-        top_pecas=top_pecas,
-        estoque_rua=estoque_rua,
-        valor_estoque_rua=float(valor_estoque_rua),
-        movimentacoes_recentes=movimentacoes_recentes,
-        alertas_estoque=alertas_estoque
+        data_inicio=report['data_inicio'],
+        data_fim=report['data_fim'],
+        total_movs=report['total_movs'],
+        total_pecas=report['total_pecas'],
+        custo_periodo=report['custo_periodo'],
+        top_pecas=report['top_pecas'],
+        estoque_rua=report['estoque_rua'],
+        valor_estoque_rua=report['valor_estoque_rua'],
+        movimentacoes_recentes=report['movimentacoes_recentes'],
+        alertas_estoque=report['alertas_estoque']
     )
 
 
@@ -729,112 +710,12 @@ def api_dashboard_resumo():
     """
     API: Resumo consolidado de métricas de estoque para o dashboard principal.
 
-    Retorna:
-    - Estoque em campo (total e valor)
-    - Peças usadas no mês
-    - Custo de materiais no mês
-    - Alertas de estoque baixo
-    - Solicitações pendentes
-    - Variação de custos
+    REFATORADO (2026-01): Queries movidas para StockReportService.
     """
-    from datetime import timedelta
-
-    hoje = datetime.now().date()
-    inicio_mes = hoje.replace(day=1)
-
-    # 1. Estoque total em campo
-    estoque_stats = db.session.query(
-        func.count(TecnicoStock.id).label('registros'),
-        func.sum(TecnicoStock.quantidade).label('total_pecas'),
-        func.sum(TecnicoStock.quantidade * ItemLPU.valor_custo).label('valor_total')
-    ).join(ItemLPU, TecnicoStock.item_lpu_id == ItemLPU.id).filter(
-        TecnicoStock.quantidade > 0
-    ).first()
-
-    # 2. Uso de peças no mês atual
-    uso_mes = db.session.query(
-        func.count(StockMovement.id).label('movimentacoes'),
-        func.sum(StockMovement.quantidade).label('pecas_usadas')
-    ).filter(
-        StockMovement.tipo_movimento == 'USO',
-        func.date(StockMovement.data_criacao) >= inicio_mes
-    ).first()
-
-    # 3. Custo de materiais em chamados no mês
-    custo_mes = db.session.query(
-        func.sum(Chamado.custo_peca).label('total')
-    ).filter(
-        Chamado.data_atendimento >= inicio_mes,
-        Chamado.custo_peca > 0
-    ).scalar() or 0
-
-    # 4. Alertas de estoque baixo (quantidade <= 1)
-    alertas_baixo = TecnicoStock.query.filter(
-        TecnicoStock.quantidade <= 1,
-        TecnicoStock.quantidade > 0
-    ).count()
-
-    # 5. Solicitações pendentes
-    solicitacoes_pendentes = SolicitacaoReposicao.query.filter_by(status='Pendente').count()
-
-    # 6. Variação de custo (últimos 30 dias)
-    data_30d = hoje - timedelta(days=30)
-    alteracoes_preco = ItemLPUPrecoHistorico.query.filter(
-        func.date(ItemLPUPrecoHistorico.data_alteracao) >= data_30d
-    ).count()
-
-    # 7. Top 3 peças mais usadas no mês
-    top_pecas_mes = db.session.query(
-        ItemLPU.nome,
-        func.sum(StockMovement.quantidade).label('qtd')
-    ).join(
-        StockMovement, StockMovement.item_lpu_id == ItemLPU.id
-    ).filter(
-        StockMovement.tipo_movimento == 'USO',
-        func.date(StockMovement.data_criacao) >= inicio_mes
-    ).group_by(ItemLPU.id).order_by(
-        func.sum(StockMovement.quantidade).desc()
-    ).limit(3).all()
-
-    # 8. Técnicos com mais peças em mãos
-    tecnicos_mais_estoque = db.session.query(
-        Tecnico.nome,
-        func.sum(TecnicoStock.quantidade).label('total')
-    ).join(
-        TecnicoStock, TecnicoStock.tecnico_id == Tecnico.id
-    ).filter(
-        TecnicoStock.quantidade > 0
-    ).group_by(Tecnico.id).order_by(
-        func.sum(TecnicoStock.quantidade).desc()
-    ).limit(3).all()
-
-    return jsonify({
-        'estoque': {
-            'total_pecas': estoque_stats.total_pecas or 0,
-            'valor_total': float(estoque_stats.valor_total or 0),
-            'tecnicos_com_estoque': estoque_stats.registros or 0
-        },
-        'uso_mes': {
-            'movimentacoes': uso_mes.movimentacoes or 0,
-            'pecas_usadas': uso_mes.pecas_usadas or 0,
-            'custo_materiais': float(custo_mes)
-        },
-        'alertas': {
-            'estoque_baixo': alertas_baixo,
-            'solicitacoes_pendentes': solicitacoes_pendentes,
-            'alteracoes_preco_30d': alteracoes_preco
-        },
-        'top_pecas_mes': [
-            {'nome': p.nome, 'quantidade': p.qtd} for p in top_pecas_mes
-        ],
-        'tecnicos_mais_estoque': [
-            {'nome': t.nome, 'quantidade': t.total} for t in tecnicos_mais_estoque
-        ],
-        'periodo': {
-            'inicio_mes': inicio_mes.isoformat(),
-            'hoje': hoje.isoformat()
-        }
-    })
+    from ..services.stock_report_service import StockReportService
+    
+    data = StockReportService.get_dashboard_resumo()
+    return jsonify(data)
 
 
 @stock_bp.route('/api/dashboard/kpis')

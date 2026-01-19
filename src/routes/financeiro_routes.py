@@ -213,9 +213,9 @@ def marcar_como_pago(id):
 def fechamento_lote():
     """
     Fechamento de pagamentos em lote por periodo.
-    OTIMIZADO: Usa query SQL agregada para evitar N+1.
+    
+    REFATORADO (2026-01): Query movida para FinanceiroService.calcular_previa_fechamento().
     """
-    from sqlalchemy import func, case, and_
     from ..models import db
 
     if request.method == 'POST':
@@ -243,6 +243,7 @@ def fechamento_lote():
             
         return redirect(url_for('financeiro.pagamentos'))
 
+    # GET: Obter prévia de fechamento
     periodo_inicio = request.args.get('inicio', '')
     periodo_fim = request.args.get('fim', '')
     tecnicos_display = []
@@ -250,42 +251,9 @@ def fechamento_lote():
     if periodo_inicio and periodo_fim:
         data_inicio = datetime.strptime(periodo_inicio, '%Y-%m-%d').date()
         data_fim = datetime.strptime(periodo_fim, '%Y-%m-%d').date()
-
-        # OTIMIZACAO: Query SQL agregada em vez de N+1
-        # REFATORADO: Removido fallback para Chamado.valor (campo DEPRECATED)
-        val_expr = func.coalesce(Chamado.custo_atribuido, 0)
-
-        from ..models import db
-
-        result = db.session.query(
-            Tecnico.id,
-            Tecnico.nome,
-            func.count(Chamado.id).label('qtd_chamados'),
-            func.sum(val_expr).label('total_previsto')
-        ).join(
-            Chamado, Tecnico.id == Chamado.tecnico_id
-        ).filter(
-            Tecnico.status == 'Ativo',
-            Chamado.status_chamado == 'Concluído',
-            Chamado.status_validacao == 'Aprovado',  # P0: Gate unificado
-            Chamado.pago == False,
-            Chamado.pagamento_id == None,
-            Chamado.data_atendimento >= data_inicio,
-            Chamado.data_atendimento <= data_fim
-        ).group_by(
-            Tecnico.id
-        ).having(
-            func.count(Chamado.id) > 0
-        ).all()
-
-        for row in result:
-            tecnicos_display.append({
-                'id': row[0],
-                'id_tecnico': f"T-{str(row[0]).zfill(3)}",
-                'nome': row[1],
-                'qtd_chamados': row[2],
-                'total_previsto': float(row[3] or 0)
-            })
+        
+        # Delegar query para o Service
+        tecnicos_display = FinanceiroService.calcular_previa_fechamento(data_inicio, data_fim)
 
     return render_template('fechamento_lote.html',
                            tecnicos=tecnicos_display,
