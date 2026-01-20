@@ -1,8 +1,15 @@
 {% extends 'base.html' %}
+{% from 'macros/ui_macros.html' import render_status_badge, render_breadcrumb, money %}
 
 {% block title %}{{ tecnico.nome }} - Detalhes{% endblock %}
 
 {% block content %}
+{{ render_breadcrumb([
+{'label': 'Dashboard', 'href': url_for('operacional.dashboard')},
+{'label': 'Técnicos', 'href': url_for('operacional.tecnicos')},
+{'label': tecnico.nome}
+]) }}
+
 <!-- Profile Hero -->
 <div class="profile-hero mb-4">
     <div class="d-flex align-items-center gap-4 position-relative">

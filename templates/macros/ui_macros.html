@@ -12,13 +12,28 @@ Importar: {% from 'macros/ui_macros.html' import render_status_badge %}
 {% set badge_class = 'bg-primary' %}
 {%- elif status in ['em andamento', 'execução', 'execucao', 'pendente'] -%}
 {% set badge_class = 'bg-warning text-dark' %}
-{%- elif status in ['concluído', 'concluido', 'finalizado', 'pago', 'aprovado', 'spare'] -%}
+{%- elif status in ['concluído', 'concluido', 'finalizado', 'pago', 'aprovado', 'spare', 'ativo'] -%}
 {% set badge_class = 'bg-success' %}
-{%- elif status in ['cancelado', 'reprovado', 'erro', 'recusado'] -%}
+{%- elif status in ['cancelado', 'reprovado', 'erro', 'recusado', 'inativo'] -%}
 {% set badge_class = 'bg-danger' %}
 {%- endif -%}
 
 <span class="badge {{ badge_class }}">{{ status_text }}</span>
+{% endmacro %}
+
+{# Renderiza navegação breadcrumb #}
+{% macro render_breadcrumb(items) %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb mb-0">
+        {% for item in items %}
+        {% if loop.last %}
+        <li class="breadcrumb-item active" aria-current="page">{{ item.label }}</li>
+        {% else %}
+        <li class="breadcrumb-item"><a href="{{ item.href }}" class="text-decoration-none">{{ item.label }}</a></li>
+        {% endif %}
+        {% endfor %}
+    </ol>
+</nav>
 {% endmacro %}
 
 {# Renderiza badge de pagamento #}

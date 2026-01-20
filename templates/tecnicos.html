@@ -1,8 +1,11 @@
 {% extends 'base.html' %}
+{% from 'macros/ui_macros.html' import render_status_badge, render_breadcrumb, render_empty_state %}
 
 {% block title %}Técnicos - Gestão de Técnicos{% endblock %}
 
 {% block content %}
+{{ render_breadcrumb([{'label': 'Dashboard', 'href': url_for('operacional.dashboard')}, {'label': 'Técnicos'}]) }}
+
 <div class="page-header-modern">
     <div>
         <h1><i class="bi bi-people-fill"></i> Técnicos</h1>
@@ -190,9 +193,7 @@
                         <!-- Using contato as proxy for payment info based on screenshot? wait, model says forma_pagamento is a field, but template used contato in col 4?? Let's stick to template logic but maybe fix label if mismatch. -->
                         <!-- Actually, looking at original template line 80: <td>{{ tecnico.contato }}</td> under Header 'Forma Pagamento'?? That seems like a bug in original code too. Leaving as is to be safe or assuming 'contato' holds meaningful info. Let's start with sticking to previous content but fixing layout. -->
                         <td>
-                            <span class="badge bg-{{ 'success' if tecnico.status == 'Ativo' else 'secondary' }}">
-                                {{ tecnico.status }}
-                            </span>
+                            {{ render_status_badge(tecnico.status) }}
                         </td>
                         <td>
                             <!-- REFATORADO (2026-01): total_a_pagar requer cache via get_tecnicos_com_metricas.
