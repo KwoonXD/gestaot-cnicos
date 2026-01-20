@@ -980,3 +980,41 @@ body,
     background: var(--slate-700);
     color: var(--slate-300);
 }
+
+/* =================================================================== */
+/* 📊 TABLE UTILITY CLASSES                                            */
+/* =================================================================== */
+
+/* Colunas numéricas/monetárias - alinhamento e fonte tabular */
+.cell-numeric {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    font-family: 'Inter', sans-serif;
+}
+
+/* Colunas de ações - largura mínima e centralizado */
+.cell-actions {
+    white-space: nowrap;
+    width: 1%;
+    text-align: center;
+}
+
+/* Tabela densa - menos padding para mais dados */
+.table-dense th,
+.table-dense td {
+    padding-top: 0.35rem;
+    padding-bottom: 0.35rem;
+    font-size: 0.85rem;
+}
+
+.table-dense th {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+}
+
+/* Status badges com estilo de status */
+.badge-status {
+    font-size: 0.75rem;
+    text-transform: capitalize;
+}

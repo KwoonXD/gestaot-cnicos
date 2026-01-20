@@ -1,0 +1,41 @@
+{#
+Macros UI padronizadas para uso em templates.
+Importar: {% from 'macros/ui_macros.html' import render_status_badge %}
+#}
+
+{# Renderiza badge de status com cores consistentes #}
+{% macro render_status_badge(status_text) %}
+{% set status = status_text|lower if status_text else '' %}
+{% set badge_class = 'bg-secondary' %}
+
+{%- if status in ['novo', 'aberto'] -%}
+{% set badge_class = 'bg-primary' %}
+{%- elif status in ['em andamento', 'execução', 'execucao', 'pendente'] -%}
+{% set badge_class = 'bg-warning text-dark' %}
+{%- elif status in ['concluído', 'concluido', 'finalizado', 'pago', 'aprovado', 'spare'] -%}
+{% set badge_class = 'bg-success' %}
+{%- elif status in ['cancelado', 'reprovado', 'erro', 'recusado'] -%}
+{% set badge_class = 'bg-danger' %}
+{%- endif -%}
+
+<span class="badge {{ badge_class }}">{{ status_text }}</span>
+{% endmacro %}
+
+{# Renderiza badge de pagamento #}
+{% macro render_payment_badge(is_paid) %}
+{% if is_paid %}
+<span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Pago</span>
+{% else %}
+<span class="badge bg-warning text-dark"><i class="bi bi-clock me-1"></i>Pendente</span>
+{% endif %}
+{% endmacro %}
+
+{# Formata valor monetário #}
+{% macro money(value, prefix='R$ ') %}
+{{ prefix }}{{ "%.2f"|format(value|float if value else 0) }}
+{% endmacro %}
+
+{# Célula de ações com espaçamento padronizado #}
+{% macro action_cell() %}
+<td class="cell-actions">{{ caller() }}</td>
+{% endmacro %}

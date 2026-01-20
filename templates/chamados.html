@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% from 'macros/ui_macros.html' import render_status_badge %}
 
 {% block title %}Chamados - Gestão de Técnicos{% endblock %}
 
@@ -156,17 +157,7 @@
                                     {{ chamado.catalogo_servico.nome if chamado.catalogo_servico else 'Serviço Removido'
                                     }}
                                 </span>
-                                {% if chamado.status_chamado == 'Concluído' %}
-                                <span class="badge bg-success">Concluído</span>
-                                {% elif chamado.status_chamado == 'SPARE' %}
-                                <span class="badge bg-warning text-dark">SPARE</span>
-                                {% elif chamado.status_chamado == 'Pendente' %}
-                                <span class="badge bg-warning">Pendente</span>
-                                {% elif chamado.status_chamado == 'Cancelado' %}
-                                <span class="badge bg-danger">Cancelado</span>
-                                {% else %}
-                                <span class="badge bg-secondary">{{ chamado.status_chamado }}</span>
-                                {% endif %}
+                                {{ render_status_badge(chamado.status_chamado) }}
                             </div>
                         </td>
                         <td>
