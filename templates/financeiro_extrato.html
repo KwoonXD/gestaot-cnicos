@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% from 'macros/ui_macros.html' import render_status_badge, money, render_empty_state %}
 
 {% block title %}Extrato - {{ tecnico.nome }}{% endblock %}
 
@@ -13,7 +14,7 @@
     </div>
     <div class="text-end">
         <div class="display-6 {{ 'text-success' if tecnico.saldo_atual >= 0 else 'text-danger' }}">
-            R$ {{ "%.2f"|format(tecnico.saldo_atual) }}
+            {{ money(tecnico.saldo_atual) }}
         </div>
         <small class="text-muted">Saldo Disponível</small>
     </div>
@@ -28,13 +29,13 @@
                         <th>Data</th>
                         <th>Descrição</th>
                         <th>Tipo</th>
-                        <th class="text-end">Valor</th>
-                        <th class="text-end">Saldo no Momento</th> <!-- Opcional: Calcular running balance -->
+                        <th class="cell-numeric">Valor</th>
+                        <th class="cell-numeric">Saldo</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for l in lancamentos %}
-                    <tr class="{{ 'table-success' if l.tipo in ['CREDITO_SERVICO', 'BONUS', 'REEMBOLSO'] else '' }}">
+                    <tr>
                         <td>{{ l.data.strftime('%d/%m/%Y') }}</td>
                         <td>
                             {{ l.descricao }}
@@ -46,27 +47,26 @@
                             {% endif %}
                         </td>
                         <td>
-                            <span
-                                class="badge {{ 'bg-success' if l.tipo in ['CREDITO_SERVICO', 'BONUS', 'REEMBOLSO'] else 'bg-danger' }}">
+                            {% set is_credit = l.tipo in ['CREDITO_SERVICO', 'BONUS', 'REEMBOLSO'] %}
+                            <span class="badge {{ 'bg-success' if is_credit else 'bg-danger' }}">
                                 {{ l.tipo.replace('_', ' ') }}
                             </span>
                         </td>
                         <td
-                            class="text-end fw-bold {{ 'text-success' if l.tipo in ['CREDITO_SERVICO', 'BONUS', 'REEMBOLSO'] else 'text-danger' }}">
+                            class="cell-numeric fw-bold {{ 'text-success' if l.tipo in ['CREDITO_SERVICO', 'BONUS', 'REEMBOLSO'] else 'text-danger' }}">
                             {% if l.tipo in ['CREDITO_SERVICO', 'BONUS', 'REEMBOLSO'] %}
-                            + R$ {{ "%.2f"|format(l.valor) }}
+                            + {{ money(l.valor) }}
                             {% else %}
-                            - R$ {{ "%.2f"|format(l.valor) }}
+                            - {{ money(l.valor) }}
                             {% endif %}
                         </td>
-                        <td class="text-end text-muted">
-                            <!-- TODO: Running balance requires reverse calculation or storing snapshot -->
-                            -
-                        </td>
+                        <td class="cell-numeric text-muted">-</td>
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="5" class="text-center text-muted py-4">Nenhum lançamento encontrado.</td>
+                        <td colspan="5">
+                            {{ render_empty_state('Nenhum lançamento encontrado', icon='bi-journal-x') }}
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>

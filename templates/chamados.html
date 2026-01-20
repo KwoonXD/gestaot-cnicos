@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% from 'macros/ui_macros.html' import render_status_badge %}
+{% from 'macros/ui_macros.html' import render_status_badge, render_empty_state %}
 
 {% block title %}Chamados - Gestão de Técnicos{% endblock %}
 
@@ -190,9 +190,9 @@
                             </form>
                             {% endif %}
                             {% if current_user.role == 'Admin' and not chamado.pago and not chamado.pagamento_id %}
-                            <button type="button" class="btn btn-sm btn-outline-danger btn-action btn-delete"
-                                title="Excluir" data-id="{{ chamado.id }}"
-                                data-codigo="{{ chamado.codigo_chamado or chamado.id }}">
+                            <button type="button" class="btn btn-sm btn-outline-danger btn-action btn-delete-global"
+                                title="Excluir" data-href="{{ url_for('operacional.deletar_chamado', id=chamado.id) }}"
+                                data-message="Excluir o chamado {{ chamado.codigo_chamado or chamado.id }}?">
                                 <i class="bi bi-trash"></i>
                             </button>
                             {% endif %}
@@ -234,14 +234,12 @@
         </nav>
         {% endif %}
         {% else %}
-        <div class="empty-state text-center py-5">
-            <i class="bi bi-clipboard-x display-1 text-muted opacity-50"></i>
-            <h4 class="mt-4 text-muted fw-bold">Nenhum chamado encontrado</h4>
-            <p class="text-muted mb-4">Adicione um novo atendimento para começar a rastrear sua produção.</p>
-            <a href="{{ url_for('operacional.novo_chamado') }}" class="btn btn-primary btn-lg">
-                <i class="bi bi-plus-lg"></i> Novo Chamado
-            </a>
-        </div>
+        {{ render_empty_state(
+        'Nenhum chamado encontrado',
+        icon='bi-clipboard-x',
+        cta_text='Novo Chamado',
+        cta_url=url_for('operacional.novo_chamado')
+        ) }}
         {% endif %}
     </div>
 </div>
@@ -313,29 +311,6 @@
     </div>
 </div>
 
-<!-- Delete Confirmation Modal (Single, outside loop) -->
-<div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title text-danger"><i class="bi bi-exclamation-triangle me-2"></i>Excluir Chamado</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body text-start">
-                <p>Tem certeza que deseja apagar o chamado <strong id="deleteChamadoCodigo"></strong>?</p>
-                <p class="text-muted small">Esta ação não pode ser desfeita e ficará registrada na auditoria.</p>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <form id="deleteForm" action="" method="POST">
-                    <button type="submit" class="btn btn-danger">
-                        <i class="bi bi-trash me-1"></i>Excluir Permanentemente
-                    </button>
-                </form>
-            </div>
-        </div>
-    </div>
-</div>
 {% endblock %}
 
 
@@ -490,24 +465,6 @@
             console.error(e);
         }
     }
-
-    // Delete Modal Handler (Event Delegation)
-    const deleteModalEl = document.getElementById('deleteModal');
-    const deleteModal = deleteModalEl ? new bootstrap.Modal(deleteModalEl) : null;
-
-    document.addEventListener('click', function (e) {
-        const btn = e.target.closest('.btn-delete');
-        if (btn && deleteModal) {
-            const id = btn.dataset.id;
-            const codigo = btn.dataset.codigo;
-
-            // Populate modal
-            document.getElementById('deleteChamadoCodigo').textContent = codigo;
-            document.getElementById('deleteForm').action = `/chamados/${id}/delete`;
-
-            deleteModal.show();
-        }
-    });
 
     // Density Toggle (Compact Table Mode)
     const densityBtn = document.getElementById('btnDensityToggle');

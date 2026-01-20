@@ -39,3 +39,16 @@ Importar: {% from 'macros/ui_macros.html' import render_status_badge %}
 {% macro action_cell() %}
 <td class="cell-actions">{{ caller() }}</td>
 {% endmacro %}
+
+{# Estado vazio para tabelas/listas sem dados #}
+{% macro render_empty_state(message, icon='bi-inbox', cta_text=None, cta_url=None) %}
+<div class="empty-state text-center py-5">
+    <i class="bi {{ icon }} display-1 text-muted opacity-50"></i>
+    <h4 class="mt-4 text-muted fw-bold">{{ message }}</h4>
+    {% if cta_text and cta_url %}
+    <a href="{{ cta_url }}" class="btn btn-primary btn-lg mt-3">
+        <i class="bi bi-plus-lg me-1"></i>{{ cta_text }}
+    </a>
+    {% endif %}
+</div>
+{% endmacro %}

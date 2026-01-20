@@ -156,3 +156,23 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 });
+
+// --- Global Delete Modal Handler ---
+document.addEventListener('click', function(e) {
+    const btn = e.target.closest('.btn-delete-global');
+    if (!btn) return;
+    
+    e.preventDefault();
+    
+    const deleteModalEl = document.getElementById('globalDeleteModal');
+    if (!deleteModalEl) return;
+    
+    const modal = new bootstrap.Modal(deleteModalEl);
+    const href = btn.dataset.href || btn.getAttribute('href');
+    const message = btn.dataset.message || 'Tem certeza que deseja excluir este item?';
+    
+    document.getElementById('globalDeleteMessage').textContent = message;
+    document.getElementById('globalDeleteForm').action = href;
+    
+    modal.show();
+});
