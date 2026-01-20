@@ -20,63 +20,33 @@ class StockService:
 
     @staticmethod
     def _update_stock(tecnico_id, item_id, delta, user_id, tipo, obs=None, custo_unitario=None, chamado_id=None):
-        """
-        Atualiza estoque do técnico e registra movimento.
-        
-        REFATORADO (2026-01): 
-        1. Row locking para evitar race condition (saldo negativo).
-        2. Retry on creation para evitar IntegrityError (creation race).
-        3. Suporte a chamado_id para rastreabilidade unificada.
-        
-        Args:
-            tecnico_id: ID do técnico
-            item_id: ID do ItemLPU
-            delta: Quantidade (positivo = entrada, negativo = saída)
-            user_id: ID do usuário que está fazendo a operação
-            tipo: Tipo de movimento (ENVIO, DEVOLUCAO, USO, AJUSTE)
-            obs: Observação opcional
-            custo_unitario: Custo unitário para auditoria
-            chamado_id: ID do chamado vinculado (opcional)
-            
-        Returns:
-            TecnicoStock atualizado
-            
-        Raises:
-            ValueError: Se saldo resultante for negativo
-        """
+        """Atualiza estoque com row-locking e registra movimento."""
         MAX_RETRIES = 3
         for attempt in range(MAX_RETRIES):
             try:
-                # 1. Tentar buscar com LOCK
-                stock = TecnicoStock.query.filter_by(tecnico_id=tecnico_id, item_lpu_id=item_id).with_for_update().first()
+                stock = TecnicoStock.query.filter_by(
+                    tecnico_id=tecnico_id, item_lpu_id=item_id
+                ).with_for_update().first()
                 
                 if not stock:
-                    # Se não existe, cria (insert)
-                    # Pode falhar com IntegrityError se outra thread criar neste exato momento
                     try:
-                        # Criar savepoint para isolar falha do INSERT
-                        db.session.begin_nested() 
+                        db.session.begin_nested()
                         stock = TecnicoStock(tecnico_id=tecnico_id, item_lpu_id=item_id, quantidade=0)
                         db.session.add(stock)
-                        db.session.flush() # Força INSERT
-                        # Se passou aqui, insert ok. COMMIT do savepoint ocorre automaticamente no exit do begin_nested (sucesso)
+                        db.session.flush()
                     except Exception:
-                        # Se falhou (duplicate key), rollback do savepoint e retry loop
-                        db.session.rollback() # Rollback do savepoint
+                        db.session.rollback()
                         if attempt < MAX_RETRIES - 1:
-                            continue # Tenta de novo (agora deve achar no SELECT)
-                        raise # Se excedeu retries, explode
+                            continue
+                        raise
                         
-                # 2. Calcular novo saldo
                 novo_saldo = stock.quantidade + delta
                 
-                # 3. Validação: Não permitir saldo negativo
                 if novo_saldo < 0:
                     item = ItemLPU.query.get(item_id)
                     item_nome = item.nome if item else f"ID-{item_id}"
                     raise ValueError(
-                        f"Saldo insuficiente: {item_nome} ficaria com {novo_saldo}. "
-                        f"Saldo atual: {stock.quantidade}, Solicitado: {abs(delta)}"
+                        f"Saldo insuficiente: {item_nome}. Atual: {stock.quantidade}, Solicitado: {abs(delta)}"
                     )
                 
                 stock.quantidade = novo_saldo
@@ -337,3 +307,16 @@ class StockService:
             'valor_imobilizado': _format_money(valor_total),
             'alertas_estoque_baixo': alertas
         }
+
+    @staticmethod
+    def get_alertas_dashboard(limite_minimo: int = 10):
+        """Retorna itens com estoque consolidado abaixo do limite."""
+        from ..models import ItemLPU, TecnicoStock
+        
+        result = db.session.query(
+            ItemLPU.nome,
+            func.sum(TecnicoStock.quantidade).label('total')
+        ).join(TecnicoStock).group_by(ItemLPU.id)\
+         .having(func.sum(TecnicoStock.quantidade) < limite_minimo).all()
+        
+        return result

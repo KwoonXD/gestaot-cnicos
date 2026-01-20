@@ -13,11 +13,8 @@ from marshmallow import Schema, fields, validate, ValidationError, pre_load, EXC
 
 @dataclass
 class TecnicoMetricas:
-    """
-    Metricas agregadas de um tecnico, calculadas via SQL em batch.
-    Substitui as @property que causavam N+1 queries.
-    """
-    tecnico: Any  # Objeto Tecnico ORM
+    """DTO com métricas agregadas do técnico."""
+    tecnico: Any
 
     # Contadores
     total_atendimentos: int = 0
@@ -77,7 +74,7 @@ class TecnicoMetricas:
         return self._pending_fsas
 
     def __getattr__(self, name):
-        """Proxy para atributos do tecnico ORM."""
+        """Proxy para atributos do Tecnico ORM."""
         return getattr(self.tecnico, name)
 
 # Validation Schema
@@ -116,13 +113,9 @@ tecnico_schema = TecnicoSchema()
 
 class TecnicoService:
 
-    # ==========================================================================
-    # CONDICOES SQL REUTILIZAVEIS (DRY)
-    # ==========================================================================
-
     @staticmethod
     def _chamado_pendente_condition():
-        """Condicao SQL para chamados pendentes de pagamento."""
+        """Condição SQL para chamados pendentes de pagamento."""
         return and_(
             Chamado.status_chamado.in_(['Concluído', 'SPARE']),
             Chamado.status_validacao == 'Aprovado',
@@ -132,13 +125,8 @@ class TecnicoService:
 
     @staticmethod
     def _valor_chamado_expr():
-        """Expressao SQL para valor do chamado (custo_atribuido)."""
-        # REFATORADO: Removido fallback para Chamado.valor (campo DEPRECATED)
+        """Expressão SQL para valor do chamado."""
         return func.coalesce(Chamado.custo_atribuido, 0)
-
-    # ==========================================================================
-    # METODO PRINCIPAL: GET TECNICOS COM METRICAS (UMA UNICA QUERY SQL)
-    # ==========================================================================
 
     @staticmethod
     def get_tecnicos_com_metricas(
@@ -147,19 +135,7 @@ class TecnicoService:
         per_page: int = 20,
         include_subs: bool = True
     ) -> Dict[str, Any]:
-        """
-        Busca tecnicos com TODAS as metricas agregadas em UMA UNICA query SQL.
-        Resolve o problema N+1 de forma definitiva.
-
-        Args:
-            filters: Filtros (search, estado, pagamento, status)
-            page: Pagina atual (None para todos)
-            per_page: Itens por pagina
-            include_subs: Se True, calcula totais de sub-tecnicos
-
-        Returns:
-            Dict com 'items' (lista de TecnicoMetricas), 'pagination' e metadados
-        """
+        """Busca técnicos com métricas agregadas em única query SQL."""
         val_expr = TecnicoService._valor_chamado_expr()
         pend_cond = TecnicoService._chamado_pendente_condition()
 
@@ -577,3 +553,17 @@ class TecnicoService:
                 codes.extend(extras)
 
         return sorted(list(set(codes)))
+
+    @staticmethod
+    def get_distribuicao_geografica():
+        """Retorna contagem de técnicos ativos por estado."""
+        result = db.session.query(
+            Tecnico.estado, func.count(Tecnico.id)
+        ).filter(
+            Tecnico.status == 'Ativo',
+            Tecnico.estado != ''
+        ).group_by(Tecnico.estado).all()
+        
+        data = [(e if e else 'Indefinido', c) for e, c in result]
+        data.sort(key=lambda x: x[1], reverse=True)
+        return data

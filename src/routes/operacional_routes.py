@@ -60,28 +60,9 @@ def get_tipos_servico():
 @operacional_bp.route('/')
 @login_required
 def dashboard():
-    """
-    Dashboard Estrategico de Lucratividade.
-    Foco em: Margem, Eficiencia e Alertas.
-    """
-    # =========================================================================
-    # KPIs ESTRATEGICOS (Fonte unica de verdade)
-    # =========================================================================
     kpis = ReportService.get_dashboard_kpis()
-
-    # =========================================================================
-    # DADOS COMPLEMENTARES (Apenas o necessario)
-    # =========================================================================
-    # Ultimos chamados para timeline
     ultimos_chamados = ChamadoService.get_dashboard_stats().get('ultimos', [])
-
-    # Alertas de estoque critico
-    estoque_baixo_limit = 10
-    alertas_estoque = db.session.query(
-        ItemLPU.nome,
-        func.sum(TecnicoStock.quantidade).label('total')
-    ).join(TecnicoStock).group_by(ItemLPU.id)\
-    .having(func.sum(TecnicoStock.quantidade) < estoque_baixo_limit).all()
+    alertas_estoque = StockService.get_alertas_dashboard(limite_minimo=10)
 
     return render_template('dashboard.html',
         kpis=kpis,
@@ -92,12 +73,6 @@ def dashboard():
 @operacional_bp.route('/tecnicos')
 @login_required
 def tecnicos():
-    """
-    Listagem de técnicos com métricas agregadas.
-    
-    REFATORADO (2026-01): Usa get_tecnicos_com_metricas() para evitar N+1 queries.
-    Retorna TecnicoMetricas DTO que possui todos os valores pré-calculados.
-    """
     page = request.args.get('page', 1, type=int)
     filters = {
         'estado': request.args.get('estado', ''),
@@ -128,22 +103,9 @@ def tecnicos():
     all_states = [m.tecnico.estado for m in metricas_list if m.tecnico.estado] 
     estados_usados = sorted(list(set(all_states)))
     
-    # Saved Views
     saved_views = SavedViewService.get_for_user(current_user.id, 'tecnicos')
-    
-    # Available Tags
     available_tags = TagService.get_all_unique()
-
-    # Capilaridade Stats (query separada - OK, é agregação simples)
-    tecnicos_por_estado = db.session.query(
-        Tecnico.estado, func.count(Tecnico.id)
-    ).filter(
-        Tecnico.status == 'Ativo',
-        Tecnico.estado != ''
-    ).group_by(Tecnico.estado).all()
-    
-    tecnicos_por_estado = [(e if e else 'Indefinido', c) for e, c in tecnicos_por_estado]
-    tecnicos_por_estado.sort(key=lambda x: x[1], reverse=True)
+    tecnicos_por_estado = TecnicoService.get_distribuicao_geografica()
 
     # Criar objeto de paginação compatível com template
     class PaginationShim:
