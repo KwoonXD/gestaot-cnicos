@@ -299,15 +299,22 @@
             <!-- Ações Rápidas -->
             <div class="action-panel mb-4">
                 <div class="panel-title">Ações Rápidas</div>
-                <div class="d-grid gap-2">
-                    <a href="{{ url_for('operacional.novo_chamado') }}" class="btn btn-outline-primary">
-                        <i class="bi bi-plus-lg me-2"></i>Novo Chamado
+                <div class="d-flex flex-column gap-2">
+                    <a href="{{ url_for('operacional.novo_chamado') }}" class="action-panel-btn">
+                        <i class="bi bi-plus-circle text-primary"></i>
+                        <span>Novo Chamado</span>
                     </a>
-                    <a href="{{ url_for('operacional.novo_tecnico') }}" class="btn btn-outline-success">
-                        <i class="bi bi-person-plus me-2"></i>Novo Técnico
+                    <a href="{{ url_for('operacional.novo_tecnico') }}" class="action-panel-btn">
+                        <i class="bi bi-person-plus text-success"></i>
+                        <span>Novo Técnico</span>
                     </a>
-                    <a href="{{ url_for('financeiro.pagamentos') }}" class="btn btn-outline-warning">
-                        <i class="bi bi-cash-stack me-2"></i>Gerar Pagamento
+                    <a href="{{ url_for('financeiro.pagamentos') }}" class="action-panel-btn">
+                        <i class="bi bi-cash-stack text-warning"></i>
+                        <span>Gerar Pagamento</span>
+                    </a>
+                    <a href="{{ url_for('operacional.chamados') }}" class="action-panel-btn">
+                        <i class="bi bi-list-ul text-secondary"></i>
+                        <span>Ver Todos os Chamados</span>
                     </a>
                 </div>
             </div>
