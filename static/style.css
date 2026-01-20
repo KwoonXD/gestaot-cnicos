@@ -1,5 +1,40 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
+/* =================================================================== */
+/* 🖱️ CUSTOM SCROLLBARS (Native app feel)                             */
+/* =================================================================== */
+
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+[data-bs-theme="dark"] ::-webkit-scrollbar-track {
+    background: #1e293b;
+}
+
+[data-bs-theme="dark"] ::-webkit-scrollbar-thumb {
+    background: #475569;
+}
+
+[data-bs-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+    background: #64748b;
+}
+
 :root {
     /* ================================================= */
     /* 🎨 SUA IDENTIDADE VISUAL (ALTERE AQUI)         */
@@ -1173,4 +1208,175 @@ body,
 
 [data-bs-theme="dark"] .form-card .card-footer {
     background: var(--slate-800);
+}
+
+/* =================================================================== */
+/* 🚀 LAUNCHER DASHBOARD (Action Cards)                               */
+/* =================================================================== */
+
+.hover-elevate {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.hover-elevate:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+    cursor: pointer;
+}
+
+.action-icon {
+    width: 80px;
+    height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.5rem;
+}
+
+.action-icon-sm {
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+}
+
+[data-bs-theme="dark"] .hover-elevate:hover {
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.4) !important;
+}
+
+/* =================================================================== */
+/* 📊 KPI CARD SMALL (Compact dashboard indicators)                    */
+/* =================================================================== */
+
+.kpi-card-sm {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    background: var(--bs-card-bg);
+    border-radius: 0.75rem;
+    box-shadow: var(--card-shadow);
+}
+
+.kpi-card-sm .kpi-icon {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    background: currentColor;
+    background: rgba(var(--bs-primary-rgb), 0.1);
+    border-radius: 0.5rem;
+}
+
+.kpi-card-sm .kpi-icon.text-primary {
+    background: rgba(var(--bs-primary-rgb), 0.1);
+}
+
+.kpi-card-sm .kpi-icon.text-success {
+    background: rgba(var(--bs-success-rgb), 0.1);
+}
+
+.kpi-card-sm .kpi-icon.text-warning {
+    background: rgba(var(--bs-warning-rgb), 0.15);
+}
+
+.kpi-card-sm .kpi-icon.text-danger {
+    background: rgba(var(--bs-danger-rgb), 0.1);
+}
+
+.kpi-card-sm .kpi-icon.text-secondary {
+    background: rgba(var(--bs-secondary-rgb), 0.1);
+}
+
+.kpi-card-sm .kpi-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.kpi-card-sm .kpi-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--bs-body-color);
+}
+
+.kpi-card-sm .kpi-label {
+    font-size: 0.75rem;
+    color: var(--slate-500);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    margin-top: 0.25rem;
+}
+
+/* =================================================================== */
+/* 🔒 PRIVACY BLUR (Click to reveal financial values)                  */
+/* =================================================================== */
+
+.privacy-blur {
+    filter: blur(5px);
+    user-select: none;
+    transition: filter 0.3s ease;
+    cursor: pointer;
+    position: relative;
+}
+
+.privacy-blur:hover,
+.privacy-blur.visible {
+    filter: blur(0);
+}
+
+/* Wrapper for value + eye icon */
+.privacy-value {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.privacy-value .privacy-icon {
+    font-size: 0.875rem;
+    opacity: 0.5;
+    transition: opacity 0.2s;
+}
+
+.privacy-value:hover .privacy-icon {
+    opacity: 1;
+}
+
+.privacy-value.visible .privacy-icon::before {
+    content: "\F341";
+    /* bi-eye-fill */
+}
+
+/* Financial card with gold accent */
+.financial-card {
+    border-left: 4px solid #d4af37 !important;
+    background: linear-gradient(135deg, rgba(212, 175, 55, 0.03) 0%, transparent 50%);
+}
+
+.financial-card .card-body {
+    padding: 1.5rem;
+}
+
+.financial-card .financial-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--slate-500);
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.financial-card .financial-value {
+    font-size: 1.75rem;
+    font-weight: 700;
+}
+
+.financial-card .financial-footer {
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--bs-border-color);
 }

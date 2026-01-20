@@ -12,6 +12,7 @@ from ..services.tag_service import TagService
 from ..services.saved_view_service import SavedViewService
 from ..services.import_service import ImportService
 from ..services.report_service import ReportService
+from ..services.stock_service import StockService
 from ..decorators import admin_required
 
 operacional_bp = Blueprint('operacional', __name__)
