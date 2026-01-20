@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Página Não Encontrada | WT</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
+</head>
+
+<body class="bg-light">
+    <div class="min-vh-100 d-flex align-items-center justify-content-center p-4">
+        <div class="text-center" style="max-width: 400px;">
+            <!-- Icon -->
+            <div class="mb-4">
+                <div class="rounded-circle bg-warning bg-opacity-10 d-inline-flex align-items-center justify-content-center"
+                    style="width: 120px; height: 120px;">
+                    <i class="bi bi-signpost-split text-warning" style="font-size: 3.5rem;"></i>
+                </div>
+            </div>
+
+            <!-- Error Code -->
+            <h1 class="display-1 fw-bold text-warning mb-0">404</h1>
+
+            <!-- Message -->
+            <h4 class="fw-bold text-dark mt-3 mb-2">Página Não Encontrada</h4>
+            <p class="text-muted mb-4">
+                A página ou registro que você procura não existe ou foi movido.
+                Verifique o endereço ou volte para o início.
+            </p>
+
+            <!-- Actions -->
+            <div class="d-flex flex-column flex-sm-row gap-2 justify-content-center">
+                <a href="{{ url_for('operacional.dashboard') }}" class="btn btn-primary px-4">
+                    <i class="bi bi-house me-2"></i>Voltar ao Início
+                </a>
+                <button onclick="history.back()" class="btn btn-outline-secondary px-4">
+                    <i class="bi bi-arrow-left me-2"></i>Página Anterior
+                </button>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

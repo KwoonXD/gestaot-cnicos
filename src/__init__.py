@@ -99,4 +99,19 @@ def create_app():
     
     app.register_blueprint(public_bp)
     
+    # Error Handlers
+    @app.errorhandler(403)
+    def forbidden_error(error):
+        return render_template('403.html'), 403
+    
+    @app.errorhandler(404)
+    def not_found_error(error):
+        return render_template('404.html'), 404
+    
+    @app.errorhandler(500)
+    def internal_error(error):
+        db.session.rollback()
+        app.logger.error(f'Server Error: {error}')
+        return render_template('500.html'), 500
+    
     return app
