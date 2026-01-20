@@ -99,19 +99,20 @@ def create_app():
     
     app.register_blueprint(public_bp)
     
-    # Error Handlers
+    # Registro de Páginas de Erro Personalizadas
+    @app.errorhandler(401)
     @app.errorhandler(403)
-    def forbidden_error(error):
+    def erro_permissao(e):
         return render_template('403.html'), 403
-    
+
     @app.errorhandler(404)
-    def not_found_error(error):
+    def pagina_nao_encontrada(e):
         return render_template('404.html'), 404
-    
+
     @app.errorhandler(500)
-    def internal_error(error):
-        db.session.rollback()
-        app.logger.error(f'Server Error: {error}')
+    def erro_servidor(e):
+        # Opcional: Adicionar log de erro aqui
+        app.logger.error(f'Server Error: {e}')
         return render_template('500.html'), 500
     
     return app

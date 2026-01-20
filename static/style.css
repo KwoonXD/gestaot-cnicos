@@ -1419,3 +1419,25 @@ body,
         border-right: 1px solid var(--bs-border-color) !important;
     }
 }
+
+/* Ajuste Mobile */
+@media (max-width: 768px) {
+
+    .container,
+    .container-fluid {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+
+    .kpi-card,
+    .kpi-card-sm {
+        margin-bottom: 1rem;
+    }
+
+    /* Força rolagem suave em tabelas no mobile */
+    .table-responsive {
+        -webkit-overflow-scrolling: touch;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+}
