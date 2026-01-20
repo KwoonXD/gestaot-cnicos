@@ -101,17 +101,13 @@ def test_stock_usage_concurrency(app):
     def consume_stock():
         with app.app_context():
             try:
-                # Bypass Chamado creation for simpler unit test, calling internal logic if possible
-                # or finding a way to invoke usage.
-                # Since registrar_uso_chamado needs a Chamado, we mock or allow generic usage.
-                # For this test, we accept we are testing `_update_stock` mainly.
-                StockService.ajustar_saldo(
+                # Use devolver_tecnico_para_sede for atomic decrement (1 unit)
+                StockService.devolver_tecnico_para_sede(
                     tecnico_id=t_id,
                     item_id=i_id,
-                    quantidade_real=None, # Not absolute
-                    delta_quantidade=-1, # Decrement 1
+                    qtd=1,
                     user_id=u_id,
-                    motivo="Simulated Usage"
+                    obs="Simulated Usage"
                 )
                 return True
             except Exception:

@@ -92,33 +92,49 @@ def dashboard():
 @operacional_bp.route('/tecnicos')
 @login_required
 def tecnicos():
-    page = request.args.get('page', 1, type=int) # Captura a página
+    """
+    Listagem de técnicos com métricas agregadas.
+    
+    REFATORADO (2026-01): Usa get_tecnicos_com_metricas() para evitar N+1 queries.
+    Retorna TecnicoMetricas DTO que possui todos os valores pré-calculados.
+    """
+    page = request.args.get('page', 1, type=int)
     filters = {
         'estado': request.args.get('estado', ''),
         'cidade': request.args.get('cidade', ''),
         'status': request.args.get('status', ''),
         'pagamento': request.args.get('pagamento', ''),
         'search': request.args.get('search', ''),
-        'tag': request.args.get('tag', '') # New filter
+        'tag': request.args.get('tag', '')
     }
     
-    # Chama o serviço passando a página
-    pagination = TecnicoService.get_all(filters, page=page, per_page=20)
-    tecnicos_list = pagination.items # Extrai a lista da página atual
+    # REFATORADO: Usar get_tecnicos_com_metricas() em vez de get_all()
+    # Isso retorna TecnicoMetricas DTOs com total_a_pagar_agregado já calculado
+    result = TecnicoService.get_tecnicos_com_metricas(
+        filters=filters, 
+        page=page, 
+        per_page=20
+    )
     
-    # Get states for dropdown
-    # Nota: Idealmente isso viria de cache ou query distinct, mas ok para agora
-    all_states = [t.estado for t in tecnicos_list if t.estado] 
+    # result['items'] = lista de TecnicoMetricas
+    # result['pagination'] = dict com info de paginação ou None
+    metricas_list = result['items']
+    pagination_info = result.get('pagination')
+    
+    # Para compatibilidade com template, passamos os objetos como lista
+    # O template pode acessar m.tecnico para dados do Model ou m.total_a_pagar_agregado
+    
+    # Get states for dropdown (usando os técnicos retornados)
+    all_states = [m.tecnico.estado for m in metricas_list if m.tecnico.estado] 
     estados_usados = sorted(list(set(all_states)))
     
     # Saved Views
     saved_views = SavedViewService.get_for_user(current_user.id, 'tecnicos')
     
-    # Available Tags (for filter dropdown if needed, though usually typing is easier or a separate endpoint)
-    # For now, we can get unique tags to show in filter dropdown if desired.
+    # Available Tags
     available_tags = TagService.get_all_unique()
 
-    # Capilaridade Stats
+    # Capilaridade Stats (query separada - OK, é agregação simples)
     tecnicos_por_estado = db.session.query(
         Tecnico.estado, func.count(Tecnico.id)
     ).filter(
@@ -126,16 +142,38 @@ def tecnicos():
         Tecnico.estado != ''
     ).group_by(Tecnico.estado).all()
     
-    # Convert to dict for easier access if needed, or list of tuples is fine
-    # Let's clean up state names if null
     tecnicos_por_estado = [(e if e else 'Indefinido', c) for e, c in tecnicos_por_estado]
-    
-    # Sort by count desc
     tecnicos_por_estado.sort(key=lambda x: x[1], reverse=True)
 
+    # Criar objeto de paginação compatível com template
+    class PaginationShim:
+        """Shim para compatibilidade com template existente."""
+        def __init__(self, items, info):
+            self.items = items
+            self.page = info.get('page', 1) if info else 1
+            self.pages = info.get('pages', 1) if info else 1
+            self.total = info.get('total', len(items)) if info else len(items)
+            self.has_next = info.get('has_next', False) if info else False
+            self.has_prev = info.get('has_prev', False) if info else False
+            self.next_num = info.get('next_num') if info else None
+            self.prev_num = info.get('prev_num') if info else None
+        
+        def iter_pages(self, left_edge=1, right_edge=1, left_current=2, right_current=2):
+            last = 0
+            for num in range(1, self.pages + 1):
+                if num <= left_edge or \
+                   (num > self.page - left_current - 1 and num < self.page + right_current) or \
+                   num > self.pages - right_edge:
+                    if last + 1 != num:
+                        yield None
+                    yield num
+                    last = num
+
+    pagination = PaginationShim(metricas_list, pagination_info)
+
     return render_template('tecnicos.html',
-        tecnicos=tecnicos_list,
-        pagination=pagination,  # Passamos o objeto de paginação
+        tecnicos=metricas_list,  # Lista de TecnicoMetricas
+        pagination=pagination,
         estados=ESTADOS_BRASIL,
         estados_usados=estados_usados,
         formas_pagamento=FORMAS_PAGAMENTO,

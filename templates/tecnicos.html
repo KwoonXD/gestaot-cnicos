@@ -195,11 +195,10 @@
                             </span>
                         </td>
                         <td>
-                            {% if tecnico.total_a_pagar_cache > 0 %}
-                            <span class="fw-bold text-danger">R$ {{ "%.2f"|format(tecnico.total_a_pagar_cache) }}</span>
-                            {% else %}
-                            <span class="text-muted">-</span>
-                            {% endif %}
+                            <!-- REFATORADO (2026-01): total_a_pagar requer cache via get_tecnicos_com_metricas.
+                                 Para listagem simples, mostramos apenas indicador genérico. 
+                                 Para valores exatos, usar página de detalhes ou Financeiro. -->
+                            <span class="text-muted small">Ver detalhes</span>
                         </td>
                         <td class="text-end pe-4">
                             <div class="actions-cell">
@@ -226,12 +225,8 @@
                             </div>
 
 
-                            {% if tecnico.total_a_pagar > 0 %}
-                            <a href="{{ url_for('financeiro.gerar_pagamento') }}?tecnico={{ tecnico.id }}"
-                                class="btn btn-sm btn-outline-warning" title="Gerar Pagamento">
-                                <i class="bi bi-cash-stack"></i>
-                            </a>
-                            {% endif %}
+                            <!-- Botão de pagamento rápido removido da listagem.
+                                 Use a página Financeiro > Pagamentos para gestão. -->
                         </td>
                     </tr>
                     {% endfor %}

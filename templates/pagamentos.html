@@ -205,10 +205,14 @@
                                     </a>
                                 </td>
                                 <td>
+                                    {% if pagamento.tecnico %}
                                     <a href="{{ url_for('operacional.tecnico_detalhes', id=pagamento.tecnico.id) }}"
                                         class="text-decoration-none">
                                         {{ pagamento.tecnico.nome }}
                                     </a>
+                                    {% else %}
+                                    <span class="text-muted">Técnico removido</span>
+                                    {% endif %}
                                 </td>
                                 <td>{{ pagamento.periodo_inicio.strftime('%d/%m') }} - {{
                                     pagamento.periodo_fim.strftime('%d/%m/%Y') }}</td>
@@ -251,7 +255,8 @@
                                                     data-bs-dismiss="modal"></button>
                                             </div>
                                             <div class="modal-body">
-                                                <p>Confirmar pagamento para <strong>{{ pagamento.tecnico.nome
+                                                <p>Confirmar pagamento para <strong>{{ pagamento.tecnico.nome if
+                                                        pagamento.tecnico else 'Técnico removido'
                                                         }}</strong>?</p>
                                                 <p class="mb-3">
                                                     <strong>Valor:</strong> R$ {{ "%.2f"|format(pagamento.valor_total)
