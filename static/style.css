@@ -1380,3 +1380,42 @@ body,
     padding-top: 0.75rem;
     border-top: 1px solid var(--bs-border-color);
 }
+
+/* =================================================================== */
+/* 🎯 FINALIZAÇÃO UX - CLASSES PADRÃO                                  */
+/* =================================================================== */
+
+/* Icon Box for KPIs */
+.icon-box {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    font-size: 1.5rem;
+}
+
+/* Login Screen */
+.login-body {
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.login-card {
+    width: 100%;
+    max-width: 400px;
+    border: none;
+    border-radius: 16px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+}
+
+/* Border separator for md screens */
+@media (min-width: 768px) {
+    .border-end-md {
+        border-right: 1px solid var(--bs-border-color) !important;
+    }
+}
