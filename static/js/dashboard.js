@@ -123,4 +123,32 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             });
         });
+
+    // --- 4. Status dos Chamados (Doughnut) ---
+    const statusCtx = document.getElementById('chartChamadosStatus');
+    if (statusCtx) {
+        new Chart(statusCtx.getContext('2d'), {
+            type: 'doughnut',
+            data: {
+                labels: ['Concluído', 'Pendente', 'Em Andamento', 'Cancelado'],
+                datasets: [{
+                    data: [65, 20, 10, 5],
+                    backgroundColor: [successColor, warningColor, primaryColor, dangerColor],
+                    borderWidth: 0,
+                    hoverOffset: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                cutout: '60%',
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { usePointStyle: true, padding: 12, font: { size: 11 } }
+                    }
+                }
+            }
+        });
+    }
 });

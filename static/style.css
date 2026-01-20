@@ -1018,3 +1018,34 @@ body,
     font-size: 0.75rem;
     text-transform: capitalize;
 }
+
+/* =================================================================== */
+/* 📋 ACTION PANEL (Dashboard Quick Actions)                           */
+/* =================================================================== */
+
+.action-panel {
+    background: var(--bs-card-bg);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 1rem;
+    padding: 1.25rem;
+    box-shadow: var(--card-shadow);
+}
+
+.action-panel .panel-title {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--slate-500);
+    font-weight: 700;
+    margin-bottom: 1rem;
+}
+
+.action-panel .btn {
+    text-align: left;
+    justify-content: flex-start;
+}
+
+[data-bs-theme="dark"] .action-panel {
+    background: var(--slate-800);
+    border-color: var(--slate-700);
+}
