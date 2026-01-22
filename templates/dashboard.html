@@ -1,154 +1,127 @@
 {% extends 'base.html' %}
-{% from 'macros/ui_macros.html' import render_status_badge, money %}
+{% from 'macros/ui_macros.html' import render_greeting, money %}
 
 {% block title %}Visão Geral{% endblock %}
 
 {% block content %}
-<div class="row g-4 mb-4">
-    <div class="col-6 col-md-3">
-        <div class="kpi-card-sm border-primary">
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <span class="text-muted small fw-bold text-uppercase">Em Aberto</span>
-                    <h2 class="mb-0 fw-bold text-dark">{{ kpis.financeiro.volume_chamados if kpis else 0 }}</h2>
-                </div>
-                <div class="icon-box bg-primary bg-opacity-10 text-primary">
+<div class="mb-4">
+    <h3 class="fw-bold">Olá, {{ current_user.nome }} 👋</h3>
+    <p class="text-muted">Visão geral da operação.</p>
+</div>
+
+<!-- Cards Operacionais -->
+<div class="row mb-4">
+    <div class="col-12 col-md-3 mb-3 mb-md-0">
+        <div class="card card-metric h-100 p-3 shadow-sm">
+            <div class="d-flex align-items-center">
+                <div class="icon-box bg-primary bg-opacity-10 text-primary me-3">
                     <i class="bi bi-inbox"></i>
                 </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3">
-        <div class="kpi-card-sm border-warning">
-            <div class="d-flex justify-content-between align-items-center">
                 <div>
-                    <span class="text-muted small fw-bold text-uppercase">Em Andamento</span>
-                    <h2 class="mb-0 fw-bold text-dark">{{ kpis.backlog.quantidade if kpis else 0 }}</h2>
-                </div>
-                <div class="icon-box bg-warning bg-opacity-10 text-warning">
-                    <i class="bi bi-gear"></i>
+                    <h6 class="text-muted text-uppercase small mb-1">Abertos</h6>
+                    <h3 class="mb-0 fw-bold text-dark">{{ kpis.chamados_abertos }}</h3>
                 </div>
             </div>
         </div>
     </div>
-    <div class="col-6 col-md-3">
-        <div class="kpi-card-sm border-success">
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <span class="text-muted small fw-bold text-uppercase">Técnicos Ativos</span>
-                    <h2 class="mb-0 fw-bold text-dark">{{ tecnicos_ativos if tecnicos_ativos else '-' }}</h2>
+
+    <div class="col-12 col-md-3 mb-3 mb-md-0">
+        <div class="card card-metric h-100 p-3 shadow-sm">
+            <div class="d-flex align-items-center">
+                <div class="icon-box bg-warning bg-opacity-10 text-warning me-3">
+                    <i class="bi bi-tools"></i>
                 </div>
-                <div class="icon-box bg-success bg-opacity-10 text-success">
+                <div>
+                    <h6 class="text-muted text-uppercase small mb-1">Em Execução</h6>
+                    <h3 class="mb-0 fw-bold text-dark">{{ kpis.chamados_andamento }}</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-md-3 mb-3 mb-md-0">
+        <div class="card card-metric h-100 p-3 shadow-sm">
+            <div class="d-flex align-items-center">
+                <div class="icon-box bg-success bg-opacity-10 text-success me-3">
                     <i class="bi bi-people"></i>
                 </div>
+                <div>
+                    <h6 class="text-muted text-uppercase small mb-1">Equipe</h6>
+                    <h3 class="mb-0 fw-bold text-dark">{{ kpis.tecnicos_ativos }}</h3>
+                </div>
             </div>
         </div>
     </div>
-    <div class="col-6 col-md-3">
-        <div class="kpi-card-sm border-danger">
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <span class="text-muted small fw-bold text-uppercase">Críticos/Atraso</span>
-                    <h2 class="mb-0 fw-bold text-dark">{{ alertas_estoque|length if alertas_estoque else 0 }}</h2>
+
+    <div class="col-12 col-md-3">
+        <a href="{{ url_for('operacional.novo_chamado') }}"
+            class="card card-metric h-100 p-3 shadow-sm bg-primary text-white text-decoration-none">
+            <div class="d-flex align-items-center justify-content-center h-100">
+                <div class="text-center">
+                    <i class="bi bi-plus-circle-fill fs-2 mb-1"></i>
+                    <div class="fw-bold">Novo Chamado</div>
                 </div>
-                <div class="icon-box bg-danger bg-opacity-10 text-danger">
-                    <i class="bi bi-exclamation-triangle"></i>
+            </div>
+        </a>
+    </div>
+</div>
+
+<!-- Cards Financeiros (Admin Only) -->
+{# Normaliza permissão para minúsculo #}
+{% set user_type = current_user.tipo|lower if current_user.tipo else '' %}
+
+{% if user_type in ['admin', 'administrador', 'financeiro', 'master', 'gerente'] %}
+<h5 class="text-muted fw-bold mb-3 mt-5"><i class="bi bi-wallet2 me-2"></i>Financeiro (Mensal)</h5>
+
+<div class="row">
+    <div class="col-12 col-md-4 mb-3 mb-md-0">
+        <div class="card card-metric h-100 p-3 shadow-sm">
+            <div class="d-flex align-items-center">
+                <div class="icon-box bg-dark text-white me-3">
+                    <i class="bi bi-graph-up-arrow"></i>
+                </div>
+                <div>
+                    <h6 class="text-muted text-uppercase small mb-1">Faturamento</h6>
+                    <h3 class="mb-0 fw-bold text-dark">{{ money(kpis.financeiro_receita) }}</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-md-4 mb-3 mb-md-0">
+        <div class="card card-metric h-100 p-3 shadow-sm">
+            <div class="d-flex align-items-center">
+                <div class="icon-box bg-danger bg-opacity-10 text-danger me-3">
+                    <i class="bi bi-arrow-down-right"></i>
+                </div>
+                <div>
+                    <h6 class="text-muted text-uppercase small mb-1">Despesas</h6>
+                    <h3 class="mb-0 fw-bold text-danger">{{ money(kpis.financeiro_despesa) }}</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-md-4">
+        <div class="card card-metric h-100 p-3 shadow-sm border-success">
+            <div class="d-flex align-items-center">
+                <div class="icon-box bg-success text-white me-3">
+                    <i class="bi bi-currency-dollar"></i>
+                </div>
+                <div>
+                    <h6 class="text-muted text-uppercase small mb-1 text-success">Lucro Líquido</h6>
+                    <h3 class="mb-0 fw-bold text-success">{{ money(kpis.financeiro_lucro) }}</h3>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
-{% if current_user.is_admin %}
-<div class="card border-0 shadow-sm mb-4 bg-light">
-    <div class="card-body p-4">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h6 class="fw-bold text-primary m-0"><i class="bi bi-shield-lock me-2"></i>Indicadores Financeiros (Mês
-                Atual)</h6>
-            <button class="btn btn-sm btn-outline-secondary rounded-pill px-3" onclick="togglePrivacy()">
-                <i class="bi bi-eye-slash" id="privacyIcon"></i> Ocultar/Revelar
-            </button>
-        </div>
-        <div class="row g-4 text-center text-md-start">
-            <div class="col-md-4 border-end-md">
-                <small class="text-muted text-uppercase fw-bold">Faturamento</small>
-                <h3 class="fw-bold text-dark privacy-blur mb-1">
-                    R$ {{ "{:,.0f}".format(kpis.financeiro.receita_total).replace(',', '.') if kpis else '0' }}
-                </h3>
-            </div>
-            <div class="col-md-4 border-end-md">
-                <small class="text-muted text-uppercase fw-bold">Custos Operacionais</small>
-                <h3 class="fw-bold text-danger privacy-blur mb-1">
-                    R$ {{ "{:,.0f}".format(kpis.financeiro.custo_total).replace(',', '.') if kpis else '0' }}
-                </h3>
-            </div>
-            <div class="col-md-4">
-                <small class="text-muted text-uppercase fw-bold">Lucro Estimado</small>
-                <h3 class="fw-bold text-success privacy-blur mb-1">
-                    R$ {{ "{:,.0f}".format(kpis.financeiro.lucro_liquido).replace(',', '.') if kpis else '0' }}
-                </h3>
-                <a href="{{ url_for('financeiro.pagamentos') }}"
-                    class="btn btn-link btn-sm p-0 text-decoration-none mt-1">
-                    Ver detalhes do extrato &rarr;
-                </a>
-            </div>
-        </div>
-    </div>
+<div class="mt-3 text-end">
+    <a href="{{ url_for('financeiro.extrato') }}" class="btn btn-outline-secondary btn-sm">
+        Ver Relatório Completo <i class="bi bi-arrow-right ms-1"></i>
+    </a>
 </div>
 {% endif %}
 
-<div class="card shadow-sm border-0">
-    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
-        <h6 class="m-0 fw-bold">Atividades Recentes</h6>
-        <a href="{{ url_for('operacional.chamados') }}" class="btn btn-sm btn-light">Ver Todos</a>
-    </div>
-    <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0">
-            <thead class="table-light small text-muted text-uppercase">
-                <tr>
-                    <th class="ps-3">ID</th>
-                    <th>Cliente</th>
-                    <th>Status</th>
-                    <th class="text-end pe-3">Ação</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for chamado in ultimos_chamados %}
-                <tr>
-                    <td class="ps-3"><span class="font-monospace text-primary">#{{ chamado.id }}</span></td>
-                    <td class="text-truncate" style="max-width: 250px;">{{ chamado.cidade or 'N/A' }}</td>
-                    <td>{{ render_status_badge(chamado.status_chamado) }}</td>
-                    <td class="text-end pe-3">
-                        <a href="{{ url_for('operacional.editar_chamado', id=chamado.id) }}"
-                            class="btn btn-sm btn-outline-secondary border-0">
-                            <i class="bi bi-arrow-right"></i>
-                        </a>
-                    </td>
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="4" class="text-center text-muted py-4">Nenhuma atividade recente.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</div>
-{% endblock %}
-
-{% block scripts %}
-<script>
-    function togglePrivacy() {
-        const elements = document.querySelectorAll('.privacy-blur');
-        const icon = document.getElementById('privacyIcon');
-
-        elements.forEach(el => el.classList.toggle('visible'));
-
-        if (icon.classList.contains('bi-eye-slash')) {
-            icon.classList.replace('bi-eye-slash', 'bi-eye');
-        } else {
-            icon.classList.replace('bi-eye', 'bi-eye-slash');
-        }
-    }
-</script>
 {% endblock %}

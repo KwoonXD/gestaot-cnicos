@@ -1441,3 +1441,60 @@ body,
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
     }
 }
+
+/* --- Cards com Interação (Hover Lift) --- */
+.hover-lift {
+    transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.2s ease;
+}
+
+.hover-lift:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* --- Layout de KPI Otimizado (Ícone à Esquerda) --- */
+.kpi-row-centered {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    /* Espaço consistente entre ícone e texto */
+}
+
+.icon-circle-lg {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    /* Circular é mais amigável que quadrado */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.75rem;
+    flex-shrink: 0;
+}
+
+/* --- Greeting (Saudação) --- */
+.greeting-header {
+    background: linear-gradient(90deg, #f8f9fa 0%, #ffffff 100%);
+    border-left: 5px solid var(--bs-primary);
+    padding: 1.5rem;
+    border-radius: 8px;
+
+
+    /* Cards Padrão Limpos */
+    .card-metric {
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        border-radius: 8px;
+        background: #fff;
+        transition: none;
+        /* Remove animações */
+    }
+
+    .card-metric .icon-box {
+        width: 50px;
+        height: 50px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        font-size: 1.5rem;
+    }

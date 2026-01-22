@@ -4,21 +4,29 @@ Importar: {% from 'macros/ui_macros.html' import render_status_badge %}
 #}
 
 {# Renderiza badge de status com cores consistentes #}
+{# Renderiza badge de status com cores consistentes #}
 {% macro render_status_badge(status_text) %}
+{# Normalização #}
 {% set status = status_text|lower if status_text else '' %}
 {% set badge_class = 'bg-secondary' %}
 
-{%- if status in ['novo', 'aberto'] -%}
+{# Mapeamento de Cores #}
+{%- if status in ['novo', 'aberto', 'ativo'] -%}
 {% set badge_class = 'bg-primary' %}
 {%- elif status in ['em andamento', 'execução', 'execucao', 'pendente'] -%}
 {% set badge_class = 'bg-warning text-dark' %}
-{%- elif status in ['concluído', 'concluido', 'finalizado', 'pago', 'aprovado', 'spare', 'ativo'] -%}
+{%- elif status in ['concluído', 'concluido', 'finalizado', 'pago', 'aprovado', 'spare'] -%}
 {% set badge_class = 'bg-success' %}
 {%- elif status in ['cancelado', 'reprovado', 'erro', 'recusado', 'inativo'] -%}
 {% set badge_class = 'bg-danger' %}
 {%- endif -%}
 
-<span class="badge {{ badge_class }}">{{ status_text }}</span>
+{# Lógica do Carimbo: Só aplica se for Status Final/Sucesso #}
+{% set anim_class = 'stamp-pop' if badge_class == 'bg-success' else '' %}
+
+<span class="badge {{ badge_class }} {{ anim_class }}">
+    {{ status_text }}
+</span>
 {% endmacro %}
 
 {# Renderiza navegação breadcrumb #}
@@ -65,5 +73,21 @@ Importar: {% from 'macros/ui_macros.html' import render_status_badge %}
         <i class="bi bi-plus-lg me-1"></i>{{ cta_text }}
     </a>
     {% endif %}
+</div>
+{% endmacro %}
+
+{# Saudação e Cabeçalho do Dashboard #}
+{% macro render_greeting(user_name) %}
+<div class="greeting-header shadow-sm d-flex align-items-center justify-content-between">
+    <div>
+        <h2 class="h3 fw-bold text-dark mb-1">
+            <span id="saudacaoTexto">Olá</span>, {{ user_name }}! 👋
+        </h2>
+        <p class="text-muted mb-0 small">Aqui está o resumo da sua operação hoje.</p>
+    </div>
+    <div class="d-none d-md-block text-end">
+        <small class="text-muted d-block text-uppercase fw-bold" style="font-size: 0.7rem;">Data de Hoje</small>
+        <span class="fs-5 fw-bold text-dark" id="dataAtual">--/--</span>
+    </div>
 </div>
 {% endmacro %}
