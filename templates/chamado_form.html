@@ -9,6 +9,41 @@
 {% block content %}
 <div class="container-fluid py-4" x-data="chamadoForm()">
 
+    <!-- Error Alert Section (Inline Validation Feedback) -->
+    <div x-show="errors.length > 0" x-transition:enter="transition ease-out duration-300"
+        x-transition:enter-start="opacity-0 transform -translate-y-2"
+        x-transition:enter-end="opacity-100 transform translate-y-0" class="alert alert-danger border-0 shadow-sm mb-4"
+        role="alert" x-ref="errorAlert">
+        <div class="d-flex align-items-start">
+            <i class="bi bi-exclamation-triangle-fill me-3 fs-5"></i>
+            <div class="flex-grow-1">
+                <strong>Corrija os erros abaixo:</strong>
+                <ul class="mb-0 mt-2 ps-3">
+                    <template x-for="(error, index) in errors" :key="index">
+                        <li x-text="error"></li>
+                    </template>
+                </ul>
+            </div>
+            <button type="button" class="btn-close" @click="errors = []" aria-label="Fechar"></button>
+        </div>
+    </div>
+
+    <!-- Undo Toast (FSA Removal) -->
+    <div x-show="undoData" x-transition
+        class="alert alert-warning d-flex align-items-center justify-content-between mb-4 shadow-sm border-0">
+        <span><i class="bi bi-arrow-counterclockwise me-2"></i>Linha removida.</span>
+        <button type="button" class="btn btn-sm btn-warning" @click="undoRemove()">
+            <i class="bi bi-arrow-counterclockwise me-1"></i>Desfazer
+        </button>
+    </div>
+
+    <!-- Success Feedback -->
+    <div x-show="saveSuccess" x-transition
+        class="alert alert-success d-flex align-items-center mb-4 shadow-sm border-0">
+        <i class="bi bi-check-circle-fill me-2 fs-5"></i>
+        <strong>Salvo com sucesso!</strong> Redirecionando...
+    </div>
+
     <!-- Header -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
@@ -235,6 +270,14 @@
             stockIcon: 'bi bi-info-circle',
             pasteStatus: 'Colar Dados (Magic)',
 
+            // NEW: Inline Error Handling
+            errors: [],
+            saveSuccess: false,
+
+            // NEW: Undo FSA Removal
+            undoData: null,
+            undoTimer: null,
+
             // Computed Helpers (Simulated in Alpine methods)
             get availableServices() {
                 if (!this.logistica.cliente_id) return [];
@@ -254,7 +297,7 @@
                     await this.loadContratos();
                 } catch (e) {
                     console.error("Erro crítico ao carregar API:", e);
-                    alert("Erro ao carregar lista de clientes. Verifique a conexão.");
+                    this.errors.push("Erro ao carregar lista de clientes. Verifique a conexão.");
                 }
 
                 // Inicializa TomSelect
@@ -358,8 +401,18 @@
                     setTimeout(() => this.pasteStatus = 'Colar Dados (Magic)', 2000);
 
                 } catch (err) {
-                    alert('Permissão de colar negada ou erro ao ler clipboard.');
+                    this.errors = ['Permissão de colar negada ou erro ao ler clipboard.'];
+                    this.scrollToErrors();
                 }
+            },
+
+            // --- NEW: Scroll to Errors ---
+            scrollToErrors() {
+                this.$nextTick(() => {
+                    if (this.$refs.errorAlert) {
+                        this.$refs.errorAlert.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                });
             },
 
             // --- Row Management ---
@@ -375,8 +428,36 @@
                 });
             },
 
+            // NEW: Soft Delete with Undo
             removeFsaRow(index) {
-                this.fsas.splice(index, 1);
+                // Clear any existing undo timer
+                if (this.undoTimer) {
+                    clearTimeout(this.undoTimer);
+                }
+
+                // Store removed row for undo
+                const removed = this.fsas.splice(index, 1)[0];
+                this.undoData = { row: removed, index: index };
+
+                // Auto-clear undo after 5 seconds
+                this.undoTimer = setTimeout(() => {
+                    this.undoData = null;
+                    this.undoTimer = null;
+                }, 5000);
+            },
+
+            // NEW: Undo Remove
+            undoRemove() {
+                if (this.undoData) {
+                    // Re-insert at original position (or end if out of bounds)
+                    const insertIndex = Math.min(this.undoData.index, this.fsas.length);
+                    this.fsas.splice(insertIndex, 0, this.undoData.row);
+
+                    // Clear undo state
+                    if (this.undoTimer) clearTimeout(this.undoTimer);
+                    this.undoData = null;
+                    this.undoTimer = null;
+                }
             },
 
             onClienteChange() {
@@ -389,32 +470,36 @@
 
             // --- Submit ---
             async submitForm() {
+                // Clear previous errors
+                this.errors = [];
+
                 // 1. Validação Logística
                 if (!this.logistica.tecnico_id) {
-                    alert('Selecione um Técnico Responsável.');
-                    return;
+                    this.errors.push('Selecione um Técnico Responsável.');
                 }
                 if (!this.logistica.cliente_id) {
-                    alert('Selecione um Cliente.');
-                    return;
+                    this.errors.push('Selecione um Cliente.');
                 }
                 if (!this.logistica.cidade) {
-                    alert('Informe o Local / Cidade.');
-                    return;
+                    this.errors.push('Informe o Local / Cidade.');
                 }
 
                 // 2. Remove linhas completamente vazias (ghost rows)
                 this.fsas = this.fsas.filter(f => f.codigo_chamado || f.catalogo_servico_id);
 
                 if (this.fsas.length === 0) {
-                    alert('Adicione pelo menos um FSA válido.');
-                    return;
+                    this.errors.push('Adicione pelo menos um FSA válido.');
                 }
 
-                // 2. Validação de Linhas Incompletas (tem um campo mas não o outro)
+                // 3. Validação de Linhas Incompletas (tem um campo mas não o outro)
                 const invalidIndex = this.fsas.findIndex(f => !f.codigo_chamado || !f.catalogo_servico_id);
                 if (invalidIndex !== -1) {
-                    alert(`O FSA da linha ${invalidIndex + 1} está incompleto. Verifique o Código e o Serviço.`);
+                    this.errors.push(`O FSA da linha ${invalidIndex + 1} está incompleto. Verifique o Código e o Serviço.`);
+                }
+
+                // If any errors, scroll to top and abort
+                if (this.errors.length > 0) {
+                    this.scrollToErrors();
                     return;
                 }
 
@@ -448,12 +533,17 @@
                     const data = await res.json();
 
                     if (res.ok) {
-                        window.location.href = '/atendimentos';
+                        // NEW: Show success feedback before redirect
+                        this.isSaving = false;
+                        this.saveSuccess = true;
+                        setTimeout(() => window.location.href = '/atendimentos', 1000);
                     } else {
-                        alert('Erro: ' + (data.error || 'Desconhecido'));
+                        this.errors = ['Erro: ' + (data.error || 'Desconhecido')];
+                        this.scrollToErrors();
                     }
                 } catch (e) {
-                    alert('Erro de conexão.');
+                    this.errors = ['Erro de conexão. Verifique sua internet e tente novamente.'];
+                    this.scrollToErrors();
                 } finally {
                     this.isSaving = false;
                 }

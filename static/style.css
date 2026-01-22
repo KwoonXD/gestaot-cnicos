@@ -145,6 +145,61 @@ main {
     box-shadow: var(--card-shadow-hover);
 }
 
+/* =================================================================== */
+/* 🚀 DASHBOARD COCKPIT STYLES                                         */
+/* =================================================================== */
+
+/* Hover Lift Effect */
+.hover-lift {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.hover-lift:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--card-shadow-hover);
+}
+
+/* Privacy Blur */
+.blur-value {
+    filter: blur(8px);
+    cursor: pointer;
+    transition: filter 0.3s ease;
+    user-select: none;
+}
+
+.blur-value:hover {
+    filter: blur(5px);
+}
+
+/* Chart Center Label (Doughnut Hole) */
+.chart-center-label {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    pointer-events: none;
+}
+
+/* Ghost Button Variants */
+.btn-ghost-primary {
+    color: var(--brand-primary);
+    background: transparent;
+    border: none;
+    padding: 0.4rem 0.6rem;
+    border-radius: 6px;
+    transition: all 0.15s ease;
+}
+
+.btn-ghost-primary:hover {
+    background: rgba(30, 77, 161, 0.1);
+    color: var(--brand-primary);
+}
+
+[data-bs-theme="dark"] .btn-ghost-primary:hover {
+    background: rgba(96, 165, 250, 0.15);
+}
+
 .card-header {
     background-color: transparent;
     border-bottom: 1px solid var(--bs-border-color);
@@ -718,6 +773,34 @@ body,
 
 .badge-warning.pulse {
     animation: pulse 2s infinite;
+}
+
+/* =================================================================== */
+/* 🌙 DARK MODE CONTRAST FIXES (Text Colors in Tables)                 */
+/* =================================================================== */
+[data-bs-theme="dark"] .table .text-success {
+    color: #4ade80 !important;
+}
+
+[data-bs-theme="dark"] .table .text-danger {
+    color: #f87171 !important;
+}
+
+[data-bs-theme="dark"] .table .text-warning {
+    color: #fbbf24 !important;
+}
+
+[data-bs-theme="dark"] .table .text-info {
+    color: #38bdf8 !important;
+}
+
+/* Additional contrast for financial cells */
+[data-bs-theme="dark"] .cell-numeric.text-success {
+    color: #4ade80 !important;
+}
+
+[data-bs-theme="dark"] .cell-numeric.text-danger {
+    color: #f87171 !important;
 }
 
 /* =================================================================== */
@@ -1478,23 +1561,23 @@ body,
     border-left: 5px solid var(--bs-primary);
     padding: 1.5rem;
     border-radius: 8px;
+}
 
+/* Cards Padrão Limpos */
+.card-metric {
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    background: #fff;
+    transition: none;
+    /* Remove animações */
+}
 
-    /* Cards Padrão Limpos */
-    .card-metric {
-        border: 1px solid rgba(0, 0, 0, 0.1);
-        border-radius: 8px;
-        background: #fff;
-        transition: none;
-        /* Remove animações */
-    }
-
-    .card-metric .icon-box {
-        width: 50px;
-        height: 50px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 8px;
-        font-size: 1.5rem;
-    }
+.card-metric .icon-box {
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    font-size: 1.5rem;
+}

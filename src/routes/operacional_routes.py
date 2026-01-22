@@ -61,13 +61,49 @@ def get_tipos_servico():
 @operacional_bp.route('/')
 @login_required
 def dashboard():
+    from datetime import date
+    hoje = date.today()
+    
+    # 1. KPIs Estratégicos (do ReportService existente)
     kpis = ReportService.get_dashboard_kpis()
-    ultimos_chamados = ChamadoService.get_dashboard_stats().get('ultimos', [])
+    
+    # 2. Stats Operacionais para o Cockpit (CORRIGIDOS)
+    stats = {
+        # Fila de Validação: Usa MESMA query da página de Atendimentos
+        # Chamados com status_validacao='Pendente' e batch_id
+        'fila_validacao': Chamado.query.filter(
+            Chamado.status_validacao == 'Pendente',
+            Chamado.batch_id.isnot(None)
+        ).count(),
+        
+        # Produtividade: Concluídos HOJE
+        'finalizados_hoje': Chamado.query.filter(
+            Chamado.status_chamado == 'Concluído',
+            func.date(Chamado.data_atendimento) == hoje
+        ).count(),
+        
+        # Força de trabalho
+        'tecnicos_ativos': Tecnico.query.filter_by(status='Ativo').count(),
+        
+        # Faturamento: Usar financeiro.receita_total dos KPIs (mais preciso)
+        'faturamento_estimado': kpis.get('financeiro', {}).get('receita_total', 0) if kpis else 0
+    }
+    
+    # 3. Top Técnicos (substitui gráfico de status)
+    top_tecnicos = kpis.get('top_tecnicos', [])[:5] if kpis else []
+    
+    # 4. Últimos Chamados (expandido para tabela do Cockpit)
+    dashboard_stats = ChamadoService.get_dashboard_stats()
+    ultimos_chamados = dashboard_stats.get('ultimos', [])
+    
+    # 5. Alertas de Estoque
     alertas_estoque = StockService.get_alertas_dashboard(limite_minimo=10)
 
     return render_template('dashboard.html',
         kpis=kpis,
+        stats=stats,
         ultimos_chamados=ultimos_chamados,
+        top_tecnicos=top_tecnicos,
         alertas_estoque=alertas_estoque
     )
 

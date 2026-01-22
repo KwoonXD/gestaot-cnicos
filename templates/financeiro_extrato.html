@@ -34,7 +34,16 @@
                     </tr>
                 </thead>
                 <tbody>
+                    {# Running Balance: Namespace para manter estado entre iterações #}
+                    {% set ns = namespace(running_balance=0) %}
                     {% for l in lancamentos %}
+                    {# Calcular saldo acumulado #}
+                    {% set is_credit = l.tipo in ['CREDITO_SERVICO', 'BONUS', 'REEMBOLSO'] %}
+                    {% if is_credit %}
+                    {% set ns.running_balance = ns.running_balance + (l.valor|float) %}
+                    {% else %}
+                    {% set ns.running_balance = ns.running_balance - (l.valor|float) %}
+                    {% endif %}
                     <tr>
                         <td>{{ l.data.strftime('%d/%m/%Y') }}</td>
                         <td>
@@ -47,20 +56,21 @@
                             {% endif %}
                         </td>
                         <td>
-                            {% set is_credit = l.tipo in ['CREDITO_SERVICO', 'BONUS', 'REEMBOLSO'] %}
                             <span class="badge {{ 'bg-success' if is_credit else 'bg-danger' }}">
                                 {{ l.tipo.replace('_', ' ') }}
                             </span>
                         </td>
-                        <td
-                            class="cell-numeric fw-bold {{ 'text-success' if l.tipo in ['CREDITO_SERVICO', 'BONUS', 'REEMBOLSO'] else 'text-danger' }}">
-                            {% if l.tipo in ['CREDITO_SERVICO', 'BONUS', 'REEMBOLSO'] %}
+                        <td class="cell-numeric fw-bold {{ 'text-success' if is_credit else 'text-danger' }}">
+                            {% if is_credit %}
                             + {{ money(l.valor) }}
                             {% else %}
                             - {{ money(l.valor) }}
                             {% endif %}
                         </td>
-                        <td class="cell-numeric text-muted">-</td>
+                        <td
+                            class="cell-numeric fw-bold {{ 'text-success' if ns.running_balance >= 0 else 'text-danger' }}">
+                            {{ money(ns.running_balance) }}
+                        </td>
                     </tr>
                     {% else %}
                     <tr>

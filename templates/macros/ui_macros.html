@@ -6,25 +6,34 @@ Importar: {% from 'macros/ui_macros.html' import render_status_badge %}
 {# Renderiza badge de status com cores consistentes #}
 {# Renderiza badge de status com cores consistentes #}
 {% macro render_status_badge(status_text) %}
-{# Normalização #}
-{% set status = status_text|lower if status_text else '' %}
+{# Normalização: lowercase + trim #}
+{% set status = status_text|lower|trim if status_text else '' %}
 {% set badge_class = 'bg-secondary' %}
+{% set is_unknown = true %}
 
 {# Mapeamento de Cores #}
 {%- if status in ['novo', 'aberto', 'ativo'] -%}
 {% set badge_class = 'bg-primary' %}
+{% set is_unknown = false %}
 {%- elif status in ['em andamento', 'execução', 'execucao', 'pendente'] -%}
 {% set badge_class = 'bg-warning text-dark' %}
+{% set is_unknown = false %}
 {%- elif status in ['concluído', 'concluido', 'finalizado', 'pago', 'aprovado', 'spare'] -%}
 {% set badge_class = 'bg-success' %}
+{% set is_unknown = false %}
 {%- elif status in ['cancelado', 'reprovado', 'erro', 'recusado', 'inativo'] -%}
 {% set badge_class = 'bg-danger' %}
+{% set is_unknown = false %}
 {%- endif -%}
+
+{# Fallback visual: borda laranja para status desconhecidos #}
+{% set unknown_indicator = 'border border-warning' if is_unknown and status else '' %}
 
 {# Lógica do Carimbo: Só aplica se for Status Final/Sucesso #}
 {% set anim_class = 'stamp-pop' if badge_class == 'bg-success' else '' %}
 
-<span class="badge {{ badge_class }} {{ anim_class }}">
+<span class="badge {{ badge_class }} {{ anim_class }} {{ unknown_indicator }}" {% if is_unknown and status
+    %}title="Status não mapeado: {{ status_text }}" {% endif %}>
     {{ status_text }}
 </span>
 {% endmacro %}
